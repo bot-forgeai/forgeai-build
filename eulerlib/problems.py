@@ -299,3 +299,12 @@ def p19(start_year=1901, end_year=2000):
         for year in range(start_year, end_year + 1)
         for month in range(1, 13)
     )
+
+
+def p31(target=200, coins=(1, 2, 5, 10, 20, 50, 100, 200)):
+    """Number of ways to make `target` (in pence) using the given UK coins."""
+    ways = [1] + [0] * target
+    for coin in coins:
+        for amount in range(coin, target + 1):
+            ways[amount] += ways[amount - coin]
+    return ways[target]
