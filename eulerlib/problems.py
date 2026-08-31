@@ -277,3 +277,8 @@ def p28(size=1001):
             total += n
         step += 2
     return total
+
+
+def p29(a_max=100, b_max=100):
+    """Number of distinct terms in a**b for 2 <= a <= a_max, 2 <= b <= b_max."""
+    return len({a**b for a in range(2, a_max + 1) for b in range(2, b_max + 1)})
