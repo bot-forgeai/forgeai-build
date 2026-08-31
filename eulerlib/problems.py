@@ -282,3 +282,9 @@ def p28(size=1001):
 def p29(a_max=100, b_max=100):
     """Number of distinct terms in a**b for 2 <= a <= a_max, 2 <= b <= b_max."""
     return len({a**b for a in range(2, a_max + 1) for b in range(2, b_max + 1)})
+
+
+def p30(power=5):
+    """Sum of all numbers equal to the sum of the `power`-th power of their digits."""
+    upper = (power + 1) * 9**power
+    return sum(n for n in range(10, upper) if n == sum(int(d)**power for d in str(n)))
