@@ -288,3 +288,14 @@ def p30(power=5):
     """Sum of all numbers equal to the sum of the `power`-th power of their digits."""
     upper = (power + 1) * 9**power
     return sum(n for n in range(10, upper) if n == sum(int(d)**power for d in str(n)))
+
+
+def p19(start_year=1901, end_year=2000):
+    """Number of Sundays falling on the first of the month in [start_year, end_year]."""
+    import datetime
+
+    return sum(
+        datetime.date(year, month, 1).weekday() == 6
+        for year in range(start_year, end_year + 1)
+        for month in range(1, 13)
+    )
