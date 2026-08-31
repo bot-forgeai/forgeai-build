@@ -264,3 +264,16 @@ def p26(limit=1000):
         return position - seen[remainder] if remainder != 0 else 0
 
     return max(range(2, limit), key=cycle_length)
+
+
+def p28(size=1001):
+    """Sum of the numbers on the diagonals of a `size`x`size` clockwise number spiral."""
+    total = 1
+    n = 1
+    step = 2
+    while step < size:
+        for _ in range(4):
+            n += step
+            total += n
+        step += 2
+    return total
