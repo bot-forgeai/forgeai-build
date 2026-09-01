@@ -421,3 +421,21 @@ def p37(count=11):
             found.append(n)
 
     return sum(found)
+
+
+def p38(digits=9):
+    """Largest 1-to-`digits` pandigital number formed as a concatenated
+    product of an integer with (1, 2, ..., n) for some n > 1."""
+    target = set(str(i) for i in range(1, digits + 1))
+
+    best = 0
+    for base in range(1, 10 ** ((digits // 2) + 1)):
+        s = ""
+        k = 1
+        while len(s) < digits:
+            s += str(base * k)
+            k += 1
+        if len(s) == digits and set(s) == target and int(s) > best:
+            best = int(s)
+
+    return best
