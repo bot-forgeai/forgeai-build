@@ -439,3 +439,19 @@ def p38(digits=9):
             best = int(s)
 
     return best
+
+
+def p39(limit=1000):
+    """The perimeter p <= limit for which the number of integer right
+    triangles {a,b,c} with a+b+c = p is maximised."""
+    counts = [0] * (limit + 1)
+    for a in range(1, limit // 3 + 1):
+        for b in range(a, (limit - a) // 2 + 1):
+            c_sq = a * a + b * b
+            c = int(c_sq**0.5)
+            if c * c == c_sq:
+                p = a + b + c
+                if p <= limit:
+                    counts[p] += 1
+
+    return max(range(1, limit + 1), key=lambda p: counts[p])
