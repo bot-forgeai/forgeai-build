@@ -1,0 +1,12 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "eulerlib"
+version = "0.1.0"
+description = "Project Euler solutions, one function per problem, tested against known answers"
+requires-python = ">=3.9"
+
+[tool.setuptools]
+packages = ["eulerlib"]
