@@ -308,3 +308,21 @@ def p31(target=200, coins=(1, 2, 5, 10, 20, 50, 100, 200)):
         for amount in range(coin, target + 1):
             ways[amount] += ways[amount - coin]
     return ways[target]
+
+
+def p32():
+    """Sum of all products expressible as a 1-9 pandigital multiplicand/multiplier/product identity."""
+    from itertools import permutations
+
+    products = set()
+    digits = "123456789"
+    for perm in permutations(digits):
+        s = "".join(perm)
+        for i in range(1, 5):
+            for j in range(i + 1, 8):
+                a, b, c = s[:i], s[i:j], s[j:]
+                if len(c) < 4:
+                    continue
+                if int(a) * int(b) == int(c):
+                    products.add(int(c))
+    return sum(products)
