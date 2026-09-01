@@ -386,3 +386,12 @@ def p35(limit=1_000_000):
         return [int(s[i:] + s[:i]) for i in range(len(s))]
 
     return sum(1 for p in primes if all(r in primes for r in rotations(p)))
+
+
+def p36(limit=1_000_000):
+    """Sum of numbers below limit that are palindromic in base 10 and base 2."""
+
+    def is_pal(s):
+        return s == s[::-1]
+
+    return sum(n for n in range(1, limit) if is_pal(str(n)) and is_pal(bin(n)[2:]))
