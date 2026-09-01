@@ -326,3 +326,29 @@ def p32():
                 if int(a) * int(b) == int(c):
                     products.add(int(c))
     return sum(products)
+
+
+def p33():
+    """Denominator (lowest terms) of the product of the four non-trivial
+    two-digit "digit canceling" fractions less than one."""
+    from fractions import Fraction
+
+    matches = []
+    for d in range(10, 100):
+        for n in range(10, d):
+            n1, n2 = divmod(n, 10)
+            d1, d2 = divmod(d, 10)
+            if n2 == 0 and d2 == 0:
+                continue
+            nd, dd = [n1, n2], [d1, d2]
+            for i in range(2):
+                for j in range(2):
+                    if nd[i] == dd[j] and nd[i] != 0:
+                        rem_n, rem_d = nd[1 - i], dd[1 - j]
+                        if rem_d != 0 and Fraction(n, d) == Fraction(rem_n, rem_d):
+                            matches.append((n, d))
+
+    product = Fraction(1, 1)
+    for n, d in matches:
+        product *= Fraction(n, d)
+    return product.denominator
