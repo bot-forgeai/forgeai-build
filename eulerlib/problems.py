@@ -352,3 +352,20 @@ def p33():
     for n, d in matches:
         product *= Fraction(n, d)
     return product.denominator
+
+
+def p34():
+    """Sum of all numbers equal to the sum of the factorial of their digits."""
+    from math import factorial
+
+    fact = [factorial(d) for d in range(10)]
+
+    def digit_factorial_sum(n):
+        total = 0
+        while n:
+            n, d = divmod(n, 10)
+            total += fact[d]
+        return total
+
+    # 7 digits * 9! = 2540160 is a safe upper bound.
+    return sum(n for n in range(10, 2540160) if digit_factorial_sum(n) == n)
