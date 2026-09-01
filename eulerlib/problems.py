@@ -395,3 +395,29 @@ def p36(limit=1_000_000):
         return s == s[::-1]
 
     return sum(n for n in range(1, limit) if is_pal(str(n)) and is_pal(bin(n)[2:]))
+
+
+def p37(count=11):
+    """Sum of the primes that are truncatable from both left and right."""
+    limit = 1_000_000
+    is_p = bytearray([1]) * (limit + 1)
+    is_p[0] = is_p[1] = 0
+    for i in range(2, int(limit**0.5) + 1):
+        if is_p[i]:
+            for j in range(i * i, limit + 1, i):
+                is_p[j] = 0
+
+    def truncatable(n):
+        s = str(n)
+        left = [int(s[i:]) for i in range(len(s))]
+        right = [int(s[:i]) for i in range(1, len(s) + 1)]
+        return all(is_p[x] for x in left) and all(is_p[x] for x in right)
+
+    found = []
+    n = 11
+    while len(found) < count:
+        n += 2
+        if is_p[n] and truncatable(n):
+            found.append(n)
+
+    return sum(found)
