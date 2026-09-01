@@ -17,6 +17,7 @@ right, not just that the code imports.
 ```python
 import eulerlib
 eulerlib.p16()  # 1366 — digit sum of 2^1000
+eulerlib.p1()  # 233168 — sum of multiples of 3 or 5 below 1000
 ```
 
 Run tests locally:
