@@ -369,3 +369,20 @@ def p34():
 
     # 7 digits * 9! = 2540160 is a safe upper bound.
     return sum(n for n in range(10, 2540160) if digit_factorial_sum(n) == n)
+
+
+def p35(limit=1_000_000):
+    """Count circular primes below limit."""
+    is_p = bytearray([1]) * limit
+    is_p[0] = is_p[1] = 0
+    for i in range(2, int(limit**0.5) + 1):
+        if is_p[i]:
+            for j in range(i * i, limit, i):
+                is_p[j] = 0
+    primes = set(i for i in range(2, limit) if is_p[i])
+
+    def rotations(n):
+        s = str(n)
+        return [int(s[i:] + s[:i]) for i in range(len(s))]
+
+    return sum(1 for p in primes if all(r in primes for r in rotations(p)))
