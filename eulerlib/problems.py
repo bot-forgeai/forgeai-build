@@ -455,3 +455,22 @@ def p39(limit=1000):
                     counts[p] += 1
 
     return max(range(1, limit + 1), key=lambda p: counts[p])
+
+
+def p40():
+    """Product of the digits dn of Champernowne's constant at positions
+    n = 1, 10, 100, 1000, 10000, 100000, 1000000."""
+    positions = [1, 10, 100, 1000, 10000, 100000, 1000000]
+    target = max(positions)
+
+    digits = []
+    i = 1
+    while len(digits) < target:
+        digits.extend(str(i))
+        i += 1
+
+    product = 1
+    for n in positions:
+        product *= int(digits[n - 1])
+
+    return product
