@@ -500,3 +500,21 @@ def p41(max_digits=9):
             if n > best and _is_prime(n):
                 best = n
     return best
+
+
+def p43():
+    """Sum of all 0-to-9 pandigital numbers with the sub-string
+    divisibility property: d2d3d4 % 2 == 0, d3d4d5 % 3 == 0, and so on
+    through d8d9d10 % 17 == 0."""
+    from itertools import permutations
+
+    primes = (2, 3, 5, 7, 11, 13, 17)
+    total = 0
+    for perm in permutations("0123456789"):
+        if perm[0] == "0":
+            continue
+        if all(
+            int("".join(perm[i + 1 : i + 4])) % primes[i] == 0 for i in range(7)
+        ):
+            total += int("".join(perm))
+    return total
