@@ -559,3 +559,33 @@ def p44(limit=3000):
                 if best is None or d < best:
                     best = d
     return best
+
+
+def p45():
+    """Find the next triangle number after T(285)=40755 that is also
+    pentagonal and hexagonal."""
+
+    def is_pentagonal(x):
+        d = 1 + 24 * x
+        s = int(d**0.5)
+        while s * s < d:
+            s += 1
+        while s * s > d:
+            s -= 1
+        return s * s == d and (1 + s) % 6 == 0
+
+    def is_hexagonal(x):
+        d = 1 + 8 * x
+        s = int(d**0.5)
+        while s * s < d:
+            s += 1
+        while s * s > d:
+            s -= 1
+        return s * s == d and (1 + s) % 4 == 0
+
+    n = 285
+    while True:
+        n += 1
+        t = n * (n + 1) // 2
+        if is_pentagonal(t) and is_hexagonal(t):
+            return t
