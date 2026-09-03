@@ -536,3 +536,26 @@ def p42():
         return t * (t + 1) // 2 == n
 
     return sum(1 for w in words if is_triangle(sum(ord(c) - 64 for c in w)))
+
+
+def p44(limit=3000):
+    """Find the minimal D = |Pk - Pj| for pentagonal numbers Pj, Pk
+    where both their sum and difference are also pentagonal."""
+
+    def is_pentagonal(x):
+        n = (1 + (1 + 24 * x) ** 0.5) / 6
+        n = round(n)
+        return n > 0 and n * (3 * n - 1) // 2 == x
+
+    pent = [n * (3 * n - 1) // 2 for n in range(1, limit)]
+    pentset = set(pent)
+
+    best = None
+    for i in range(len(pent)):
+        for j in range(i + 1, len(pent)):
+            a, b = pent[i], pent[j]
+            if (a + b) in pentset and is_pentagonal(abs(a - b)):
+                d = abs(a - b)
+                if best is None or d < best:
+                    best = d
+    return best
