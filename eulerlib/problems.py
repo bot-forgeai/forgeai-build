@@ -589,3 +589,36 @@ def p45():
         t = n * (n + 1) // 2
         if is_pentagonal(t) and is_hexagonal(t):
             return t
+
+
+def p46():
+    """Smallest odd composite that cannot be written as the sum of a
+    prime and twice a square."""
+
+    def is_prime(x):
+        if x < 2:
+            return False
+        if x % 2 == 0:
+            return x == 2
+        i = 3
+        while i * i <= x:
+            if x % i == 0:
+                return False
+            i += 2
+        return True
+
+    def has_goldbach_form(n):
+        k = 1
+        while 2 * k * k < n:
+            if is_prime(n - 2 * k * k):
+                return True
+            k += 1
+        return False
+
+    n = 9
+    while True:
+        n += 2
+        if is_prime(n):
+            continue
+        if not has_goldbach_form(n):
+            return n
