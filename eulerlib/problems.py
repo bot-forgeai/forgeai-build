@@ -654,3 +654,10 @@ def p47(target=4, limit=200000):
                 return n - target + 1
         else:
             run = 0
+
+
+def p48(count=1000, digits=10):
+    """Last `digits` digits of the sum 1^1 + 2^2 + ... + count^count."""
+
+    mod = 10**digits
+    return sum(pow(n, n, mod) for n in range(1, count + 1)) % mod
