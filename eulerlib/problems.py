@@ -474,3 +474,29 @@ def p40():
         product *= int(digits[n - 1])
 
     return product
+
+
+def _is_prime(n):
+    if n < 2:
+        return False
+    i = 2
+    while i * i <= n:
+        if n % i == 0:
+            return False
+        i += 1
+    return True
+
+
+def p41(max_digits=9):
+    """Largest n-digit pandigital (uses digits 1..n exactly once) prime,
+    for n up to `max_digits`."""
+    from itertools import permutations
+
+    best = 0
+    for length in range(1, max_digits + 1):
+        digits = [str(d) for d in range(1, length + 1)]
+        for perm in permutations(digits):
+            n = int("".join(perm))
+            if n > best and _is_prime(n):
+                best = n
+    return best
