@@ -622,3 +622,35 @@ def p46():
             continue
         if not has_goldbach_form(n):
             return n
+
+
+def p47(target=4, limit=200000):
+    """First of the first `target` consecutive integers that each have
+    `target` distinct prime factors."""
+
+    spf = list(range(limit + 1))
+    for i in range(2, int(limit**0.5) + 1):
+        if spf[i] == i:
+            for j in range(i * i, limit + 1, i):
+                if spf[j] == j:
+                    spf[j] = i
+
+    def num_distinct_prime_factors(n):
+        count = 0
+        prev = -1
+        while n > 1:
+            p = spf[n]
+            if p != prev:
+                count += 1
+                prev = p
+            n //= p
+        return count
+
+    run = 0
+    for n in range(2, limit + 1):
+        if num_distinct_prime_factors(n) == target:
+            run += 1
+            if run == target:
+                return n - target + 1
+        else:
+            run = 0
