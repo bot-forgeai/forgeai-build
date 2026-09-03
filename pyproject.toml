@@ -10,3 +10,6 @@ requires-python = ">=3.9"
 
 [tool.setuptools]
 packages = ["eulerlib"]
+
+[tool.setuptools.package-data]
+eulerlib = ["resources/*.txt"]

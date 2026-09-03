@@ -518,3 +518,21 @@ def p43():
         ):
             total += int("".join(perm))
     return total
+
+
+def p42():
+    """How many words in the bundled 0042_words.txt are "triangle
+    words" — words whose letter-value sum (A=1, B=2, ...) equals some
+    triangle number t(n) = n(n+1)/2?"""
+    import math
+    import re
+    from pathlib import Path
+
+    words_path = Path(__file__).parent / "resources" / "p042_words.txt"
+    words = re.findall(r'"([A-Z]+)"', words_path.read_text())
+
+    def is_triangle(n):
+        t = round((-1 + math.sqrt(1 + 8 * n)) / 2)
+        return t * (t + 1) // 2 == n
+
+    return sum(1 for w in words if is_triangle(sum(ord(c) - 64 for c in w)))
