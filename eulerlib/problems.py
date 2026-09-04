@@ -661,3 +661,37 @@ def p48(count=1000, digits=10):
 
     mod = 10**digits
     return sum(pow(n, n, mod) for n in range(1, count + 1)) % mod
+
+
+def p49(low=1000, high=10000, exclude_first=1487):
+    """Concatenation of the non-trivial 4-digit prime permutation
+    sequence: three primes, pairwise permutations of each other,
+    forming an arithmetic progression. Excludes the sequence
+    starting with `exclude_first` (the example given in the problem
+    text, e.g. 1487, 4817, 8147)."""
+
+    from collections import defaultdict
+
+    is_p = [True] * high
+    is_p[0] = is_p[1] = False
+    for i in range(2, int(high**0.5) + 1):
+        if is_p[i]:
+            for j in range(i * i, high, i):
+                is_p[j] = False
+
+    groups = defaultdict(list)
+    for n in range(low, high):
+        if is_p[n]:
+            groups[tuple(sorted(str(n)))].append(n)
+
+    for key, plist in groups.items():
+        plist = sorted(plist)
+        n = len(plist)
+        for i in range(n):
+            if plist[i] == exclude_first:
+                continue
+            for j in range(i + 1, n):
+                diff = plist[j] - plist[i]
+                c = plist[j] + diff
+                if c in plist:
+                    return int(f"{plist[i]}{plist[j]}{c}")
