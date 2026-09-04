@@ -695,3 +695,51 @@ def p49(low=1000, high=10000, exclude_first=1487):
                 c = plist[j] + diff
                 if c in plist:
                     return int(f"{plist[i]}{plist[j]}{c}")
+
+
+def p50(limit=1_000_000):
+    """Prime below `limit` with the longest chain of consecutive
+    primes (from a sorted prime list) summing to it. Builds a
+    prefix-sum array over the primes, then for each start index
+    binary-searches the furthest end index whose partial sum stays
+    under the limit and walks it down until the sum is prime."""
+
+    is_p = [True] * (limit + 1)
+    is_p[0] = is_p[1] = False
+    for i in range(2, int(limit**0.5) + 1):
+        if is_p[i]:
+            for j in range(i * i, limit + 1, i):
+                is_p[j] = False
+
+    primes = [i for i, p in enumerate(is_p) if p]
+    prefix = [0]
+    for p in primes:
+        prefix.append(prefix[-1] + p)
+
+    n = len(primes)
+    best_len = 0
+    best_sum = 0
+
+    for i in range(n):
+        if prefix[-1] - prefix[i] < best_sum:
+            break
+        lo, hi = i + 1, n
+        while lo < hi:
+            mid = (lo + hi + 1) // 2
+            if prefix[mid] - prefix[i] < limit:
+                lo = mid
+            else:
+                hi = mid - 1
+        j = lo
+        while j > i:
+            length = j - i
+            if length <= best_len:
+                break
+            s = prefix[j] - prefix[i]
+            if is_p[s]:
+                best_len = length
+                best_sum = s
+                break
+            j -= 1
+
+    return best_sum
