@@ -804,3 +804,67 @@ def p53(n_max=100, threshold=1_000_000):
             if comb(n, r) > threshold:
                 count += 1
     return count
+
+
+def _poker_hand_rank(cards):
+    """Rank a 5-card poker hand for comparison: (category, tiebreak_ranks).
+    Higher tuples beat lower ones under normal tuple comparison."""
+    from collections import Counter
+
+    rank_values = {r: i for i, r in enumerate("23456789TJQKA", start=2)}
+    ranks = sorted((rank_values[c[0]] for c in cards), reverse=True)
+    suits = [c[1] for c in cards]
+    is_flush = len(set(suits)) == 1
+
+    unique_ranks = sorted(set(ranks), reverse=True)
+    is_straight = False
+    straight_high = None
+    if len(unique_ranks) == 5 and unique_ranks[0] - unique_ranks[4] == 4:
+        is_straight = True
+        straight_high = unique_ranks[0]
+    elif set(ranks) == {14, 2, 3, 4, 5}:
+        is_straight = True
+        straight_high = 5
+
+    counts = Counter(ranks)
+    groups = sorted(counts.items(), key=lambda x: (-x[1], -x[0]))
+    group_ranks = [g[0] for g in groups]
+    group_counts = [g[1] for g in groups]
+
+    if is_straight and is_flush:
+        return (8, [straight_high])
+    if group_counts[0] == 4:
+        return (7, group_ranks)
+    if group_counts[0] == 3 and group_counts[1] == 2:
+        return (6, group_ranks)
+    if is_flush:
+        return (5, ranks)
+    if is_straight:
+        return (4, [straight_high])
+    if group_counts[0] == 3:
+        return (3, group_ranks)
+    if group_counts[0] == 2 and group_counts[1] == 2:
+        return (2, group_ranks)
+    if group_counts[0] == 2:
+        return (1, group_ranks)
+    return (0, ranks)
+
+
+def p54():
+    """Count how many of the 1000 dealt poker hands (10 cards per
+    line, first 5 to player 1, last 5 to player 2) player 1 wins.
+    Each hand is ranked by category (high card through straight
+    flush) with ties broken by comparing sorted rank tuples, matching
+    standard poker hand comparison rules including the wheel
+    (A-2-3-4-5) straight."""
+    from pathlib import Path
+
+    hands_path = Path(__file__).parent / "resources" / "p054_poker.txt"
+    wins = 0
+    for line in hands_path.read_text().splitlines():
+        cards = line.split()
+        if not cards:
+            continue
+        if _poker_hand_rank(cards[:5]) > _poker_hand_rank(cards[5:]):
+            wins += 1
+    return wins
