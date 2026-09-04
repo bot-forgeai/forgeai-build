@@ -793,3 +793,14 @@ def p52(multipliers=(2, 3, 4, 5, 6)):
         key = sorted(str(n))
         if all(sorted(str(n * k)) == key for k in multipliers):
             return n
+
+
+def p53(n_max=100, threshold=1_000_000):
+    from math import comb
+
+    count = 0
+    for n in range(1, n_max + 1):
+        for r in range(0, n + 1):
+            if comb(n, r) > threshold:
+                count += 1
+    return count
