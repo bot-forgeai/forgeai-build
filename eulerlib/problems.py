@@ -784,3 +784,12 @@ def p51(min_family_size=8, limit=1_000_000):
                         family.append(num)
                 if len(family) >= min_family_size:
                     return p
+
+
+def p52(multipliers=(2, 3, 4, 5, 6)):
+    n = 1
+    while True:
+        n += 1
+        key = sorted(str(n))
+        if all(sorted(str(n * k)) == key for k in multipliers):
+            return n
