@@ -868,3 +868,25 @@ def p54():
         if _poker_hand_rank(cards[:5]) > _poker_hand_rank(cards[5:]):
             wins += 1
     return wins
+
+
+def p55():
+    """Count how many numbers below ten thousand become a Lychrel
+    number, i.e. never form a palindrome within 50 iterations of
+    reverse-and-add (a number that becomes a palindrome on the very
+    first reverse-and-add step, such as 47 -> 121, is not Lychrel
+    even if it is not itself a palindrome)."""
+
+    def is_palindrome(n):
+        s = str(n)
+        return s == s[::-1]
+
+    def is_lychrel(n, max_iter=50):
+        x = n
+        for _ in range(max_iter):
+            x = x + int(str(x)[::-1])
+            if is_palindrome(x):
+                return False
+        return True
+
+    return sum(1 for n in range(1, 10000) if is_lychrel(n))
