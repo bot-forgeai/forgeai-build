@@ -898,3 +898,21 @@ def p56():
     return max(
         sum(int(d) for d in str(a**b)) for a in range(1, 100) for b in range(1, 100)
     )
+
+
+def p57():
+    """In the first 1000 iterations of the continued fraction
+    expansion for the square root of two, count how many of the
+    resulting fractions have a numerator with more digits than the
+    denominator."""
+    h_prev2, h_prev1 = 1, 3
+    k_prev2, k_prev1 = 1, 2
+    count = 1 if len(str(h_prev1)) > len(str(k_prev1)) else 0
+    for _ in range(2, 1001):
+        h = 2 * h_prev1 + h_prev2
+        k = 2 * k_prev1 + k_prev2
+        if len(str(h)) > len(str(k)):
+            count += 1
+        h_prev2, h_prev1 = h_prev1, h
+        k_prev2, k_prev1 = k_prev1, k
+    return count
