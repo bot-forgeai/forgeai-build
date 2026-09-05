@@ -4,6 +4,7 @@ import urllib.request
 
 import pytest
 
+from vitalsdash.__main__ import parse_thresholds
 from vitalsdash.data import load_vitals
 from vitalsdash.server import make_server
 
@@ -47,9 +48,22 @@ def test_load_vitals_requires_timestamp_column(tmp_path):
         load_vitals(str(p))
 
 
+def test_parse_thresholds_parses_metric_value_pairs():
+    assert parse_thresholds(["temp_c=70", "load1=4"]) == {"temp_c": 70.0, "load1": 4.0}
+
+
+def test_parse_thresholds_empty_when_none():
+    assert parse_thresholds(None) == {}
+
+
+def test_parse_thresholds_rejects_missing_equals():
+    with pytest.raises(ValueError):
+        parse_thresholds(["temp_c"])
+
+
 @pytest.fixture
 def running_server():
-    server = make_server(SAMPLE_CSV, port=0)
+    server = make_server(SAMPLE_CSV, port=0, thresholds={"temp_c": 44.0})
     import threading
 
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -67,6 +81,7 @@ def test_api_vitals_returns_records(running_server):
         payload = json.loads(resp.read())
     assert payload["metrics"] == ["temp_c", "load1", "mem_available_mb"]
     assert len(payload["records"]) == 7
+    assert payload["thresholds"] == {"temp_c": 44.0}
 
 
 def test_index_page_serves_html(running_server):
