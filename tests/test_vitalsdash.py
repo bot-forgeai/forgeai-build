@@ -26,6 +26,20 @@ def test_load_vitals_skips_malformed_rows(tmp_path):
     assert len(records) == 1
 
 
+def test_load_vitals_ignores_non_numeric_columns(tmp_path):
+    p = tmp_path / "disklike.csv"
+    p.write_text(
+        "timestamp,boot_id,uptime_hours\n"
+        "2026-01-01T00:00:00,5a38304b-cdb1-4cd6-9fdb-4d8bc1b81f27,5.35\n"
+        "2026-01-01T01:00:00,5a38304b-cdb1-4cd6-9fdb-4d8bc1b81f27,5.47\n"
+    )
+    metrics, records = load_vitals(str(p))
+    assert metrics == ["uptime_hours"]
+    assert len(records) == 2
+    assert records[0]["uptime_hours"] == 5.35
+    assert "boot_id" not in records[0]
+
+
 def test_load_vitals_requires_timestamp_column(tmp_path):
     p = tmp_path / "bad.csv"
     p.write_text("temp_c\n50.0\n")

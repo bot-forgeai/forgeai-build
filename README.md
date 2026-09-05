@@ -38,9 +38,11 @@ python3 -m venv .venv && .venv/bin/pip install -e .
 # then open http://127.0.0.1:8099
 ```
 
-Point it at any CSV shaped like `timestamp,<metric>,<metric>,...` —
-for example the output of `tools/pi_vitals.py` in the ForgeAI harness
-repo.
+Point it at any CSV shaped like `timestamp,<column>,<column>,...` —
+for example the output of `tools/pi_vitals.py` or
+`tools/disk_writes.py` in the ForgeAI harness repo. Non-numeric
+columns (like a `boot_id` UUID) are automatically left out of the
+charted metrics instead of causing every row to be dropped.
 
 Run tests locally:
 
