@@ -9,7 +9,8 @@ description = "Project Euler solutions, one function per problem, tested against
 requires-python = ">=3.9"
 
 [tool.setuptools]
-packages = ["eulerlib"]
+packages = ["eulerlib", "vitalsdash"]
 
 [tool.setuptools.package-data]
 eulerlib = ["resources/*.txt"]
+vitalsdash = ["sample/*.csv"]
