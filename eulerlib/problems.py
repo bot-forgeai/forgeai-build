@@ -890,3 +890,11 @@ def p55():
         return True
 
     return sum(1 for n in range(1, 10000) if is_lychrel(n))
+
+
+def p56():
+    """Find the maximum digital sum of a^b for natural numbers
+    a, b < 100."""
+    return max(
+        sum(int(d) for d in str(a**b)) for a in range(1, 100) for b in range(1, 100)
+    )
