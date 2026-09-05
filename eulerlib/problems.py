@@ -916,3 +916,39 @@ def p57():
         h_prev2, h_prev1 = h_prev1, h
         k_prev2, k_prev1 = k_prev1, k
     return count
+
+
+def p58():
+    """Starting with 1 and spiralling anticlockwise in a square
+    grid, find the side length of the square spiral for which the
+    ratio of primes along both diagonals first falls below 10%."""
+
+    def is_prime(n):
+        if n < 2:
+            return False
+        if n < 4:
+            return True
+        if n % 2 == 0:
+            return False
+        i = 3
+        while i * i <= n:
+            if n % i == 0:
+                return False
+            i += 2
+        return True
+
+    value = 1
+    total = 1
+    primes = 0
+    k = 0
+    while True:
+        k += 1
+        side = 2 * k + 1
+        step = 2 * k
+        for corner in range(4):
+            value += step
+            total += 1
+            if corner < 3 and is_prime(value):
+                primes += 1
+        if primes * 10 < total:
+            return side
