@@ -50,6 +50,12 @@ render a second CSV's charts alongside the first for each shared
 metric — useful for eyeballing two boots, two machines, or before/after
 a change side by side.
 
+If a CSV has exactly one non-numeric column (like `boot_id`), its
+metrics are automatically bar-charted per group in addition to the
+line+histogram charts. If a CSV has more than one non-numeric column,
+auto-detect can't pick one unambiguously — pass `--bar-by column` to
+choose it explicitly.
+
 Run tests locally:
 
 ```

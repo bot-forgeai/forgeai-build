@@ -173,7 +173,7 @@ main();
 """
 
 
-def _make_handler(csv_path, thresholds, compare_path):
+def _make_handler(csv_path, thresholds, compare_path, group_by):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):
             pass  # keep stdout quiet on a resource-constrained host
@@ -181,7 +181,7 @@ def _make_handler(csv_path, thresholds, compare_path):
         def do_GET(self):
             if self.path == "/api/vitals":
                 metric_names, records = load_vitals(csv_path)
-                group_column, group_labels, group_values = load_groups(csv_path)
+                group_column, group_labels, group_values = load_groups(csv_path, group_by=group_by)
                 series = [
                     {
                         "label": os.path.basename(csv_path),
@@ -196,7 +196,7 @@ def _make_handler(csv_path, thresholds, compare_path):
                 ]
                 if compare_path:
                     c_metrics, c_records = load_vitals(compare_path)
-                    c_group_column, c_group_labels, c_group_values = load_groups(compare_path)
+                    c_group_column, c_group_labels, c_group_values = load_groups(compare_path, group_by=group_by)
                     series.append(
                         {
                             "label": os.path.basename(compare_path),
@@ -237,15 +237,19 @@ def _make_handler(csv_path, thresholds, compare_path):
     return Handler
 
 
-def make_server(csv_path, host="127.0.0.1", port=8099, thresholds=None, compare_path=None):
+def make_server(csv_path, host="127.0.0.1", port=8099, thresholds=None, compare_path=None, group_by=None):
     """Build (but do not start) a ThreadingHTTPServer serving csv_path.
 
     thresholds, if given, maps metric name -> a value above which the
     dashboard highlights that metric's chart (red points/heading, a
     dashed reference line). compare_path, if given, is a second CSV
     whose charts render alongside csv_path's for each shared metric,
-    for eyeballing two boots/runs/machines side by side.
+    for eyeballing two boots/runs/machines side by side. group_by, if
+    given, names the column to bar-chart metrics by (needed when a CSV
+    has more than one non-numeric column, so auto-detect can't pick
+    one); otherwise a CSV with exactly one non-numeric column is
+    grouped by it automatically.
     """
     return ThreadingHTTPServer(
-        (host, port), _make_handler(csv_path, thresholds or {}, compare_path)
+        (host, port), _make_handler(csv_path, thresholds or {}, compare_path, group_by)
     )

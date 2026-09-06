@@ -51,8 +51,8 @@ def load_vitals(csv_path):
     return metric_names, records
 
 
-def load_groups(csv_path):
-    """Group numeric metrics by the file's one non-numeric column, if it has one.
+def load_groups(csv_path, group_by=None):
+    """Group numeric metrics by a non-numeric column, if there's one to use.
 
     disk-writes.csv has a `boot_id` column: a counter that resets each
     boot, so a line-over-time chart is misleading (it looks like a
@@ -61,9 +61,16 @@ def load_groups(csv_path):
     (the counter's peak within that boot approximates its total) in
     the order boots first appear.
 
+    group_by, if given, names the column to group by explicitly — use
+    this when a CSV has more than one non-numeric column and the
+    single-column auto-detect below can't pick one unambiguously.
+    Otherwise, if the file has exactly one non-numeric column, that
+    column is used automatically.
+
     Returns (group_column, group_labels, {metric: [max_per_group]}).
-    If the file has zero or more than one non-numeric column, there is
-    no unambiguous thing to group by, so this returns (None, [], {}).
+    If group_by isn't a column in the file, or auto-detect finds zero
+    or more than one non-numeric column, there is no unambiguous thing
+    to group by, so this returns (None, [], {}).
     """
     with open(csv_path, newline="") as f:
         reader = csv.DictReader(f)
@@ -78,10 +85,16 @@ def load_groups(csv_path):
     ]
     group_names = [name for name in candidate_names if name not in metric_names]
 
-    if len(group_names) != 1:
+    if group_by is not None:
+        if group_by not in candidate_names:
+            return None, [], {}
+        group_column = group_by
+        metric_names = [name for name in metric_names if name != group_by]
+    elif len(group_names) == 1:
+        group_column = group_names[0]
+    else:
         return None, [], {}
 
-    group_column = group_names[0]
     order = []
     maxima = {}
     for row in rows:
