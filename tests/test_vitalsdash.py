@@ -5,7 +5,7 @@ import urllib.request
 import pytest
 
 from vitalsdash.__main__ import build_arg_parser, parse_thresholds
-from vitalsdash.data import load_vitals
+from vitalsdash.data import load_groups, load_vitals
 from vitalsdash.server import make_server
 
 SAMPLE_CSV = os.path.join(os.path.dirname(__file__), "..", "vitalsdash", "sample", "demo.csv")
@@ -40,6 +40,28 @@ def test_load_vitals_ignores_non_numeric_columns(tmp_path):
     assert len(records) == 2
     assert records[0]["uptime_hours"] == 5.35
     assert "boot_id" not in records[0]
+
+
+def test_load_groups_maxes_metric_per_boot(tmp_path):
+    p = tmp_path / "disklike.csv"
+    p.write_text(
+        "timestamp,boot_id,sectors_written\n"
+        "2026-01-01T00:00:00,boot-a,100\n"
+        "2026-01-01T01:00:00,boot-a,150\n"
+        "2026-01-01T02:00:00,boot-b,10\n"
+        "2026-01-01T03:00:00,boot-b,40\n"
+    )
+    column, labels, per_metric = load_groups(str(p))
+    assert column == "boot_id"
+    assert labels == ["boot-a", "boot-b"]
+    assert per_metric == {"sectors_written": [150.0, 40.0]}
+
+
+def test_load_groups_none_when_no_non_numeric_column():
+    column, labels, per_metric = load_groups(SAMPLE_CSV)
+    assert column is None
+    assert labels == []
+    assert per_metric == {}
 
 
 def test_load_vitals_requires_timestamp_column(tmp_path):
@@ -150,6 +172,50 @@ def test_index_page_shows_both_sources_when_comparing(comparing_server):
     assert "demo.csv" in body
     assert "demo2.csv" in body
     assert "series-block" in body
+
+
+@pytest.fixture
+def grouped_server(tmp_path):
+    p = tmp_path / "disklike.csv"
+    p.write_text(
+        "timestamp,boot_id,sectors_written\n"
+        "2026-01-01T00:00:00,boot-a,100\n"
+        "2026-01-01T01:00:00,boot-b,10\n"
+    )
+    server = make_server(str(p), port=0)
+    import threading
+
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    yield server
+    server.shutdown()
+    server.server_close()
+    thread.join(timeout=2)
+
+
+def test_api_vitals_includes_group_for_boot_id_style_csv(grouped_server):
+    port = grouped_server.server_address[1]
+    with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/vitals") as resp:
+        payload = json.loads(resp.read())
+    group = payload["series"][0]["group"]
+    assert group["column"] == "boot_id"
+    assert group["labels"] == ["boot-a", "boot-b"]
+    assert group["values"] == {"sectors_written": [100.0, 10.0]}
+
+
+def test_api_vitals_group_is_none_without_group_column(running_server):
+    port = running_server.server_address[1]
+    with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/vitals") as resp:
+        payload = json.loads(resp.read())
+    assert payload["series"][0]["group"] is None
+
+
+def test_index_page_includes_bar_chart_rendering(grouped_server):
+    port = grouped_server.server_address[1]
+    with urllib.request.urlopen(f"http://127.0.0.1:{port}/") as resp:
+        body = resp.read().decode()
+    assert "barChartSvg" in body
+    assert "bar-bar" in body
 
 
 def test_unknown_path_404s(running_server):

@@ -10,7 +10,7 @@ import json
 import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from .data import load_vitals
+from .data import load_groups, load_vitals
 
 PAGE_TEMPLATE = """<!DOCTYPE html>
 <html>
@@ -30,6 +30,7 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
   text {{ fill: #888; font-size: 9px; }}
   text.threshold-label {{ fill: #f66; }}
   rect.hist-bar {{ fill: #8fd; }}
+  rect.bar-bar {{ fill: #fd8; }}
   .charts-row {{ display: flex; flex-wrap: wrap; align-items: flex-end; }}
   .series-block {{ margin-bottom: 0.5rem; }}
   .series-label {{ font-size: 0.8rem; color: #888; margin: 0 0 0.2rem 0; }}
@@ -48,7 +49,7 @@ async function main() {{
   const W = 700, H = 140, PAD = 20;
   const HIST_W = 260, HIST_H = 140, HIST_PAD = 20, HIST_BINS = 10;
 
-  function chartRow(label, values, threshold) {{
+  function chartRow(label, values, threshold, group) {{
     const min = Math.min(...values, ...(threshold !== undefined ? [threshold] : []));
     const max = Math.max(...values, ...(threshold !== undefined ? [threshold] : []));
     const range = (max - min) || 1;
@@ -85,8 +86,31 @@ async function main() {{
             ${{circles}}
           </svg>
           ${{histogramSvg(values)}}
+          ${{group ? barChartSvg(group.labels, group.values, group.column) : ''}}
         </div>
       </div>`;
+  }}
+
+  function barChartSvg(labels, values, groupColumn) {{
+    const present = labels.map((l, i) => [l, values[i]]).filter(([, v]) => v !== null && v !== undefined);
+    if (present.length === 0) return '';
+    const maxVal = Math.max(...present.map(([, v]) => v), 1);
+    const plotW = HIST_W - 2 * HIST_PAD;
+    const plotH = HIST_H - 2 * HIST_PAD;
+    const slot = plotW / present.length;
+    const barW = Math.max(slot - 4, 1);
+    const bars = present.map(([label, v], i) => {{
+      const barH = (v / maxVal) * plotH;
+      const x = HIST_PAD + i * slot + 2;
+      const y = HIST_H - HIST_PAD - barH;
+      const short = String(label).slice(0, 8);
+      return `<rect class="bar-bar" x="${{x.toFixed(1)}}" y="${{y.toFixed(1)}}" width="${{barW.toFixed(1)}}" height="${{barH.toFixed(1)}}" rx="2"><title>${{label}}: ${{v}}</title></rect>`;
+    }}).join('');
+    return `<svg width="${{HIST_W}}" height="${{HIST_H}}">
+        ${{bars}}
+        <text x="${{HIST_PAD}}" y="${{HIST_H - 4}}">by ${{groupColumn}}</text>
+        <text x="${{HIST_W - HIST_PAD - 50}}" y="${{HIST_H - 4}}">max ${{maxVal.toFixed(1)}}</text>
+      </svg>`;
   }}
 
   function histogramSvg(values) {{
@@ -135,7 +159,8 @@ async function main() {{
       const values = s.records.map(r => r[metric]);
       const threshold = thresholds[metric];
       const label = comparing ? s.label : `${{s.records[0] ? s.records[0].timestamp : ''}} — ${{s.records.length ? s.records[s.records.length - 1].timestamp : ''}}`;
-      inner += chartRow(label, values, threshold);
+      const group = (s.group && s.group.values[metric]) ? {{labels: s.group.labels, values: s.group.values[metric], column: s.group.column}} : null;
+      inner += chartRow(label, values, threshold, group);
     }}
     div.innerHTML = inner;
     container.appendChild(div);
@@ -156,13 +181,33 @@ def _make_handler(csv_path, thresholds, compare_path):
         def do_GET(self):
             if self.path == "/api/vitals":
                 metric_names, records = load_vitals(csv_path)
+                group_column, group_labels, group_values = load_groups(csv_path)
                 series = [
-                    {"label": os.path.basename(csv_path), "metrics": metric_names, "records": records}
+                    {
+                        "label": os.path.basename(csv_path),
+                        "metrics": metric_names,
+                        "records": records,
+                        "group": {
+                            "column": group_column,
+                            "labels": group_labels,
+                            "values": group_values,
+                        } if group_column else None,
+                    }
                 ]
                 if compare_path:
                     c_metrics, c_records = load_vitals(compare_path)
+                    c_group_column, c_group_labels, c_group_values = load_groups(compare_path)
                     series.append(
-                        {"label": os.path.basename(compare_path), "metrics": c_metrics, "records": c_records}
+                        {
+                            "label": os.path.basename(compare_path),
+                            "metrics": c_metrics,
+                            "records": c_records,
+                            "group": {
+                                "column": c_group_column,
+                                "labels": c_group_labels,
+                                "values": c_group_values,
+                            } if c_group_column else None,
+                        }
                     )
                 body = json.dumps(
                     {

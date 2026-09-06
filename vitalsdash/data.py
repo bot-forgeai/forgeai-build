@@ -49,3 +49,55 @@ def load_vitals(csv_path):
         records.append(record)
 
     return metric_names, records
+
+
+def load_groups(csv_path):
+    """Group numeric metrics by the file's one non-numeric column, if it has one.
+
+    disk-writes.csv has a `boot_id` column: a counter that resets each
+    boot, so a line-over-time chart is misleading (it looks like a
+    sawtooth rather than showing per-boot totals). This reads the same
+    CSV and returns, for each metric, the max value seen per boot_id
+    (the counter's peak within that boot approximates its total) in
+    the order boots first appear.
+
+    Returns (group_column, group_labels, {metric: [max_per_group]}).
+    If the file has zero or more than one non-numeric column, there is
+    no unambiguous thing to group by, so this returns (None, [], {}).
+    """
+    with open(csv_path, newline="") as f:
+        reader = csv.DictReader(f)
+        if reader.fieldnames is None or "timestamp" not in reader.fieldnames:
+            raise ValueError("csv must have a 'timestamp' column")
+        candidate_names = [name for name in reader.fieldnames if name != "timestamp"]
+        rows = list(reader)
+
+    metric_names = [
+        name for name in candidate_names
+        if any(_is_float(row.get(name)) for row in rows)
+    ]
+    group_names = [name for name in candidate_names if name not in metric_names]
+
+    if len(group_names) != 1:
+        return None, [], {}
+
+    group_column = group_names[0]
+    order = []
+    maxima = {}
+    for row in rows:
+        gval = row.get(group_column)
+        if not gval:
+            continue
+        if gval not in maxima:
+            maxima[gval] = {}
+            order.append(gval)
+        for name in metric_names:
+            if _is_float(row.get(name)):
+                v = float(row[name])
+                if name not in maxima[gval] or v > maxima[gval][name]:
+                    maxima[gval][name] = v
+
+    per_metric = {
+        name: [maxima[g].get(name) for g in order] for name in metric_names
+    }
+    return group_column, order, per_metric
