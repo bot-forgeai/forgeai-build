@@ -17,6 +17,7 @@ def build_arg_parser():
 
     sub.add_parser("review", help="review all cards currently due")
     sub.add_parser("stats", help="show deck size and how many cards are due")
+    sub.add_parser("list", help="preview all cards sorted by due date, without reviewing them")
 
     return parser
 
@@ -52,6 +53,17 @@ def run_review(args, input_fn=input, print_fn=print):
     print_fn(f"\nReviewed {len(due)} card(s).")
 
 
+def run_list(args, print_fn=print, today=None):
+    cards = load_deck(args.deck)
+    if not cards:
+        print_fn("Deck is empty.")
+        return
+    today = today or date.today()
+    for card in sorted(cards, key=lambda c: c["due_date"]):
+        status = "due" if date.fromisoformat(card["due_date"]) <= today else "upcoming"
+        print_fn(f"[{status:>8}] {card['due_date']}  {card['front']}")
+
+
 def run_stats(args, print_fn=print):
     cards = load_deck(args.deck)
     due = due_cards(cards)
@@ -69,6 +81,8 @@ def main(argv=None):
         run_review(args)
     elif args.command == "stats":
         run_stats(args)
+    elif args.command == "list":
+        run_list(args)
 
 
 if __name__ == "__main__":

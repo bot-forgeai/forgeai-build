@@ -3,7 +3,7 @@ from datetime import date, timedelta
 import pytest
 
 from recall.algorithm import CardState, review
-from recall.__main__ import build_arg_parser, run_add, run_review, run_stats
+from recall.__main__ import build_arg_parser, run_add, run_list, run_review, run_stats
 from recall.storage import add_card, apply_review, due_cards, load_deck, save_deck
 
 
@@ -102,6 +102,33 @@ def test_cli_review_with_nothing_due_reports_that(tmp_path):
     outputs = []
     run_review(args, print_fn=outputs.append)
     assert outputs == ["Nothing due for review."]
+
+
+def test_cli_list_reports_empty_deck(tmp_path):
+    deck_path = str(tmp_path / "deck.json")
+    save_deck(deck_path, [])
+    parser = build_arg_parser()
+    args = parser.parse_args(["--deck", deck_path, "list"])
+    outputs = []
+    run_list(args, print_fn=outputs.append)
+    assert outputs == ["Deck is empty."]
+
+
+def test_cli_list_sorts_by_due_date_and_marks_status(tmp_path):
+    deck_path = str(tmp_path / "deck.json")
+    today = date(2026, 1, 10)
+    cards = add_card([], "later", "back", today=today)
+    cards = add_card(cards, "sooner", "back", today=today)
+    cards[0]["due_date"] = (today + timedelta(days=5)).isoformat()
+    cards[1]["due_date"] = today.isoformat()
+    save_deck(deck_path, cards)
+    parser = build_arg_parser()
+    args = parser.parse_args(["--deck", deck_path, "list"])
+    outputs = []
+    run_list(args, print_fn=outputs.append, today=today)
+    assert len(outputs) == 2
+    assert "sooner" in outputs[0] and "due" in outputs[0]
+    assert "later" in outputs[1] and "upcoming" in outputs[1]
 
 
 def test_cli_stats_reports_counts(tmp_path):
