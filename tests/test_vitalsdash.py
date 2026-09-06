@@ -92,6 +92,15 @@ def test_index_page_serves_html(running_server):
     assert "<title>vitalsdash</title>" in body
 
 
+def test_index_page_includes_histogram_rendering(running_server):
+    port = running_server.server_address[1]
+    with urllib.request.urlopen(f"http://127.0.0.1:{port}/") as resp:
+        body = resp.read().decode()
+    assert "histogramSvg" in body
+    assert "hist-bar" in body
+    assert "charts-row" in body
+
+
 def test_unknown_path_404s(running_server):
     port = running_server.server_address[1]
     try:
