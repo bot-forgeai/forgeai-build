@@ -64,6 +64,44 @@ def test_load_groups_none_when_no_non_numeric_column():
     assert per_metric == {}
 
 
+def test_load_groups_none_when_multiple_non_numeric_columns_and_no_group_by(tmp_path):
+    p = tmp_path / "twocols.csv"
+    p.write_text(
+        "timestamp,boot_id,host,sectors_written\n"
+        "2026-01-01T00:00:00,boot-a,pi-1,100\n"
+        "2026-01-01T01:00:00,boot-b,pi-1,10\n"
+    )
+    column, labels, per_metric = load_groups(str(p))
+    assert column is None
+    assert labels == []
+    assert per_metric == {}
+
+
+def test_load_groups_uses_explicit_group_by_with_multiple_non_numeric_columns(tmp_path):
+    p = tmp_path / "twocols.csv"
+    p.write_text(
+        "timestamp,boot_id,host,sectors_written\n"
+        "2026-01-01T00:00:00,boot-a,pi-1,100\n"
+        "2026-01-01T01:00:00,boot-b,pi-1,10\n"
+    )
+    column, labels, per_metric = load_groups(str(p), group_by="boot_id")
+    assert column == "boot_id"
+    assert labels == ["boot-a", "boot-b"]
+    assert per_metric == {"sectors_written": [100.0, 10.0]}
+
+
+def test_load_groups_group_by_unknown_column_returns_none(tmp_path):
+    p = tmp_path / "disklike.csv"
+    p.write_text(
+        "timestamp,boot_id,sectors_written\n"
+        "2026-01-01T00:00:00,boot-a,100\n"
+    )
+    column, labels, per_metric = load_groups(str(p), group_by="nope")
+    assert column is None
+    assert labels == []
+    assert per_metric == {}
+
+
 def test_load_vitals_requires_timestamp_column(tmp_path):
     p = tmp_path / "bad.csv"
     p.write_text("temp_c\n50.0\n")
@@ -132,6 +170,16 @@ def test_parses_compare_flag():
 def test_compare_defaults_to_none():
     args = build_arg_parser().parse_args([SAMPLE_CSV])
     assert args.compare is None
+
+
+def test_parses_bar_by_flag():
+    args = build_arg_parser().parse_args([SAMPLE_CSV, "--bar-by", "host"])
+    assert args.bar_by == "host"
+
+
+def test_bar_by_defaults_to_none():
+    args = build_arg_parser().parse_args([SAMPLE_CSV])
+    assert args.bar_by is None
 
 
 @pytest.fixture
@@ -216,6 +264,35 @@ def test_index_page_includes_bar_chart_rendering(grouped_server):
         body = resp.read().decode()
     assert "barChartSvg" in body
     assert "bar-bar" in body
+
+
+@pytest.fixture
+def explicit_group_server(tmp_path):
+    p = tmp_path / "twocols.csv"
+    p.write_text(
+        "timestamp,boot_id,host,sectors_written\n"
+        "2026-01-01T00:00:00,boot-a,pi-1,100\n"
+        "2026-01-01T01:00:00,boot-b,pi-1,10\n"
+    )
+    server = make_server(str(p), port=0, group_by="boot_id")
+    import threading
+
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    yield server
+    server.shutdown()
+    server.server_close()
+    thread.join(timeout=2)
+
+
+def test_api_vitals_uses_explicit_group_by_with_ambiguous_columns(explicit_group_server):
+    port = explicit_group_server.server_address[1]
+    with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/vitals") as resp:
+        payload = json.loads(resp.read())
+    group = payload["series"][0]["group"]
+    assert group["column"] == "boot_id"
+    assert group["labels"] == ["boot-a", "boot-b"]
+    assert group["values"] == {"sectors_written": [100.0, 10.0]}
 
 
 def test_unknown_path_404s(running_server):

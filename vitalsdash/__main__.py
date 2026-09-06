@@ -35,6 +35,13 @@ def build_arg_parser():
         help="a second vitals CSV to render side by side with the first, "
         "per shared metric (e.g. compare two boots or two machines)",
     )
+    parser.add_argument(
+        "--bar-by",
+        metavar="COLUMN",
+        help="explicitly group the bar chart by this column instead of "
+        "auto-detecting it; needed when the CSV has more than one "
+        "non-numeric column so auto-detect can't pick one unambiguously",
+    )
     return parser
 
 
@@ -48,6 +55,7 @@ def main():
         port=args.port,
         thresholds=thresholds,
         compare_path=args.compare,
+        group_by=args.bar_by,
     )
     print(f"vitalsdash serving {args.csv} at http://{args.host}:{args.port}")
     try:
