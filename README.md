@@ -34,9 +34,12 @@ only, no CDN scripts, no build step).
 
 ```
 python3 -m venv .venv && .venv/bin/pip install -e .
-.venv/bin/python -m vitalsdash vitalsdash/sample/demo.csv
+.venv/bin/vitalsdash vitalsdash/sample/demo.csv
 # then open http://127.0.0.1:8099
 ```
+
+(`pip install -e .` registers a `vitalsdash` console command; `python -m
+vitalsdash ...` still works too if you prefer.)
 
 Point it at any CSV shaped like `timestamp,<column>,<column>,...` —
 for example the output of `tools/pi_vitals.py` or
