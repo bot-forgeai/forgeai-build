@@ -14,7 +14,7 @@ def parse_thresholds(specs):
     return thresholds
 
 
-def main():
+def build_arg_parser():
     parser = argparse.ArgumentParser(
         prog="vitalsdash",
         description="Serve a local dashboard for a timestamp+metrics CSV.",
@@ -29,10 +29,26 @@ def main():
         help="highlight a metric's chart when its latest value exceeds VALUE "
         "(repeatable, e.g. --threshold temp_c=70 --threshold load1=4)",
     )
-    args = parser.parse_args()
+    parser.add_argument(
+        "--compare",
+        metavar="CSV",
+        help="a second vitals CSV to render side by side with the first, "
+        "per shared metric (e.g. compare two boots or two machines)",
+    )
+    return parser
+
+
+def main():
+    args = build_arg_parser().parse_args()
 
     thresholds = parse_thresholds(args.threshold)
-    server = make_server(args.csv, host=args.host, port=args.port, thresholds=thresholds)
+    server = make_server(
+        args.csv,
+        host=args.host,
+        port=args.port,
+        thresholds=thresholds,
+        compare_path=args.compare,
+    )
     print(f"vitalsdash serving {args.csv} at http://{args.host}:{args.port}")
     try:
         server.serve_forever()

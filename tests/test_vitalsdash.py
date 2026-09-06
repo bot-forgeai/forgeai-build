@@ -4,11 +4,12 @@ import urllib.request
 
 import pytest
 
-from vitalsdash.__main__ import parse_thresholds
+from vitalsdash.__main__ import build_arg_parser, parse_thresholds
 from vitalsdash.data import load_vitals
 from vitalsdash.server import make_server
 
 SAMPLE_CSV = os.path.join(os.path.dirname(__file__), "..", "vitalsdash", "sample", "demo.csv")
+SAMPLE_CSV_2 = os.path.join(os.path.dirname(__file__), "..", "vitalsdash", "sample", "demo2.csv")
 
 
 def test_load_vitals_parses_metrics_and_rows():
@@ -99,6 +100,56 @@ def test_index_page_includes_histogram_rendering(running_server):
     assert "histogramSvg" in body
     assert "hist-bar" in body
     assert "charts-row" in body
+
+
+def test_parses_compare_flag():
+    args = build_arg_parser().parse_args([SAMPLE_CSV, "--compare", SAMPLE_CSV_2])
+    assert args.compare == SAMPLE_CSV_2
+
+
+def test_compare_defaults_to_none():
+    args = build_arg_parser().parse_args([SAMPLE_CSV])
+    assert args.compare is None
+
+
+@pytest.fixture
+def comparing_server():
+    server = make_server(SAMPLE_CSV, port=0, compare_path=SAMPLE_CSV_2)
+    import threading
+
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    yield server
+    server.shutdown()
+    server.server_close()
+    thread.join(timeout=2)
+
+
+def test_api_vitals_includes_both_series_when_comparing(comparing_server):
+    port = comparing_server.server_address[1]
+    with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/vitals") as resp:
+        payload = json.loads(resp.read())
+    assert len(payload["series"]) == 2
+    assert payload["series"][0]["label"] == "demo.csv"
+    assert payload["series"][1]["label"] == "demo2.csv"
+    assert len(payload["series"][1]["records"]) == 7
+
+
+def test_api_vitals_single_series_when_not_comparing(running_server):
+    port = running_server.server_address[1]
+    with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/vitals") as resp:
+        payload = json.loads(resp.read())
+    assert len(payload["series"]) == 1
+    assert payload["series"][0]["label"] == "demo.csv"
+
+
+def test_index_page_shows_both_sources_when_comparing(comparing_server):
+    port = comparing_server.server_address[1]
+    with urllib.request.urlopen(f"http://127.0.0.1:{port}/") as resp:
+        body = resp.read().decode()
+    assert "demo.csv" in body
+    assert "demo2.csv" in body
+    assert "series-block" in body
 
 
 def test_unknown_path_404s(running_server):

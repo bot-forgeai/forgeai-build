@@ -44,6 +44,12 @@ for example the output of `tools/pi_vitals.py` or
 columns (like a `boot_id` UUID) are automatically left out of the
 charted metrics instead of causing every row to be dropped.
 
+Add `--threshold metric=value` (repeatable) to flag a metric's chart
+when its latest value exceeds a limit, or `--compare other.csv` to
+render a second CSV's charts alongside the first for each shared
+metric — useful for eyeballing two boots, two machines, or before/after
+a change side by side.
+
 Run tests locally:
 
 ```
