@@ -21,7 +21,7 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
   h1 {{ font-size: 1.1rem; color: #8fd; }}
   .chart {{ margin-bottom: 2rem; }}
   .chart h2 {{ font-size: 0.9rem; color: #aaa; margin: 0 0 0.3rem 0; }}
-  svg {{ background: #1a1a1a; border: 1px solid #333; }}
+  svg {{ background: #1a1a1a; border: 1px solid #333; margin-right: 0.75rem; }}
   polyline {{ fill: none; stroke: #8fd; stroke-width: 1.5; }}
   circle.over {{ fill: #f66; }}
   circle.under {{ fill: #8fd; }}
@@ -29,6 +29,8 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
   text {{ fill: #888; font-size: 9px; }}
   text.threshold-label {{ fill: #f66; }}
   h2.breached {{ color: #f66; }}
+  rect.hist-bar {{ fill: #8fd; }}
+  .charts-row {{ display: flex; flex-wrap: wrap; align-items: flex-end; }}
 </style>
 </head>
 <body>
@@ -41,6 +43,35 @@ async function main() {{
   const thresholds = data.thresholds || {{}};
   const container = document.getElementById('charts');
   const W = 700, H = 140, PAD = 20;
+  const HIST_W = 260, HIST_H = 140, HIST_PAD = 20, HIST_BINS = 10;
+
+  function histogramSvg(values) {{
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const range = (max - min) || 1;
+    const binWidth = range / HIST_BINS;
+    const counts = new Array(HIST_BINS).fill(0);
+    for (const v of values) {{
+      const idx = Math.min(HIST_BINS - 1, Math.floor((v - min) / binWidth));
+      counts[idx]++;
+    }}
+    const maxCount = Math.max(...counts, 1);
+    const plotW = HIST_W - 2 * HIST_PAD;
+    const plotH = HIST_H - 2 * HIST_PAD;
+    const slot = plotW / HIST_BINS;
+    const barW = Math.max(slot - 2, 1);
+    const bars = counts.map((c, i) => {{
+      const barH = (c / maxCount) * plotH;
+      const x = HIST_PAD + i * slot + 1;
+      const y = HIST_H - HIST_PAD - barH;
+      return `<rect class="hist-bar" x="${{x.toFixed(1)}}" y="${{y.toFixed(1)}}" width="${{barW.toFixed(1)}}" height="${{barH.toFixed(1)}}" rx="2" />`;
+    }}).join('');
+    return `<svg width="${{HIST_W}}" height="${{HIST_H}}">
+        ${{bars}}
+        <text x="${{HIST_PAD}}" y="${{HIST_H - 4}}">${{min.toFixed(1)}}</text>
+        <text x="${{HIST_W - HIST_PAD - 40}}" y="${{HIST_H - 4}}">${{max.toFixed(1)}}</text>
+      </svg>`;
+  }}
 
   for (const metric of data.metrics) {{
     const values = data.records.map(r => r[metric]);
@@ -75,13 +106,16 @@ async function main() {{
     div.className = 'chart';
     div.innerHTML = `
       <h2 class="${{breached ? 'breached' : ''}}">${{metric}} (min ${{min.toFixed(2)}}, max ${{max.toFixed(2)}}, latest ${{latest}}${{breached ? ' — over threshold' : ''}})</h2>
-      <svg width="${{W}}" height="${{H}}">
-        ${{thresholdSvg}}
-        <polyline points="${{points}}" />
-        ${{circles}}
-        <text x="${{PAD}}" y="${{H - 4}}">${{data.records[0] ? data.records[0].timestamp : ''}}</text>
-        <text x="${{W - 140}}" y="${{H - 4}}">${{data.records.length ? data.records[data.records.length - 1].timestamp : ''}}</text>
-      </svg>`;
+      <div class="charts-row">
+        <svg width="${{W}}" height="${{H}}">
+          ${{thresholdSvg}}
+          <polyline points="${{points}}" />
+          ${{circles}}
+          <text x="${{PAD}}" y="${{H - 4}}">${{data.records[0] ? data.records[0].timestamp : ''}}</text>
+          <text x="${{W - 140}}" y="${{H - 4}}">${{data.records.length ? data.records[data.records.length - 1].timestamp : ''}}</text>
+        </svg>
+        ${{histogramSvg(values)}}
+      </div>`;
     container.appendChild(div);
   }}
 }}
