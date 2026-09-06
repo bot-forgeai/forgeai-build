@@ -65,3 +65,24 @@ Run tests locally:
 python3 -m venv .venv && .venv/bin/pip install -e . pytest
 .venv/bin/pytest -v
 ```
+
+## recall
+
+A spaced-repetition flashcard CLI using the SM-2 algorithm (the
+scheduling method behind SuperMemo 2 and, in modified form, Anki). A
+deck is a plain JSON file; each card tracks its own interval,
+repetition count, and ease factor, and is only shown again once due.
+
+```
+python3 -m venv .venv && .venv/bin/pip install -e .
+.venv/bin/recall --deck mydeck.json add "capital of Peru" "Lima"
+.venv/bin/recall --deck mydeck.json review   # shown once due
+.venv/bin/recall --deck mydeck.json stats
+```
+
+`--deck` defaults to `recall_deck.json` in the current directory.
+`review` walks every due card, waits for you to reveal the answer,
+then asks for a 0-5 recall-quality rating that determines the next
+interval — a failed recall (0-2) resets the card to review again
+tomorrow; a successful one (3-5) pushes the interval out further,
+scaled by the ease factor.
