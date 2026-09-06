@@ -38,6 +38,33 @@ def due_cards(cards, today=None):
     return [c for c in cards if date.fromisoformat(c["due_date"]) <= today]
 
 
+def import_cards(cards, lines, today=None):
+    """Add cards from an iterable of 'front\\tback' lines.
+
+    Blank lines and lines starting with '#' are skipped. Lines without a
+    tab separator are skipped. Returns the number of cards added.
+    """
+    added = 0
+    for line in lines:
+        line = line.rstrip("\n")
+        if not line.strip() or line.startswith("#"):
+            continue
+        if "\t" not in line:
+            continue
+        front, back = line.split("\t", 1)
+        front, back = front.strip(), back.strip()
+        if not front or not back:
+            continue
+        add_card(cards, front, back, today=today)
+        added += 1
+    return added
+
+
+def export_lines(cards):
+    """Return a list of 'front\\tback' lines, one per card."""
+    return [f"{c['front']}\t{c['back']}" for c in cards]
+
+
 def apply_review(card, quality, today=None):
     """Score a review and update the card's schedule in place."""
     today = today or date.today()

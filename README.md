@@ -79,6 +79,8 @@ python3 -m venv .venv && .venv/bin/pip install -e .
 .venv/bin/recall --deck mydeck.json review   # shown once due
 .venv/bin/recall --deck mydeck.json stats
 .venv/bin/recall --deck mydeck.json list     # preview all cards, no reviewing
+.venv/bin/recall --deck mydeck.json import cards.txt   # add cards from a text file
+.venv/bin/recall --deck mydeck.json export cards.txt   # write all cards to a text file
 ```
 
 `--deck` defaults to `recall_deck.json` in the current directory.
@@ -88,3 +90,7 @@ interval — a failed recall (0-2) resets the card to review again
 tomorrow; a successful one (3-5) pushes the interval out further,
 scaled by the ease factor. `list` shows every card sorted by due
 date, each marked `due` or `upcoming`, without triggering a review.
+`import`/`export` use a plain text format, one card per line as
+`front<TAB>back`; blank lines and lines starting with `#` are
+ignored on import, so exported decks can be hand-edited or merged
+before re-importing.

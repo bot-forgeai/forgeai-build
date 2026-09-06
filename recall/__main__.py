@@ -3,7 +3,15 @@ import argparse
 import sys
 from datetime import date
 
-from .storage import add_card, apply_review, due_cards, load_deck, save_deck
+from .storage import (
+    add_card,
+    apply_review,
+    due_cards,
+    export_lines,
+    import_cards,
+    load_deck,
+    save_deck,
+)
 
 
 def build_arg_parser():
@@ -18,6 +26,16 @@ def build_arg_parser():
     sub.add_parser("review", help="review all cards currently due")
     sub.add_parser("stats", help="show deck size and how many cards are due")
     sub.add_parser("list", help="preview all cards sorted by due date, without reviewing them")
+
+    import_p = sub.add_parser(
+        "import", help="add cards from a text file of 'front<TAB>back' lines"
+    )
+    import_p.add_argument("path", help="path to the text file to import")
+
+    export_p = sub.add_parser(
+        "export", help="write all cards to a text file of 'front<TAB>back' lines"
+    )
+    export_p.add_argument("path", help="path to write the text file to")
 
     return parser
 
@@ -64,6 +82,22 @@ def run_list(args, print_fn=print, today=None):
         print_fn(f"[{status:>8}] {card['due_date']}  {card['front']}")
 
 
+def run_import(args, print_fn=print):
+    cards = load_deck(args.deck)
+    with open(args.path) as f:
+        added = import_cards(cards, f)
+    save_deck(args.deck, cards)
+    print_fn(f"Imported {added} card(s). Deck now has {len(cards)} card(s).")
+
+
+def run_export(args, print_fn=print):
+    cards = load_deck(args.deck)
+    lines = export_lines(cards)
+    with open(args.path, "w") as f:
+        f.write("\n".join(lines) + ("\n" if lines else ""))
+    print_fn(f"Exported {len(lines)} card(s) to {args.path}.")
+
+
 def run_stats(args, print_fn=print):
     cards = load_deck(args.deck)
     due = due_cards(cards)
@@ -83,6 +117,10 @@ def main(argv=None):
         run_stats(args)
     elif args.command == "list":
         run_list(args)
+    elif args.command == "import":
+        run_import(args)
+    elif args.command == "export":
+        run_export(args)
 
 
 if __name__ == "__main__":
