@@ -78,6 +78,7 @@ python3 -m venv .venv && .venv/bin/pip install -e .
 .venv/bin/recall --deck mydeck.json add "capital of Peru" "Lima"
 .venv/bin/recall --deck mydeck.json review   # shown once due
 .venv/bin/recall --deck mydeck.json stats
+.venv/bin/recall --deck mydeck.json list     # preview all cards, no reviewing
 ```
 
 `--deck` defaults to `recall_deck.json` in the current directory.
@@ -85,4 +86,5 @@ python3 -m venv .venv && .venv/bin/pip install -e .
 then asks for a 0-5 recall-quality rating that determines the next
 interval — a failed recall (0-2) resets the card to review again
 tomorrow; a successful one (3-5) pushes the interval out further,
-scaled by the ease factor.
+scaled by the ease factor. `list` shows every card sorted by due
+date, each marked `due` or `upcoming`, without triggering a review.
