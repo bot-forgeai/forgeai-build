@@ -3,8 +3,24 @@ from datetime import date, timedelta
 import pytest
 
 from recall.algorithm import CardState, review
-from recall.__main__ import build_arg_parser, run_add, run_list, run_review, run_stats
-from recall.storage import add_card, apply_review, due_cards, load_deck, save_deck
+from recall.__main__ import (
+    build_arg_parser,
+    run_add,
+    run_export,
+    run_import,
+    run_list,
+    run_review,
+    run_stats,
+)
+from recall.storage import (
+    add_card,
+    apply_review,
+    due_cards,
+    export_lines,
+    import_cards,
+    load_deck,
+    save_deck,
+)
 
 
 def test_review_failed_recall_resets_repetitions():
@@ -129,6 +145,56 @@ def test_cli_list_sorts_by_due_date_and_marks_status(tmp_path):
     assert len(outputs) == 2
     assert "sooner" in outputs[0] and "due" in outputs[0]
     assert "later" in outputs[1] and "upcoming" in outputs[1]
+
+
+def test_import_cards_adds_valid_lines_and_skips_bad_ones():
+    lines = [
+        "2+2\t4",
+        "\n",
+        "# a comment",
+        "no tab here",
+        "capital of France\tParis\n",
+        "\tmissing front",
+    ]
+    cards = []
+    added = import_cards(cards, lines)
+    assert added == 2
+    assert [c["front"] for c in cards] == ["2+2", "capital of France"]
+    assert [c["back"] for c in cards] == ["4", "Paris"]
+
+
+def test_export_lines_roundtrips_through_import():
+    cards = add_card([], "front1", "back1")
+    cards = add_card(cards, "front2", "back2")
+    lines = export_lines(cards)
+    assert lines == ["front1\tback1", "front2\tback2"]
+    reimported = import_cards([], lines)
+    assert reimported == 2
+
+
+def test_cli_import_persists_cards_from_file(tmp_path):
+    deck_path = str(tmp_path / "deck.json")
+    import_path = tmp_path / "cards.txt"
+    import_path.write_text("2+2\t4\ncapital of France\tParis\n")
+    parser = build_arg_parser()
+    args = parser.parse_args(["--deck", deck_path, "import", str(import_path)])
+    outputs = []
+    run_import(args, print_fn=outputs.append)
+    cards = load_deck(deck_path)
+    assert len(cards) == 2
+    assert any("Imported 2 card" in line for line in outputs)
+
+
+def test_cli_export_writes_file(tmp_path):
+    deck_path = str(tmp_path / "deck.json")
+    save_deck(deck_path, add_card([], "front", "back"))
+    export_path = tmp_path / "out.txt"
+    parser = build_arg_parser()
+    args = parser.parse_args(["--deck", deck_path, "export", str(export_path)])
+    outputs = []
+    run_export(args, print_fn=outputs.append)
+    assert export_path.read_text() == "front\tback\n"
+    assert any("Exported 1 card" in line for line in outputs)
 
 
 def test_cli_stats_reports_counts(tmp_path):
