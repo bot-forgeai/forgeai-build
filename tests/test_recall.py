@@ -5,7 +5,9 @@ import pytest
 from recall.algorithm import CardState, review
 from recall.__main__ import (
     build_arg_parser,
+    main,
     run_add,
+    run_decks,
     run_export,
     run_import,
     run_list,
@@ -19,7 +21,10 @@ from recall.storage import (
     export_lines,
     import_cards,
     load_deck,
+    load_registry,
+    register_deck,
     save_deck,
+    save_registry,
 )
 
 
@@ -206,3 +211,63 @@ def test_cli_stats_reports_counts(tmp_path):
     run_stats(args, print_fn=outputs.append)
     assert any("Total cards: 1" in line for line in outputs)
     assert any("Due today" in line for line in outputs)
+
+
+def test_registry_roundtrip(tmp_path):
+    registry_path = str(tmp_path / "registry.json")
+    registry = register_deck({}, "spanish", "spanish.json")
+    save_registry(registry_path, registry)
+    assert load_registry(registry_path) == {"spanish": "spanish.json"}
+
+
+def test_load_registry_missing_file_returns_empty_dict(tmp_path):
+    assert load_registry(str(tmp_path / "missing.json")) == {}
+
+
+def test_register_deck_overwrites_existing_name():
+    registry = register_deck({}, "spanish", "old.json")
+    register_deck(registry, "spanish", "new.json")
+    assert registry == {"spanish": "new.json"}
+
+
+def test_cli_add_registers_deck_under_its_basename(tmp_path):
+    deck_path = str(tmp_path / "spanish.json")
+    registry_path = str(tmp_path / "registry.json")
+    main(["--deck", deck_path, "--registry", registry_path, "add", "hola", "hello"])
+    assert load_registry(registry_path) == {"spanish": deck_path}
+
+
+def test_cli_add_registers_deck_under_explicit_name(tmp_path):
+    deck_path = str(tmp_path / "deck.json")
+    registry_path = str(tmp_path / "registry.json")
+    main([
+        "--deck", deck_path, "--deck-name", "custom", "--registry", registry_path,
+        "add", "front", "back",
+    ])
+    assert load_registry(registry_path) == {"custom": deck_path}
+
+
+def test_cli_decks_lists_registered_decks_with_counts(tmp_path):
+    spanish_path = str(tmp_path / "spanish.json")
+    french_path = str(tmp_path / "french.json")
+    save_deck(spanish_path, add_card([], "hola", "hello"))
+    save_deck(french_path, add_card(add_card([], "bonjour", "hello"), "merci", "thanks"))
+    registry_path = str(tmp_path / "registry.json")
+    registry = register_deck({}, "spanish", spanish_path)
+    register_deck(registry, "french", french_path)
+    save_registry(registry_path, registry)
+
+    parser = build_arg_parser()
+    args = parser.parse_args(["--registry", registry_path, "decks"])
+    outputs = []
+    run_decks(args, print_fn=outputs.append)
+    assert any(line.startswith("french: 2 card(s)") for line in outputs)
+    assert any(line.startswith("spanish: 1 card(s)") for line in outputs)
+
+
+def test_cli_decks_reports_when_nothing_registered(tmp_path):
+    parser = build_arg_parser()
+    args = parser.parse_args(["--registry", str(tmp_path / "missing.json"), "decks"])
+    outputs = []
+    run_decks(args, print_fn=outputs.append)
+    assert outputs == ["No decks registered yet."]

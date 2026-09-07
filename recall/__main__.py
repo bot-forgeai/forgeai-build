@@ -1,5 +1,6 @@
 """Command-line interface for recall: add flashcards, review due ones, see stats."""
 import argparse
+import os
 import sys
 from datetime import date
 
@@ -10,13 +11,26 @@ from .storage import (
     export_lines,
     import_cards,
     load_deck,
+    load_registry,
+    register_deck,
     save_deck,
+    save_registry,
 )
 
 
 def build_arg_parser():
     parser = argparse.ArgumentParser(prog="recall", description=__doc__)
     parser.add_argument("--deck", default="recall_deck.json", help="path to the deck JSON file")
+    parser.add_argument(
+        "--deck-name",
+        default=None,
+        help="name this deck is registered under (default: the deck file's basename)",
+    )
+    parser.add_argument(
+        "--registry",
+        default="recall_registry.json",
+        help="path to the multi-deck registry file",
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
     add_p = sub.add_parser("add", help="add a new flashcard")
@@ -26,6 +40,7 @@ def build_arg_parser():
     sub.add_parser("review", help="review all cards currently due")
     sub.add_parser("stats", help="show deck size and how many cards are due")
     sub.add_parser("list", help="preview all cards sorted by due date, without reviewing them")
+    sub.add_parser("decks", help="list every deck registered so far, with its card counts")
 
     import_p = sub.add_parser(
         "import", help="add cards from a text file of 'front<TAB>back' lines"
@@ -106,21 +121,49 @@ def run_stats(args, print_fn=print):
     print_fn(f"Due today ({date.today().isoformat()}): {len(due)}")
 
 
+def deck_name_for(args):
+    return args.deck_name or os.path.splitext(os.path.basename(args.deck))[0]
+
+
+def register_current_deck(args):
+    """Record args.deck in the registry under its name, creating the registry if needed."""
+    registry = load_registry(args.registry)
+    register_deck(registry, deck_name_for(args), args.deck)
+    save_registry(args.registry, registry)
+
+
+def run_decks(args, print_fn=print):
+    registry = load_registry(args.registry)
+    if not registry:
+        print_fn("No decks registered yet.")
+        return
+    today = date.today()
+    for name, path in sorted(registry.items()):
+        cards = load_deck(path)
+        due = due_cards(cards, today=today)
+        print_fn(f"{name}: {len(cards)} card(s), {len(due)} due  ({path})")
+
+
 def main(argv=None):
     parser = build_arg_parser()
     args = parser.parse_args(argv if argv is not None else sys.argv[1:])
     if args.command == "add":
         run_add(args)
+        register_current_deck(args)
     elif args.command == "review":
         run_review(args)
+        register_current_deck(args)
     elif args.command == "stats":
         run_stats(args)
     elif args.command == "list":
         run_list(args)
     elif args.command == "import":
         run_import(args)
+        register_current_deck(args)
     elif args.command == "export":
         run_export(args)
+    elif args.command == "decks":
+        run_decks(args)
 
 
 if __name__ == "__main__":
