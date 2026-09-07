@@ -134,3 +134,94 @@ def test_opponent_disconnect_notifies_remaining_player():
     finally:
         fx.close()
         sock_x.close()
+
+
+def test_third_connection_joins_as_spectator_and_sees_state():
+    _thread, port = _start_server()
+    sock_x, fx = _connect(port)
+    sock_o, fo = _connect(port)
+    try:
+        fx.readline()  # WELCOME X
+        fx.readline()  # WAITING
+        fo.readline()  # WELCOME O
+        fx.readline()  # STATE (initial)
+        fo.readline()  # STATE (initial)
+
+        sock_spec, fspec = _connect(port)
+        try:
+            assert fspec.readline().strip() == "WELCOME SPECTATOR"
+            assert fspec.readline().strip().startswith("STATE ......... TURN:X")
+
+            _move(fx, 0)
+            fx.readline()
+            fo.readline()
+            assert fspec.readline().strip() == "STATE X........ TURN:O"
+        finally:
+            fspec.close()
+            sock_spec.close()
+    finally:
+        fx.close()
+        fo.close()
+        sock_x.close()
+        sock_o.close()
+
+
+def test_spectator_move_command_is_ignored_not_applied():
+    _thread, port = _start_server()
+    sock_x, fx = _connect(port)
+    sock_o, fo = _connect(port)
+    try:
+        fx.readline()
+        fx.readline()
+        fo.readline()
+        fx.readline()
+        fo.readline()
+
+        sock_spec, fspec = _connect(port)
+        try:
+            fspec.readline()  # WELCOME SPECTATOR
+            fspec.readline()  # STATE
+
+            fspec.write("MOVE 0\n")
+            fspec.flush()
+
+            # The board is untouched: a real player move still lands on X's turn.
+            _move(fx, 0)
+            assert fx.readline().strip() == "STATE X........ TURN:O"
+        finally:
+            fspec.close()
+            sock_spec.close()
+    finally:
+        fx.close()
+        fo.close()
+        sock_x.close()
+        sock_o.close()
+
+
+def test_spectator_notified_on_opponent_left():
+    _thread, port = _start_server()
+    sock_x, fx = _connect(port)
+    sock_o, fo = _connect(port)
+    try:
+        fx.readline()
+        fx.readline()
+        fo.readline()
+        fx.readline()
+        fo.readline()
+
+        sock_spec, fspec = _connect(port)
+        try:
+            fspec.readline()  # WELCOME SPECTATOR
+            fspec.readline()  # STATE
+
+            sock_o.shutdown(socket.SHUT_RDWR)
+            fo.close()
+            sock_o.close()
+
+            assert fspec.readline().strip() == "OPPONENT_LEFT"
+        finally:
+            fspec.close()
+            sock_spec.close()
+    finally:
+        fx.close()
+        sock_x.close()

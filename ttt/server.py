@@ -7,7 +7,13 @@ Protocol (newline-delimited text, one game at a time per accepted pair):
   server -> client: ERROR <message>               (sent only to the client whose move failed)
   server -> other:  OPPONENT_LEFT                 (sent if a player disconnects mid-game)
   client -> server: MOVE <0-8>
+
+  Any connection accepted while a game already has both players is treated
+  as a spectator instead of a third player:
+  server -> spectator: WELCOME SPECTATOR
+  server -> spectator: STATE ... / OPPONENT_LEFT  (same broadcasts as players, read-only)
 """
+import queue
 import socket
 import threading
 
@@ -19,6 +25,8 @@ class Game:
         self.board = Board()
         self.lock = threading.Lock()
         self.conns = {}
+        self.spectators = []
+        self.spectators_lock = threading.Lock()
 
 
 def _send(f, msg):
@@ -40,6 +48,41 @@ def _broadcast_state(game):
         try:
             _send(f, msg)
         except (OSError, ValueError):
+            pass
+    _broadcast_spectators(game, msg)
+
+
+def _broadcast_spectators(game, msg):
+    with game.spectators_lock:
+        for f in list(game.spectators):
+            try:
+                _send(f, msg)
+            except (OSError, ValueError):
+                game.spectators.remove(f)
+
+
+def _handle_spectator(game, conn):
+    f = conn.makefile("rw")
+    with game.spectators_lock:
+        game.spectators.append(f)
+    try:
+        _send(f, "WELCOME SPECTATOR")
+        _send(f, f"STATE {game.board.render()} {_status(game.board)}")
+        for _ in f:
+            pass  # spectators don't send commands; just drain until they disconnect
+    except (OSError, ValueError):
+        pass
+    finally:
+        with game.spectators_lock:
+            if f in game.spectators:
+                game.spectators.remove(f)
+        try:
+            f.close()
+        except OSError:
+            pass
+        try:
+            conn.close()
+        except OSError:
             pass
 
 
@@ -76,8 +119,15 @@ def _handle_client(game, symbol, sock, f):
                     _send(other_f, "OPPONENT_LEFT")
                 except (OSError, ValueError):
                     pass
-        f.close()
-        sock.close()
+            _broadcast_spectators(game, "OPPONENT_LEFT")
+        try:
+            f.close()
+        except OSError:
+            pass
+        try:
+            sock.close()
+        except OSError:
+            pass
 
 
 def serve(host, port, num_games=1, ready_event=None, bound_port_holder=None):
@@ -90,18 +140,34 @@ def serve(host, port, num_games=1, ready_event=None, bound_port_holder=None):
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     srv.bind((host, port))
-    srv.listen(4)
+    srv.listen(8)
     if bound_port_holder is not None:
         bound_port_holder.append(srv.getsockname()[1])
     if ready_event is not None:
         ready_event.set()
+
+    # A single acceptor thread feeds every incoming connection into a queue.
+    # The main loop pulls the first two per game off as players; anything
+    # that arrives while a game already has both players becomes a spectator.
+    conn_queue = queue.Queue()
+
+    def accept_loop():
+        while True:
+            try:
+                conn, _addr = srv.accept()
+            except OSError:
+                return
+            conn_queue.put(conn)
+
+    acceptor = threading.Thread(target=accept_loop, daemon=True)
+    acceptor.start()
 
     try:
         for _ in range(num_games):
             game = Game()
             players = []
             for i, symbol in enumerate(("X", "O")):
-                conn, _addr = srv.accept()
+                conn = conn_queue.get()
                 f = conn.makefile("rw")
                 game.conns[symbol] = f
                 _send(f, f"WELCOME {symbol}")
@@ -117,7 +183,23 @@ def serve(host, port, num_games=1, ready_event=None, bound_port_holder=None):
             ]
             for t in threads:
                 t.start()
+
+            spectator_stop = threading.Event()
+
+            def spectator_intake():
+                while not spectator_stop.is_set():
+                    try:
+                        conn = conn_queue.get(timeout=0.2)
+                    except queue.Empty:
+                        continue
+                    threading.Thread(target=_handle_spectator, args=(game, conn), daemon=True).start()
+
+            intake_thread = threading.Thread(target=spectator_intake, daemon=True)
+            intake_thread.start()
+
             for t in threads:
                 t.join()
+            spectator_stop.set()
+            intake_thread.join(timeout=1)
     finally:
         srv.close()

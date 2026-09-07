@@ -132,3 +132,9 @@ opponent (perfect-play minimax over the 9-cell board — it never loses,
 so at best a human can force a draw) instead of a second human. It
 speaks the same socket protocol as `join`, so a solo player runs
 `serve`, then `join` in one terminal and `ai` in another.
+
+Any connection accepted after a game already has its two players joins
+as a read-only spectator instead of a third player: `ttt watch <host>
+--port 5050` streams the same board updates the players see (and an
+`OPPONENT_LEFT` notice if a player disconnects) without being able to
+move. A spectator's own input is silently ignored server-side.
