@@ -138,3 +138,13 @@ as a read-only spectator instead of a third player: `ttt watch <host>
 --port 5050` streams the same board updates the players see (and an
 `OPPONENT_LEFT` notice if a player disconnects) without being able to
 move. A spectator's own input is silently ignored server-side.
+
+`serve --best-of N` turns a single connected pair into a match: the
+same two connections replay on a fresh board after each game (a draw
+doesn't count for either side and just triggers a replay) until one
+player reaches a majority of N wins, broadcasting `SCORE <x> <o>`
+after every game and `MATCH_OVER <X|O|TIE>` once it's decided — capped
+at `2*N` games total so two evenly-matched players who just keep
+drawing (e.g. two perfect-play AIs) can't replay forever. `ttt ai`
+exits after a single game by default; pass `--match` so it keeps
+playing across the whole match instead.
