@@ -126,3 +126,9 @@ or the final result (`WIN:X`, `WIN:O`, `DRAW`). If one player
 disconnects mid-game the other gets an `OPPONENT_LEFT` notice instead
 of hanging. `join` renders the board as a 3x3 grid and prompts for a
 cell number each turn.
+
+For solo play, `ttt ai <host> --port 5050` connects as an automated
+opponent (perfect-play minimax over the 9-cell board — it never loses,
+so at best a human can force a draw) instead of a second human. It
+speaks the same socket protocol as `join`, so a solo player runs
+`serve`, then `join` in one terminal and `ai` in another.
