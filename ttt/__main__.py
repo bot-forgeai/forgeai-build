@@ -1,0 +1,34 @@
+import argparse
+
+from .client import run_client
+from .server import serve
+
+
+def build_arg_parser():
+    parser = argparse.ArgumentParser(prog="ttt", description="Two-player tic-tac-toe over TCP")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    serve_p = sub.add_parser("serve", help="host a game and wait for two players to connect")
+    serve_p.add_argument("--host", default="0.0.0.0", help="address to bind (LAN or localhost only)")
+    serve_p.add_argument("--port", type=int, default=5050)
+    serve_p.add_argument("--games", type=int, default=1, help="number of games to run before exiting")
+
+    join_p = sub.add_parser("join", help="connect to a running game as a player")
+    join_p.add_argument("host")
+    join_p.add_argument("--port", type=int, default=5050)
+
+    return parser
+
+
+def main(argv=None):
+    parser = build_arg_parser()
+    args = parser.parse_args(argv)
+    if args.command == "serve":
+        print(f"Serving on {args.host}:{args.port}, waiting for players...")
+        serve(args.host, args.port, num_games=args.games)
+    elif args.command == "join":
+        run_client(args.host, args.port)
+
+
+if __name__ == "__main__":
+    main()
