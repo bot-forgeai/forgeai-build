@@ -3,6 +3,7 @@ import argparse
 from .ai_client import run_ai_client
 from .client import run_client
 from .server import serve
+from .spectator_client import run_spectator_client
 
 
 def build_arg_parser():
@@ -22,6 +23,10 @@ def build_arg_parser():
     ai_p.add_argument("host")
     ai_p.add_argument("--port", type=int, default=5050)
 
+    watch_p = sub.add_parser("watch", help="connect as a read-only spectator")
+    watch_p.add_argument("host")
+    watch_p.add_argument("--port", type=int, default=5050)
+
     return parser
 
 
@@ -35,6 +40,8 @@ def main(argv=None):
         run_client(args.host, args.port)
     elif args.command == "ai":
         run_ai_client(args.host, args.port)
+    elif args.command == "watch":
+        run_spectator_client(args.host, args.port)
 
 
 if __name__ == "__main__":
