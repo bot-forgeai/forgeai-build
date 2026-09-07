@@ -11,9 +11,10 @@ requires-python = ">=3.9"
 [project.scripts]
 vitalsdash = "vitalsdash.__main__:main"
 recall = "recall.__main__:main"
+ttt = "ttt.__main__:main"
 
 [tool.setuptools]
-packages = ["eulerlib", "vitalsdash", "recall"]
+packages = ["eulerlib", "vitalsdash", "recall", "ttt"]
 
 [tool.setuptools.package-data]
 eulerlib = ["resources/*.txt"]

@@ -103,3 +103,26 @@ derived from the deck's filename, or `--deck-name` if you want to
 pick one explicitly. `recall decks` then lists every deck registered
 so far with its total and due-today card counts, so you can keep
 several decks (e.g. one per subject) without memorizing their paths.
+
+## ttt
+
+A two-player tic-tac-toe game played over a TCP socket — one process
+hosts, two others join as players (from different terminals, or
+different machines on the same LAN). Unlike eulerlib/vitalsdash/recall,
+the interesting part here is the networked protocol and concurrent
+per-connection state, not a CSV or a JSON file.
+
+```
+python3 -m venv .venv && .venv/bin/pip install -e .
+.venv/bin/ttt serve --host 0.0.0.0 --port 5050   # on the host machine
+.venv/bin/ttt join <host-ip> --port 5050         # from each player's terminal
+```
+
+`serve` blocks waiting for two connections, then relays moves between
+them: each `MOVE <0-8>` is validated server-side (right player's turn,
+cell free, game not already over) and the resulting board is broadcast
+to both players after every valid move, along with whose turn it is
+or the final result (`WIN:X`, `WIN:O`, `DRAW`). If one player
+disconnects mid-game the other gets an `OPPONENT_LEFT` notice instead
+of hanging. `join` renders the board as a 3x3 grid and prompts for a
+cell number each turn.
