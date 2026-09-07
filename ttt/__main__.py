@@ -1,5 +1,6 @@
 import argparse
 
+from .ai_client import run_ai_client
 from .client import run_client
 from .server import serve
 
@@ -17,6 +18,10 @@ def build_arg_parser():
     join_p.add_argument("host")
     join_p.add_argument("--port", type=int, default=5050)
 
+    ai_p = sub.add_parser("ai", help="connect as an automated opponent (perfect-play minimax)")
+    ai_p.add_argument("host")
+    ai_p.add_argument("--port", type=int, default=5050)
+
     return parser
 
 
@@ -28,6 +33,8 @@ def main(argv=None):
         serve(args.host, args.port, num_games=args.games)
     elif args.command == "join":
         run_client(args.host, args.port)
+    elif args.command == "ai":
+        run_ai_client(args.host, args.port)
 
 
 if __name__ == "__main__":
