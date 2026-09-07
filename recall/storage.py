@@ -65,6 +65,25 @@ def export_lines(cards):
     return [f"{c['front']}\t{c['back']}" for c in cards]
 
 
+def load_registry(path):
+    """Load the name -> deck path mapping used for multi-deck support."""
+    if not os.path.exists(path):
+        return {}
+    with open(path) as f:
+        return json.load(f)
+
+
+def save_registry(path, registry):
+    with open(path, "w") as f:
+        json.dump(registry, f, indent=2)
+
+
+def register_deck(registry, name, deck_path):
+    """Record that `name` refers to `deck_path`, overwriting any prior path."""
+    registry[name] = deck_path
+    return registry
+
+
 def apply_review(card, quality, today=None):
     """Score a review and update the card's schedule in place."""
     today = today or date.today()

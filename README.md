@@ -81,6 +81,7 @@ python3 -m venv .venv && .venv/bin/pip install -e .
 .venv/bin/recall --deck mydeck.json list     # preview all cards, no reviewing
 .venv/bin/recall --deck mydeck.json import cards.txt   # add cards from a text file
 .venv/bin/recall --deck mydeck.json export cards.txt   # write all cards to a text file
+.venv/bin/recall decks                                 # list every deck used so far
 ```
 
 `--deck` defaults to `recall_deck.json` in the current directory.
@@ -94,3 +95,11 @@ date, each marked `due` or `upcoming`, without triggering a review.
 `front<TAB>back`; blank lines and lines starting with `#` are
 ignored on import, so exported decks can be hand-edited or merged
 before re-importing.
+
+Multi-deck support: any `add`, `review`, or `import` run registers
+its `--deck` path in a registry file (`--registry`, defaults to
+`recall_registry.json` in the current directory) under a name
+derived from the deck's filename, or `--deck-name` if you want to
+pick one explicitly. `recall decks` then lists every deck registered
+so far with its total and due-today card counts, so you can keep
+several decks (e.g. one per subject) without memorizing their paths.
