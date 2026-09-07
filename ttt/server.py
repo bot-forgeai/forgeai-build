@@ -12,6 +12,16 @@ Protocol (newline-delimited text, one game at a time per accepted pair):
   as a spectator instead of a third player:
   server -> spectator: WELCOME SPECTATOR
   server -> spectator: STATE ... / OPPONENT_LEFT  (same broadcasts as players, read-only)
+
+  Match mode (server started with best_of=N): the same two connections play
+  repeated games until one player reaches a majority of wins (draws don't
+  count toward either score and just trigger a replay). After each game:
+  server -> all:    SCORE <x_wins> <o_wins>
+  and then either a fresh STATE (next game starts, board reset) or:
+  server -> all:    MATCH_OVER <X|O|TIE>
+  Capped at 2*best_of games total, so two evenly-matched players who just
+  keep drawing (e.g. two perfect-play AIs) can't replay forever -- that
+  many unresolved games ends the match in a TIE instead.
 """
 import queue
 import socket
@@ -21,12 +31,16 @@ from .board import Board, InvalidMove
 
 
 class Game:
-    def __init__(self):
+    def __init__(self, best_of=None):
         self.board = Board()
         self.lock = threading.Lock()
         self.conns = {}
+        self.socks = {}
         self.spectators = []
         self.spectators_lock = threading.Lock()
+        self.best_of = best_of
+        self.wins = {"X": 0, "O": 0} if best_of else None
+        self.games_played = 0
 
 
 def _send(f, msg):
@@ -86,6 +100,44 @@ def _handle_spectator(game, conn):
             pass
 
 
+def _advance_match(game):
+    """Called with game.lock held, right after a game-ending move.
+
+    Records the result, broadcasts the updated score, and either resets the
+    board for a replay or declares a match winner. Returns True once the
+    match itself is decided (majority of game.best_of reached).
+    """
+    if game.board.winner:
+        game.wins[game.board.winner] += 1
+    game.games_played += 1
+    score_msg = f"SCORE {game.wins['X']} {game.wins['O']}"
+    for f in game.conns.values():
+        try:
+            _send(f, score_msg)
+        except (OSError, ValueError):
+            pass
+    _broadcast_spectators(game, score_msg)
+
+    needed = game.best_of // 2 + 1
+    if game.wins["X"] >= needed or game.wins["O"] >= needed:
+        result = "X" if game.wins["X"] >= needed else "O"
+    elif game.games_played >= 2 * game.best_of:
+        result = "TIE"
+    else:
+        game.board = Board()
+        _broadcast_state(game)
+        return False
+
+    final_msg = f"MATCH_OVER {result}"
+    for f in game.conns.values():
+        try:
+            _send(f, final_msg)
+        except (OSError, ValueError):
+            pass
+    _broadcast_spectators(game, final_msg)
+    return True
+
+
 def _handle_client(game, symbol, sock, f):
     try:
         for line in f:
@@ -108,6 +160,9 @@ def _handle_client(game, symbol, sock, f):
                     _send(f, f"ERROR {exc}")
                     continue
                 _broadcast_state(game)
+                if game.best_of is not None and game.board.is_over():
+                    if _advance_match(game):
+                        break
     except (BrokenPipeError, ConnectionResetError, OSError):
         pass
     finally:
@@ -130,13 +185,19 @@ def _handle_client(game, symbol, sock, f):
             pass
 
 
-def serve(host, port, num_games=1, ready_event=None, bound_port_holder=None):
-    """Accept pairs of players and run games sequentially until num_games complete.
+def serve(host, port, num_games=1, best_of=None, ready_event=None, bound_port_holder=None):
+    """Accept pairs of players and run games until num_games complete.
 
     port=0 lets the OS pick a free port; pass bound_port_holder (a list) to
     read the actual bound port back out once ready_event is set. Used by both
     the CLI (fixed port) and tests (ephemeral port).
+
+    If best_of is set, num_games is ignored: a single pair of players is
+    accepted once and replays on the same connections (see _advance_match)
+    until one of them reaches a majority of best_of wins.
     """
+    if best_of is not None:
+        num_games = 1
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     srv.bind((host, port))
@@ -164,12 +225,13 @@ def serve(host, port, num_games=1, ready_event=None, bound_port_holder=None):
 
     try:
         for _ in range(num_games):
-            game = Game()
+            game = Game(best_of=best_of)
             players = []
             for i, symbol in enumerate(("X", "O")):
                 conn = conn_queue.get()
                 f = conn.makefile("rw")
                 game.conns[symbol] = f
+                game.socks[symbol] = conn
                 _send(f, f"WELCOME {symbol}")
                 if i == 0:
                     _send(f, "WAITING")

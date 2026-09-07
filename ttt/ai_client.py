@@ -10,7 +10,10 @@ import socket
 from .ai import choose_move
 
 
-def run_ai_client(host, port, print_fn=print):
+def run_ai_client(host, port, print_fn=print, match=False):
+    """If match is True, keep playing across a --best-of match on the server
+    instead of exiting after the first game (see SCORE/MATCH_OVER in
+    server.py's protocol docstring)."""
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.connect((host, port))
     f = sock.makefile("rw")
@@ -32,7 +35,14 @@ def run_ai_client(host, port, print_fn=print):
                     f.flush()
                 elif status.startswith("WIN:") or status == "DRAW":
                     print_fn(f"Game over: {status}")
-                    break
+                    if not match:
+                        break
+            elif parts[0] == "SCORE" and len(parts) == 3:
+                print_fn(f"Score: X={parts[1]} O={parts[2]}")
+            elif parts[0] == "MATCH_OVER" and len(parts) == 2:
+                result = parts[1]
+                print_fn("Match tied." if result == "TIE" else f"Match over: {result} wins")
+                break
             elif parts[0] == "OPPONENT_LEFT":
                 print_fn("Opponent left.")
                 break
