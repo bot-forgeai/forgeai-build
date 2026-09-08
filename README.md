@@ -148,3 +148,34 @@ at `2*N` games total so two evenly-matched players who just keep
 drawing (e.g. two perfect-play AIs) can't replay forever. `ttt ai`
 exits after a single game by default; pass `--match` so it keeps
 playing across the whole match instead.
+
+## shortlink
+
+A URL shortener with click tracking, backed by SQLite instead of the
+CSV/JSON files the earlier projects use — the interesting part here is
+persistent relational state shared across concurrent HTTP requests,
+not a chart or a socket protocol.
+
+```
+python3 -m venv .venv && .venv/bin/pip install -e .
+.venv/bin/shortlink --db links.db --port 8100
+```
+
+Then visit `http://127.0.0.1:8100/` for a page that shortens a URL and
+lists every link created so far with its click count. The same
+functionality is available directly over HTTP:
+
+```
+curl -X POST http://127.0.0.1:8100/api/shorten -d '{"url": "https://example.com"}'
+# -> {"code": "aB3xY9", "short_url": "/aB3xY9"}
+curl -i http://127.0.0.1:8100/aB3xY9          # 302 redirect, records a click
+curl http://127.0.0.1:8100/api/stats/aB3xY9   # {"clicks": 1, ...}
+curl http://127.0.0.1:8100/api/links          # every link, newest first
+```
+
+`POST /api/shorten` takes an optional `"code"` field to request a
+specific short code instead of a random one; a conflicting request
+gets a 409. `ThreadingHTTPServer` handles each request on its own
+thread, so all database access goes through a single lock — sqlite3
+tolerates being opened across threads (`check_same_thread=False`) but
+not being used by more than one at a time.
