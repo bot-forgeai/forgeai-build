@@ -193,3 +193,18 @@ built from the request's own `Host` header, so scanning the code
 resolves correctly whether the server is bound to `127.0.0.1` or a
 LAN address. The homepage embeds each link's QR code as a thumbnail
 next to its click count.
+
+For a LAN-reachable demo — so a phone or another machine on the same
+network can scan a QR code and actually load the link — bind to every
+interface instead of just localhost:
+
+```
+.venv/bin/shortlink --host 0.0.0.0 --port 8100
+```
+
+Startup prints the LAN IP it detected (via a UDP "connect" to a public
+address, which never sends data but reveals which interface the OS
+would route through) alongside the localhost URL, so you know what to
+type into another device's browser or point a QR scanner at. This
+still respects LIMITS.md — bound to the Pi's own LAN address, never
+port-forwarded or tunneled beyond it.
