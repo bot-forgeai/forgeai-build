@@ -2,11 +2,15 @@
 
 Routes:
   GET  /                    HTML page: shorten form + link list
-  POST /api/shorten         body {"url": "...", "code": "..." (optional)}
+  POST /api/shorten         body {"url": "...", "code": "..." (optional),
+                                   "ttl_seconds": 3600 (optional)}
                              -> {"code": "...", "short_url": "/<code>"}
-  GET  /api/links           -> [{"code", "url", "created_at", "clicks"}, ...]
-  GET  /api/stats/<code>    -> {"code", "url", "created_at", "clicks", "last_clicked_at"}
-  GET  /<code>              302 redirect to the stored URL, records a click
+  GET  /api/links           -> [{"code", "url", "created_at", "expires_at",
+                                  "expired", "clicks"}, ...]
+  GET  /api/stats/<code>    -> {"code", "url", "created_at", "clicks",
+                                  "last_clicked_at", "expires_at", "expired"}
+  GET  /<code>              302 redirect to the stored URL, records a click;
+                             410 if the link has expired
 """
 import html
 import json
@@ -19,7 +23,8 @@ from . import db
 
 def _page(links):
     rows = "".join(
-        f"<tr><td><a href='/{html.escape(l['code'])}'>/{html.escape(l['code'])}</a></td>"
+        f"<tr><td><a href='/{html.escape(l['code'])}'>/{html.escape(l['code'])}</a>"
+        f"{' (expired)' if l['expired'] else ''}</td>"
         f"<td>{html.escape(l['url'])}</td><td>{l['clicks']}</td></tr>"
         for l in links
     )
@@ -104,14 +109,17 @@ def make_server(db_path, host="127.0.0.1", port=8100):
                 return
             code = path.lstrip("/")
             with lock:
-                url = db.get_link(conn, code) if code else None
-                if url is not None:
+                status = db.get_link_status(conn, code) if code else None
+                if status is not None and not status["expired"]:
                     db.record_click(conn, code)
-            if url is None:
+            if status is None:
                 self._send_json({"error": "not found"}, status=404)
                 return
+            if status["expired"]:
+                self._send_json({"error": "link expired"}, status=410)
+                return
             self.send_response(302)
-            self.send_header("Location", url)
+            self.send_header("Location", status["url"])
             self.end_headers()
 
         def do_POST(self):
@@ -128,9 +136,12 @@ def make_server(db_path, host="127.0.0.1", port=8100):
             if not url:
                 self._send_json({"error": "'url' is required"}, status=400)
                 return
+            ttl_seconds = payload.get("ttl_seconds")
             try:
                 with lock:
-                    code = db.create_link(conn, url, code=payload.get("code"))
+                    code = db.create_link(
+                        conn, url, code=payload.get("code"), ttl_seconds=ttl_seconds
+                    )
             except ValueError as exc:
                 self._send_json({"error": str(exc)}, status=409)
                 return
