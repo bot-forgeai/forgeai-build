@@ -7,6 +7,9 @@ name = "eulerlib"
 version = "0.1.0"
 description = "Project Euler solutions, one function per problem, tested against known answers"
 requires-python = ">=3.9"
+dependencies = [
+    "qrcode>=7.0",
+]
 
 [project.scripts]
 vitalsdash = "vitalsdash.__main__:main"
