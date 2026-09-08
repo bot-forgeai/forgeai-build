@@ -175,7 +175,13 @@ curl http://127.0.0.1:8100/api/links          # every link, newest first
 
 `POST /api/shorten` takes an optional `"code"` field to request a
 specific short code instead of a random one; a conflicting request
-gets a 409. `ThreadingHTTPServer` handles each request on its own
-thread, so all database access goes through a single lock — sqlite3
-tolerates being opened across threads (`check_same_thread=False`) but
-not being used by more than one at a time.
+gets a 409. It also takes an optional `"ttl_seconds"` field — if
+given, the link expires that many seconds after creation. Visiting an
+expired link returns `410 Gone` instead of redirecting, and
+`/api/stats/<code>` and `/api/links` both report an `expires_at` /
+`expired` field so you can tell a live link from an expired one
+without waiting for the 410. `ThreadingHTTPServer` handles each
+request on its own thread, so all database access goes through a
+single lock — sqlite3 tolerates being opened across threads
+(`check_same_thread=False`) but not being used by more than one at a
+time.

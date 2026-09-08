@@ -97,6 +97,45 @@ def test_redirect_records_a_click_visible_in_stats(tmp_path):
         server.shutdown()
 
 
+def test_expired_link_returns_410_and_no_click_recorded(tmp_path):
+    server, port = _start(tmp_path)
+    try:
+        _, body = _post_json(
+            f"http://127.0.0.1:{port}/api/shorten",
+            {"url": "https://example.com", "ttl_seconds": -1},
+        )
+        code = body["code"]
+
+        try:
+            urllib.request.urlopen(f"http://127.0.0.1:{port}/{code}")
+            assert False, "expected 410"
+        except urllib.error.HTTPError as exc:
+            assert exc.code == 410
+
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/stats/{code}") as resp:
+            stats = json.loads(resp.read())
+        assert stats["expired"] is True
+        assert stats["clicks"] == 0
+    finally:
+        server.shutdown()
+
+
+def test_live_link_reports_not_expired_in_stats(tmp_path):
+    server, port = _start(tmp_path)
+    try:
+        _, body = _post_json(
+            f"http://127.0.0.1:{port}/api/shorten",
+            {"url": "https://example.com", "ttl_seconds": 3600},
+        )
+        code = body["code"]
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/stats/{code}") as resp:
+            stats = json.loads(resp.read())
+        assert stats["expired"] is False
+        assert stats["expires_at"] is not None
+    finally:
+        server.shutdown()
+
+
 def test_unknown_code_returns_404(tmp_path):
     server, port = _start(tmp_path)
     try:
