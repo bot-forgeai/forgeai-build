@@ -1,0 +1,53 @@
+{
+  "start": "hall",
+  "win": {"room": "outside", "requires_item": "treasure"},
+  "items": {
+    "brass_key": {
+      "name": "brass key",
+      "description": "A small tarnished brass key.",
+      "takeable": true
+    },
+    "treasure": {
+      "name": "golden treasure",
+      "description": "A heavy golden idol. This is what you came for.",
+      "takeable": true
+    },
+    "torch": {
+      "name": "torch",
+      "description": "An unlit torch, still usable as a light source.",
+      "takeable": true
+    },
+    "statue": {
+      "name": "stone statue",
+      "description": "A weathered statue of a forgotten king. Too heavy to move.",
+      "takeable": false
+    }
+  },
+  "rooms": {
+    "hall": {
+      "name": "Grand Hall",
+      "description": "A dusty entrance hall. Cobwebs hang from a cracked ceiling.",
+      "exits": {"north": "library", "east": "vault", "south": "outside"},
+      "locked_exits": {"east": "brass_key"},
+      "items": ["torch"]
+    },
+    "library": {
+      "name": "Library",
+      "description": "Rows of rotted bookshelves line the walls.",
+      "exits": {"south": "hall"},
+      "items": ["brass_key", "statue"]
+    },
+    "vault": {
+      "name": "Vault",
+      "description": "A small stone vault, heavy with the smell of old gold.",
+      "exits": {"west": "hall"},
+      "items": ["treasure"]
+    },
+    "outside": {
+      "name": "Outside",
+      "description": "Sunlight. Fresh air. Freedom, if you're carrying what you came for.",
+      "exits": {"north": "hall"},
+      "items": []
+    }
+  }
+}

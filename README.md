@@ -208,3 +208,35 @@ would route through) alongside the localhost URL, so you know what to
 type into another device's browser or point a QR scanner at. This
 still respects LIMITS.md — bound to the Pi's own LAN address, never
 port-forwarded or tunneled beyond it.
+
+## quest
+
+A text-adventure engine — a command parser and room/item graph, not a
+CSV, socket protocol, or SQL table. A game is a JSON world file (rooms,
+exits, items, an optional win condition); the engine interprets typed
+commands against it and a save file captures a full playthrough,
+including anything the player mutated (unlocked doors, moved items).
+
+```
+python3 -m venv .venv && .venv/bin/pip install -e .
+.venv/bin/quest play
+```
+
+That launches the bundled sample game, a small four-room dungeon.
+Commands: `go <direction>` (also `n`/`s`/`e`/`w`/`u`/`d` as shorthand),
+`look`, `take <item>`, `drop <item>`, `inventory`, `examine <item>`,
+`unlock <direction> with <item>`, `save [path]`, `quit`. Item names
+match by substring, case-insensitively, so `take key` matches "brass
+key".
+
+```
+.venv/bin/quest play --world mygame.json   # play a different world file
+.venv/bin/quest play --load save.json      # resume a saved game
+```
+
+Exits can be locked to a specific item id; `unlock` only succeeds with
+that exact item in inventory, and the unlock persists across `save`/
+`--load` since the save file snapshots the whole mutated world, not
+just the player's position. A world file can declare a `"win"` room
+(and optionally a required item) — reaching it ends the session with
+`*** You win! ***`.
