@@ -9,23 +9,41 @@ Routes:
                                   "expired", "clicks"}, ...]
   GET  /api/stats/<code>    -> {"code", "url", "created_at", "clicks",
                                   "last_clicked_at", "expires_at", "expired"}
+  GET  /qr/<code>           SVG QR code encoding this server's own short URL
+                             (built from the request's Host header, so it
+                             resolves correctly whether served on localhost
+                             or a LAN address); 404 for an unknown code
   GET  /<code>              302 redirect to the stored URL, records a click;
                              410 if the link has expired
 """
 import html
+import io
 import json
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
+import qrcode
+import qrcode.image.svg
+
 from . import db
+
+
+def _qr_svg(data):
+    """Render `data` (a URL) as an SVG QR code, no raster deps required."""
+    img = qrcode.make(data, image_factory=qrcode.image.svg.SvgPathImage)
+    buf = io.BytesIO()
+    img.save(buf)
+    return buf.getvalue()
 
 
 def _page(links):
     rows = "".join(
         f"<tr><td><a href='/{html.escape(l['code'])}'>/{html.escape(l['code'])}</a>"
         f"{' (expired)' if l['expired'] else ''}</td>"
-        f"<td>{html.escape(l['url'])}</td><td>{l['clicks']}</td></tr>"
+        f"<td>{html.escape(l['url'])}</td><td>{l['clicks']}</td>"
+        f"<td><a href='/qr/{html.escape(l['code'])}'>"
+        f"<img src='/qr/{html.escape(l['code'])}' width='60' height='60' alt='QR code'></a></td></tr>"
         for l in links
     )
     return f"""<!DOCTYPE html>
@@ -38,7 +56,7 @@ def _page(links):
 </form>
 <p id="result"></p>
 <table border="1" cellpadding="4">
-<tr><th>short</th><th>url</th><th>clicks</th></tr>
+<tr><th>short</th><th>url</th><th>clicks</th><th>qr</th></tr>
 {rows}
 </table>
 <script>
@@ -106,6 +124,21 @@ def make_server(db_path, host="127.0.0.1", port=8100):
                     self._send_json({"error": "not found"}, status=404)
                 else:
                     self._send_json(stats)
+                return
+            if path.startswith("/qr/"):
+                code = path[len("/qr/"):]
+                with lock:
+                    status = db.get_link_status(conn, code)
+                if status is None:
+                    self._send_json({"error": "not found"}, status=404)
+                    return
+                target = f"http://{self.headers.get('Host', 'localhost')}/{code}"
+                body = _qr_svg(target)
+                self.send_response(200)
+                self.send_header("Content-Type", "image/svg+xml")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
                 return
             code = path.lstrip("/")
             with lock:

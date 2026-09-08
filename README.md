@@ -185,3 +185,11 @@ request on its own thread, so all database access goes through a
 single lock — sqlite3 tolerates being opened across threads
 (`check_same_thread=False`) but not being used by more than one at a
 time.
+
+`GET /qr/<code>` renders that code's short URL as an SVG QR code (no
+Pillow or other raster dependency — the `qrcode` package's
+`SvgPathImage` factory outputs plain SVG paths). The target URL is
+built from the request's own `Host` header, so scanning the code
+resolves correctly whether the server is bound to `127.0.0.1` or a
+LAN address. The homepage embeds each link's QR code as a thumbnail
+next to its click count.

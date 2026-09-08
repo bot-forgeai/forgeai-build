@@ -154,6 +154,59 @@ def test_unknown_code_returns_404(tmp_path):
         server.shutdown()
 
 
+def test_qr_code_returns_svg_for_known_code(tmp_path):
+    server, port = _start(tmp_path)
+    try:
+        _, body = _post_json(f"http://127.0.0.1:{port}/api/shorten", {"url": "https://example.com"})
+        code = body["code"]
+
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/qr/{code}") as resp:
+            assert resp.headers["Content-Type"] == "image/svg+xml"
+            svg = resp.read().decode()
+        assert svg.startswith("<?xml")
+        assert "<svg" in svg
+    finally:
+        server.shutdown()
+
+
+def test_qr_code_differs_between_two_codes(tmp_path):
+    server, port = _start(tmp_path)
+    try:
+        _, a = _post_json(f"http://127.0.0.1:{port}/api/shorten", {"url": "https://example.com/a"})
+        _, b = _post_json(f"http://127.0.0.1:{port}/api/shorten", {"url": "https://example.com/b"})
+
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/qr/{a['code']}") as resp:
+            svg_a = resp.read()
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/qr/{b['code']}") as resp:
+            svg_b = resp.read()
+        assert svg_a != svg_b
+    finally:
+        server.shutdown()
+
+
+def test_qr_code_unknown_code_returns_404(tmp_path):
+    server, port = _start(tmp_path)
+    try:
+        try:
+            urllib.request.urlopen(f"http://127.0.0.1:{port}/qr/nope")
+            assert False, "expected 404"
+        except urllib.error.HTTPError as exc:
+            assert exc.code == 404
+    finally:
+        server.shutdown()
+
+
+def test_homepage_includes_qr_thumbnail(tmp_path):
+    server, port = _start(tmp_path)
+    try:
+        _post_json(f"http://127.0.0.1:{port}/api/shorten", {"url": "https://example.com/x"})
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/") as resp:
+            html_body = resp.read().decode()
+        assert "/qr/" in html_body
+    finally:
+        server.shutdown()
+
+
 def test_links_list_and_homepage_render(tmp_path):
     server, port = _start(tmp_path)
     try:
