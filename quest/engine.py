@@ -1,4 +1,6 @@
 """Game engine: interprets parsed commands against a GameState and returns text."""
+import random
+
 from .parser import parse
 
 HELP_TEXT = (
@@ -60,6 +62,29 @@ def describe_room(state):
     return "\n".join(line for line in lines if line)
 
 
+def _npc_current_room_id(state, npc_id):
+    for room_id, room in state.world["rooms"].items():
+        if npc_id in room.get("npcs", []):
+            return room_id
+    return None
+
+
+def _wander_npcs(state, rng):
+    """Move each NPC with a "wander_rooms" list to a random room from that list."""
+    for npc_id, npc in state.world.get("npcs", {}).items():
+        wander_rooms = npc.get("wander_rooms")
+        if not wander_rooms:
+            continue
+        current_room_id = _npc_current_room_id(state, npc_id)
+        if current_room_id is None:
+            continue
+        destination = rng.choice(wander_rooms)
+        if destination == current_room_id or destination not in state.world["rooms"]:
+            continue
+        state.world["rooms"][current_room_id]["npcs"].remove(npc_id)
+        state.world["rooms"][destination].setdefault("npcs", []).append(npc_id)
+
+
 def _check_win(state):
     """Return the first satisfied win condition (a dict), or None."""
     for win in state.world.get("win", []):
@@ -72,7 +97,8 @@ def _check_win(state):
     return None
 
 
-def process_command(state, text):
+def process_command(state, text, rng=None):
+    rng = rng or random
     cmd = parse(text)
     if cmd is None:
         return CommandResult("")
@@ -102,6 +128,7 @@ def process_command(state, text):
         if direction in room.get("locked_exits", {}):
             return CommandResult("That way is locked.")
         state.current_room = room["exits"][direction]
+        _wander_npcs(state, rng)
         won_condition = _check_win(state)
         message = describe_room(state)
         if won_condition:

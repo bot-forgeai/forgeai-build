@@ -48,6 +48,11 @@
       "wants_item": "torch",
       "gives_item": "silver_ring",
       "traded_dialogue": "Thank you for the torch. Take care of that ring."
+    },
+    "cat": {
+      "name": "black cat",
+      "dialogue": "The cat eyes you and says nothing.",
+      "wander_rooms": ["library", "vault", "hall"]
     }
   },
   "rooms": {
@@ -69,7 +74,8 @@
       "name": "Vault",
       "description": "A small stone vault, heavy with the smell of old gold.",
       "exits": {"west": "hall"},
-      "items": ["treasure"]
+      "items": ["treasure"],
+      "npcs": ["cat"]
     },
     "outside": {
       "name": "Outside",

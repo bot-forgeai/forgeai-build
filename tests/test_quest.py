@@ -286,6 +286,72 @@ def test_give_item_not_carried_fails(state):
     assert "aren't carrying" in result.message.lower()
 
 
+# --- engine: wandering NPCs ---
+
+class FixedRNG:
+    """A stand-in for `random` whose .choice() returns each value from `choices` in order."""
+
+    def __init__(self, choices):
+        self._choices = iter(choices)
+
+    def choice(self, seq):
+        return next(self._choices)
+
+
+@pytest.fixture
+def wander_world(tmp_path):
+    path = tmp_path / "wander.json"
+    path.write_text(json.dumps({
+        "start": "a",
+        "npcs": {
+            "ghost": {"name": "ghost", "dialogue": "...", "wander_rooms": ["a", "b"]},
+        },
+        "rooms": {
+            "a": {"exits": {"east": "b"}, "npcs": ["ghost"]},
+            "b": {"exits": {"west": "a"}},
+        },
+    }))
+    return str(path)
+
+
+def test_wander_npc_moves_to_new_room(wander_world):
+    state = GameState(load_world(wander_world))
+    rng = FixedRNG(["b"])
+    result = process_command(state, "go east", rng=rng)
+    assert "b" == _npc_room(state, "ghost")
+    assert "ghost" not in state.world["rooms"]["a"].get("npcs", [])
+
+
+def test_wander_npc_can_stay_put(wander_world):
+    state = GameState(load_world(wander_world))
+    rng = FixedRNG(["a"])
+    process_command(state, "go east", rng=rng)
+    assert _npc_room(state, "ghost") == "a"
+
+
+def test_wander_npc_appears_in_destination_room_description(wander_world):
+    state = GameState(load_world(wander_world))
+    rng = FixedRNG(["b"])
+    result = process_command(state, "go east", rng=rng)
+    assert "ghost" in result.message.lower()
+
+
+def _npc_room(state, npc_id):
+    for room_id, room in state.world["rooms"].items():
+        if npc_id in room.get("npcs", []):
+            return room_id
+    return None
+
+
+def test_stationary_npc_does_not_wander(state):
+    # "keeper" in the sample world has no wander_rooms, so it stays in hall
+    # even across many "go" turns using the real random module.
+    for _ in range(5):
+        process_command(state, "go north")
+        process_command(state, "go south")
+    assert "keeper" in state.world["rooms"]["hall"].get("npcs", [])
+
+
 # --- save/load ---
 
 def test_save_and_load_roundtrip(state, tmp_path):
