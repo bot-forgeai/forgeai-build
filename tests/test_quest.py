@@ -91,6 +91,24 @@ def test_load_world_no_rooms(tmp_path):
         load_world(str(bad))
 
 
+def test_load_world_normalizes_legacy_single_win_dict(tmp_path):
+    path = tmp_path / "legacy.json"
+    path.write_text(json.dumps({
+        "start": "a",
+        "rooms": {"a": {}},
+        "win": {"room": "a"},
+    }))
+    world = load_world(str(path))
+    assert world["win"] == [{"room": "a"}]
+
+
+def test_load_world_defaults_win_to_empty_list(tmp_path):
+    path = tmp_path / "nowin.json"
+    path.write_text(json.dumps({"start": "a", "rooms": {"a": {}}}))
+    world = load_world(str(path))
+    assert world["win"] == []
+
+
 def test_sample_world_loads(world):
     assert world["start"] == "hall"
     assert "library" in world["rooms"]
@@ -198,6 +216,31 @@ def test_unlock_and_full_playthrough_wins(state):
 def test_reaching_exit_without_treasure_does_not_win(state):
     result = process_command(state, "go south")
     assert result.won is False
+
+
+# --- engine: multiple win conditions ---
+
+def test_treasure_ending_is_recorded(state):
+    process_command(state, "go north")
+    process_command(state, "take brass key")
+    process_command(state, "go south")
+    process_command(state, "unlock east with brass key")
+    process_command(state, "go east")
+    process_command(state, "take treasure")
+    process_command(state, "go west")
+    result = process_command(state, "go south")
+    assert result.won is True
+    assert state.flags.get("ending") == "treasure_ending"
+    assert "glorious victory" in result.message.lower()
+
+
+def test_alternate_ending_reached_with_different_item(state):
+    process_command(state, "take torch")
+    process_command(state, "give torch to keeper")  # trades for silver_ring
+    result = process_command(state, "go south")
+    assert result.won is True
+    assert state.flags.get("ending") == "ring_ending"
+    assert "modest ending" in result.message.lower()
 
 
 # --- engine: NPCs ---
