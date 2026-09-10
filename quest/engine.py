@@ -3,7 +3,8 @@ from .parser import parse
 
 HELP_TEXT = (
     "Commands: go <direction> (or n/s/e/w/u/d), look, take <item>, drop <item>, "
-    "inventory, examine <item>, unlock <direction> with <item>, quit"
+    "inventory, examine <item>, unlock <direction> with <item>, "
+    "talk to <person>, give <item> to <person>, quit"
 )
 
 
@@ -27,6 +28,19 @@ def _find_in(item_ids, world, name):
     return None
 
 
+def _find_npc_in(npc_ids, world, name):
+    """Match a typed name against npc ids/names in npc_ids; substring match, case-insensitive."""
+    if not name:
+        return None
+    name = name.lower()
+    for npc_id in npc_ids:
+        npc = world["npcs"][npc_id]
+        npc_name = npc.get("name", npc_id).lower()
+        if name == npc_id.lower() or name == npc_name or name in npc_name:
+            return npc_id
+    return None
+
+
 def describe_room(state):
     room = state.room()
     lines = [room.get("name", state.current_room), room.get("description", "")]
@@ -34,6 +48,10 @@ def describe_room(state):
     if items:
         names = ", ".join(state.item(i).get("name", i) for i in items)
         lines.append(f"You see: {names}")
+    npcs = room.get("npcs", [])
+    if npcs:
+        names = ", ".join(state.npc(n).get("name", n) for n in npcs)
+        lines.append(f"Also here: {names}")
     exits = sorted(room.get("exits", {}).keys())
     if exits:
         locked = room.get("locked_exits", {})
@@ -129,5 +147,35 @@ def process_command(state, text):
             return CommandResult("That doesn't unlock it.")
         del locked[direction]
         return CommandResult(f"You unlock the way {direction}.")
+
+    if cmd.verb == "talk":
+        npc_id = _find_npc_in(state.room().get("npcs", []), state.world, cmd.arg)
+        if npc_id is None:
+            return CommandResult("There's no one like that here.")
+        npc = state.npc(npc_id)
+        if npc.get("traded") and npc.get("traded_dialogue"):
+            return CommandResult(npc["traded_dialogue"])
+        return CommandResult(npc.get("dialogue", "..."))
+
+    if cmd.verb == "give":
+        npc_id = _find_npc_in(state.room().get("npcs", []), state.world, cmd.extra)
+        if npc_id is None:
+            return CommandResult("There's no one like that here.")
+        item_id = _find_in(state.inventory, state.world, cmd.arg)
+        if item_id is None:
+            return CommandResult("You aren't carrying that.")
+        npc = state.npc(npc_id)
+        wanted = npc.get("wants_item")
+        if not wanted or item_id != wanted or npc.get("traded"):
+            return CommandResult(f"{npc.get('name', npc_id)} doesn't want that.")
+        state.inventory.remove(item_id)
+        npc["traded"] = True
+        given_item = state.item(item_id).get("name", item_id)
+        message = f"You give the {given_item} to {npc.get('name', npc_id)}."
+        gives = npc.get("gives_item")
+        if gives:
+            state.inventory.append(gives)
+            message += f" In return, you receive the {state.item(gives).get('name', gives)}."
+        return CommandResult(message)
 
     return CommandResult(f"I don't understand {cmd.arg!r}." if cmd.arg else "I don't understand that.")
