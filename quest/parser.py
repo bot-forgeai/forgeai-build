@@ -17,6 +17,8 @@ VERB_ALIASES = {
     "inventory": "inventory", "i": "inventory", "inv": "inventory",
     "examine": "examine", "x": "examine", "inspect": "examine",
     "unlock": "unlock",
+    "talk": "talk", "t": "talk",
+    "give": "give",
     "quit": "quit", "exit": "quit",
     "help": "help",
 }
@@ -62,6 +64,24 @@ def parse(text):
         direction = DIRECTIONS.get(direction_words[0], " ".join(direction_words)) if direction_words else None
         item = " ".join(item_words) if item_words else None
         return ParsedCommand("unlock", direction, item)
+
+    if verb == "talk":
+        if rest and rest[0] == "to":
+            rest = rest[1:]
+        return ParsedCommand("talk", " ".join(rest) if rest else None)
+
+    if verb == "give":
+        # "give <item words...> to <npc words...>"
+        if "to" in rest:
+            idx = rest.index("to")
+            item_words = rest[:idx]
+            npc_words = rest[idx + 1:]
+        else:
+            item_words = rest
+            npc_words = []
+        item = " ".join(item_words) if item_words else None
+        npc = " ".join(npc_words) if npc_words else None
+        return ParsedCommand("give", item, npc)
 
     if verb in ("take", "drop", "examine"):
         return ParsedCommand(verb, " ".join(rest) if rest else None)

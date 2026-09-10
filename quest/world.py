@@ -22,8 +22,10 @@ def load_world(path):
         room.setdefault("exits", {})
         room.setdefault("items", [])
         room.setdefault("locked_exits", {})
+        room.setdefault("npcs", [])
 
-    items = data.get("items", {})
+    data.setdefault("items", {})
+    data.setdefault("npcs", {})
     return data
 
 
@@ -41,6 +43,9 @@ class GameState:
 
     def item(self, item_id):
         return self.world["items"][item_id]
+
+    def npc(self, npc_id):
+        return self.world["npcs"][npc_id]
 
     def to_dict(self):
         return {

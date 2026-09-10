@@ -56,6 +56,25 @@ def test_parse_unknown_verb():
     assert cmd.verb == "unknown"
 
 
+def test_parse_talk_to():
+    cmd = parse("talk to keeper")
+    assert cmd.verb == "talk"
+    assert cmd.arg == "keeper"
+
+
+def test_parse_talk_without_to():
+    cmd = parse("talk keeper")
+    assert cmd.verb == "talk"
+    assert cmd.arg == "keeper"
+
+
+def test_parse_give_to():
+    cmd = parse("give torch to keeper")
+    assert cmd.verb == "give"
+    assert cmd.arg == "torch"
+    assert cmd.extra == "keeper"
+
+
 # --- world loading ---
 
 def test_load_world_missing_start(tmp_path):
@@ -179,6 +198,49 @@ def test_unlock_and_full_playthrough_wins(state):
 def test_reaching_exit_without_treasure_does_not_win(state):
     result = process_command(state, "go south")
     assert result.won is False
+
+
+# --- engine: NPCs ---
+
+def test_describe_room_lists_npc(state):
+    result = process_command(state, "look")
+    assert "old keeper" in result.message
+
+
+def test_talk_to_npc_shows_dialogue(state):
+    result = process_command(state, "talk to keeper")
+    assert "reward" in result.message.lower()
+
+
+def test_talk_to_missing_npc_fails(state):
+    result = process_command(state, "talk to nobody")
+    assert "no one like that" in result.message.lower()
+
+
+def test_give_wrong_item_fails(state):
+    process_command(state, "go north")
+    process_command(state, "take brass key")
+    process_command(state, "go south")
+    result = process_command(state, "give brass key to keeper")
+    assert "doesn't want" in result.message.lower()
+    assert "brass_key" in state.inventory
+
+
+def test_give_wanted_item_trades(state):
+    process_command(state, "take torch")
+    result = process_command(state, "give torch to keeper")
+    assert "receive" in result.message.lower()
+    assert "torch" not in state.inventory
+    assert "silver_ring" in state.inventory
+
+    # a second trade attempt is refused, and dialogue reflects the trade
+    result = process_command(state, "talk to keeper")
+    assert "thank you" in result.message.lower()
+
+
+def test_give_item_not_carried_fails(state):
+    result = process_command(state, "give torch to keeper")
+    assert "aren't carrying" in result.message.lower()
 
 
 # --- save/load ---

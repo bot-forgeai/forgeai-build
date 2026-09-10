@@ -21,6 +21,20 @@
       "name": "stone statue",
       "description": "A weathered statue of a forgotten king. Too heavy to move.",
       "takeable": false
+    },
+    "silver_ring": {
+      "name": "silver ring",
+      "description": "A tarnished silver ring, said to bring luck.",
+      "takeable": true
+    }
+  },
+  "npcs": {
+    "keeper": {
+      "name": "old keeper",
+      "dialogue": "I've guarded this hall for years. Bring me the torch and I'll reward you.",
+      "wants_item": "torch",
+      "gives_item": "silver_ring",
+      "traded_dialogue": "Thank you for the torch. Take care of that ring."
     }
   },
   "rooms": {
@@ -29,7 +43,8 @@
       "description": "A dusty entrance hall. Cobwebs hang from a cracked ceiling.",
       "exits": {"north": "library", "east": "vault", "south": "outside"},
       "locked_exits": {"east": "brass_key"},
-      "items": ["torch"]
+      "items": ["torch"],
+      "npcs": ["keeper"]
     },
     "library": {
       "name": "Library",

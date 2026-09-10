@@ -225,9 +225,12 @@ python3 -m venv .venv && .venv/bin/pip install -e .
 That launches the bundled sample game, a small four-room dungeon.
 Commands: `go <direction>` (also `n`/`s`/`e`/`w`/`u`/`d` as shorthand),
 `look`, `take <item>`, `drop <item>`, `inventory`, `examine <item>`,
-`unlock <direction> with <item>`, `save [path]`, `quit`. Item names
+`unlock <direction> with <item>`, `talk to <person>`,
+`give <item> to <person>`, `save [path]`, `quit`. Item and NPC names
 match by substring, case-insensitively, so `take key` matches "brass
-key".
+key". NPCs can trade: giving an NPC the item they want (if any) may
+hand back another item in return, and their dialogue can change after
+the trade.
 
 ```
 .venv/bin/quest play --world mygame.json   # play a different world file
