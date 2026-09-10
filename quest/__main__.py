@@ -34,7 +34,8 @@ def run_game(state, world_path, input_fn=input, print_fn=print, default_save_pat
         if result.message:
             print_fn(result.message)
         if result.won:
-            print_fn("*** You win! ***")
+            ending = state.flags.get("ending")
+            print_fn(f"*** You win! ({ending}) ***" if ending else "*** You win! ***")
             return "won"
         if result.quit:
             return "quit"

@@ -61,15 +61,15 @@ def describe_room(state):
 
 
 def _check_win(state):
-    win = state.world.get("win")
-    if not win:
-        return False
-    if state.current_room != win.get("room"):
-        return False
-    required = win.get("requires_item")
-    if required and required not in state.inventory:
-        return False
-    return True
+    """Return the first satisfied win condition (a dict), or None."""
+    for win in state.world.get("win", []):
+        if state.current_room != win.get("room"):
+            continue
+        required = win.get("requires_item")
+        if required and required not in state.inventory:
+            continue
+        return win
+    return None
 
 
 def process_command(state, text):
@@ -102,10 +102,15 @@ def process_command(state, text):
         if direction in room.get("locked_exits", {}):
             return CommandResult("That way is locked.")
         state.current_room = room["exits"][direction]
-        won = _check_win(state)
-        if won:
+        won_condition = _check_win(state)
+        message = describe_room(state)
+        if won_condition:
             state.flags["won"] = True
-        return CommandResult(describe_room(state), won=won)
+            state.flags["ending"] = won_condition.get("id", won_condition.get("room"))
+            ending_message = won_condition.get("message")
+            if ending_message:
+                message = f"{message}\n{ending_message}"
+        return CommandResult(message, won=won_condition is not None)
 
     if cmd.verb == "take":
         room = state.room()

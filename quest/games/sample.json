@@ -1,6 +1,19 @@
 {
   "start": "hall",
-  "win": {"room": "outside", "requires_item": "treasure"},
+  "win": [
+    {
+      "id": "treasure_ending",
+      "room": "outside",
+      "requires_item": "treasure",
+      "message": "You escape with the golden treasure in hand. A glorious victory!"
+    },
+    {
+      "id": "ring_ending",
+      "room": "outside",
+      "requires_item": "silver_ring",
+      "message": "You slip away with nothing but a silver ring, but you're alive. A modest ending."
+    }
+  ],
   "items": {
     "brass_key": {
       "name": "brass key",

@@ -26,6 +26,15 @@ def load_world(path):
 
     data.setdefault("items", {})
     data.setdefault("npcs", {})
+
+    # Normalize "win" to a list of conditions: a world file may declare a
+    # single ending as one dict (legacy) or several endings as a list.
+    win = data.get("win")
+    if isinstance(win, dict):
+        data["win"] = [win]
+    elif win is None:
+        data["win"] = []
+
     return data
 
 
