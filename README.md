@@ -230,7 +230,9 @@ Commands: `go <direction>` (also `n`/`s`/`e`/`w`/`u`/`d` as shorthand),
 match by substring, case-insensitively, so `take key` matches "brass
 key". NPCs can trade: giving an NPC the item they want (if any) may
 hand back another item in return, and their dialogue can change after
-the trade.
+the trade. An NPC can also wander: giving it a `"wander_rooms"` list in
+the world file makes it move to a random room from that list each time
+the player takes a turn, so it won't always be where you left it.
 
 ```
 .venv/bin/quest play --world mygame.json   # play a different world file
