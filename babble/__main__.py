@@ -31,6 +31,24 @@ def cmd_generate(args):
     return 0
 
 
+def cmd_merge(args):
+    if len(args.models) < 2:
+        print("error: merge requires at least two model files", file=sys.stderr)
+        return 1
+    models = [load_model(path) for path in args.models]
+    merged = models[0]
+    try:
+        for other in models[1:]:
+            merged.merge(other)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    save_model(merged, args.out)
+    print(f"merged {len(args.models)} model(s) -> {args.out} "
+          f"({merged.vocab_size()} distinct words, {len(merged.chain)} states)")
+    return 0
+
+
 def cmd_info(args):
     model = load_model(args.model)
     print(f"order: {model.order}")
@@ -55,6 +73,11 @@ def main(argv=None):
     p_gen.add_argument("--seed", default=None, help="starting words (must match the model's order)")
     p_gen.add_argument("--count", type=int, default=1, help="number of lines to generate (default: 1)")
     p_gen.set_defaults(func=cmd_generate)
+
+    p_merge = sub.add_parser("merge", help="combine two or more trained models (must share the same order)")
+    p_merge.add_argument("models", nargs="+", help="paths to trained model files to merge")
+    p_merge.add_argument("--out", default="merged.json", help="path to write the merged model (default: merged.json)")
+    p_merge.set_defaults(func=cmd_merge)
 
     p_info = sub.add_parser("info", help="show stats about a trained model")
     p_info.add_argument("model", help="path to a trained model file")

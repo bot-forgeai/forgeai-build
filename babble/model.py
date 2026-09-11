@@ -51,6 +51,15 @@ class MarkovModel:
             state = tuple(words[-self.order :])
         return " ".join(words)
 
+    def merge(self, other):
+        if other.order != self.order:
+            raise ValueError(
+                f"cannot merge order-{other.order} model into order-{self.order} model"
+            )
+        for state, counter in other.chain.items():
+            self.chain[state].update(counter)
+        self.starts.update(other.starts)
+
     def vocab_size(self):
         vocab = set()
         for state, counter in self.chain.items():
