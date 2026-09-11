@@ -188,6 +188,59 @@ def test_cli_merge_requires_two_models(tmp_path, capsys):
     assert "error:" in err
 
 
+def test_generate_rejects_nonpositive_temperature():
+    model = MarkovModel(order=1)
+    model.train("a b\na c\n")
+    with pytest.raises(ValueError):
+        model.generate(length=5, temperature=0)
+    with pytest.raises(ValueError):
+        model.generate(length=5, temperature=-1)
+
+
+def test_low_temperature_favors_most_frequent_transition():
+    model = MarkovModel(order=1)
+    model.train("a b\n" * 20 + "a c\n")
+    outcomes = {
+        model.generate(length=2, seed="a", rng=random.Random(i), temperature=0.05)
+        for i in range(20)
+    }
+    assert outcomes == {"a b"}
+
+
+def test_high_temperature_still_deterministic_with_seeded_rng():
+    model = MarkovModel(order=2)
+    model.train(CORPUS)
+    text1 = model.generate(length=15, rng=random.Random(3), temperature=2.0)
+    text2 = model.generate(length=15, rng=random.Random(3), temperature=2.0)
+    assert text1 == text2
+
+
+def test_cli_generate_accepts_temperature_flag(tmp_path, capsys):
+    corpus_path = tmp_path / "corpus.txt"
+    corpus_path.write_text(CORPUS)
+    model_path = tmp_path / "model.json"
+    main(["train", str(corpus_path), "--out", str(model_path)])
+    capsys.readouterr()
+
+    exit_code = main(["generate", str(model_path), "--length", "6", "--temperature", "0.5"])
+    out = capsys.readouterr().out
+    assert exit_code == 0
+    assert out.strip()
+
+
+def test_cli_generate_bad_temperature_prints_clean_error(tmp_path, capsys):
+    corpus_path = tmp_path / "corpus.txt"
+    corpus_path.write_text(CORPUS)
+    model_path = tmp_path / "model.json"
+    main(["train", str(corpus_path), "--out", str(model_path)])
+    capsys.readouterr()
+
+    exit_code = main(["generate", str(model_path), "--temperature", "0"])
+    err = capsys.readouterr().err
+    assert exit_code == 1
+    assert "error:" in err
+
+
 def test_cli_merge_rejects_mismatched_order(tmp_path, capsys):
     corpus_path = tmp_path / "corpus.txt"
     corpus_path.write_text(CORPUS)
