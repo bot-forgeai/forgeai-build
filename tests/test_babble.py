@@ -122,3 +122,82 @@ def test_cli_generate_multiple_count(tmp_path, capsys):
     main(["generate", str(model_path), "--count", "3", "--length", "5"])
     lines = [l for l in capsys.readouterr().out.splitlines() if l]
     assert len(lines) == 3
+
+
+def test_merge_combines_transition_counts():
+    a = MarkovModel(order=1)
+    a.train("a b\na b\n")
+    b = MarkovModel(order=1)
+    b.train("a c\n")
+    a.merge(b)
+    assert a.chain[("a",)]["b"] == 2
+    assert a.chain[("a",)]["c"] == 1
+
+
+def test_merge_combines_disjoint_vocab():
+    a = MarkovModel(order=1)
+    a.train("x y\n")
+    b = MarkovModel(order=1)
+    b.train("p q\n")
+    a.merge(b)
+    assert a.vocab_size() == 4
+
+
+def test_merge_rejects_mismatched_order():
+    a = MarkovModel(order=1)
+    a.train("a b\n")
+    b = MarkovModel(order=2)
+    b.train("a b c\n")
+    with pytest.raises(ValueError):
+        a.merge(b)
+
+
+def test_cli_merge_end_to_end(tmp_path, capsys):
+    corpus_a = tmp_path / "a.txt"
+    corpus_a.write_text("x y\nx y\n")
+    corpus_b = tmp_path / "b.txt"
+    corpus_b.write_text("p q\n")
+    model_a = tmp_path / "a.json"
+    model_b = tmp_path / "b.json"
+    merged_path = tmp_path / "merged.json"
+
+    main(["train", str(corpus_a), "--order", "1", "--out", str(model_a)])
+    main(["train", str(corpus_b), "--order", "1", "--out", str(model_b)])
+    capsys.readouterr()
+
+    exit_code = main(["merge", str(model_a), str(model_b), "--out", str(merged_path)])
+    out = capsys.readouterr().out
+    assert exit_code == 0
+    assert merged_path.exists()
+    assert "merged 2 model(s)" in out
+
+    merged = load_model(merged_path)
+    assert merged.vocab_size() == 4
+
+
+def test_cli_merge_requires_two_models(tmp_path, capsys):
+    corpus_path = tmp_path / "corpus.txt"
+    corpus_path.write_text(CORPUS)
+    model_path = tmp_path / "model.json"
+    main(["train", str(corpus_path), "--out", str(model_path)])
+    capsys.readouterr()
+
+    exit_code = main(["merge", str(model_path), "--out", str(tmp_path / "out.json")])
+    err = capsys.readouterr().err
+    assert exit_code == 1
+    assert "error:" in err
+
+
+def test_cli_merge_rejects_mismatched_order(tmp_path, capsys):
+    corpus_path = tmp_path / "corpus.txt"
+    corpus_path.write_text(CORPUS)
+    model_a = tmp_path / "a.json"
+    model_b = tmp_path / "b.json"
+    main(["train", str(corpus_path), "--order", "1", "--out", str(model_a)])
+    main(["train", str(corpus_path), "--order", "2", "--out", str(model_b)])
+    capsys.readouterr()
+
+    exit_code = main(["merge", str(model_a), str(model_b), "--out", str(tmp_path / "out.json")])
+    err = capsys.readouterr().err
+    assert exit_code == 1
+    assert "error:" in err
