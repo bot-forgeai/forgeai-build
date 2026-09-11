@@ -245,3 +245,28 @@ that exact item in inventory, and the unlock persists across `save`/
 just the player's position. A world file can declare a `"win"` room
 (and optionally a required item) — reaching it ends the session with
 `*** You win! ***`.
+
+## babble
+
+A word-level Markov chain text generator — a trained model with
+persistent state (transition frequencies serialized to JSON), not a
+game, a socket protocol, or a database. Train it on any plain-text
+corpus and it generates new text by walking the chain of word
+transitions it learned, with the same probabilities the source text
+had.
+
+```
+python3 -m venv .venv && .venv/bin/pip install -e .
+.venv/bin/babble train mycorpus.txt --order 2 --out model.json
+.venv/bin/babble generate model.json --length 40
+```
+
+`--order N` controls how many preceding words the model looks at
+before choosing the next one (default 2); higher orders produce more
+coherent but less novel text, since longer contexts have fewer
+plausible continuations. `train` accepts multiple corpus files at
+once. `generate --seed "some words"` starts from an exact phrase
+instead of a random sentence-starting point (the phrase must have
+exactly `order` words); `--count N` generates several lines in one
+call. `babble info model.json` reports the model's order, vocabulary
+size, and number of distinct states without generating anything.

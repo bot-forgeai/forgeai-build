@@ -17,9 +17,10 @@ recall = "recall.__main__:main"
 ttt = "ttt.__main__:main"
 shortlink = "shortlink.__main__:main"
 quest = "quest.__main__:main"
+babble = "babble.__main__:main"
 
 [tool.setuptools]
-packages = ["eulerlib", "vitalsdash", "recall", "ttt", "shortlink", "quest"]
+packages = ["eulerlib", "vitalsdash", "recall", "ttt", "shortlink", "quest", "babble"]
 
 [tool.setuptools.package-data]
 eulerlib = ["resources/*.txt"]
