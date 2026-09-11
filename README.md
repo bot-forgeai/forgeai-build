@@ -270,3 +270,10 @@ instead of a random sentence-starting point (the phrase must have
 exactly `order` words); `--count N` generates several lines in one
 call. `babble info model.json` reports the model's order, vocabulary
 size, and number of distinct states without generating anything.
+
+`--unit char` trains on individual characters instead of whole words
+(`--seed` then takes a raw string of exactly `order` characters, and
+generated output is joined without spaces) — useful for corpora too
+small to have meaningful word-level statistics, or for
+invented-word/name generation. `train`, `merge`, and `generate` all
+refuse to mix a word-level model with a char-level one.

@@ -14,22 +14,35 @@ def _weighted_choice(rng, counter, temperature=1.0):
 
 
 class MarkovModel:
-    def __init__(self, order=2):
+    def __init__(self, order=2, unit="word"):
         if order < 1:
             raise ValueError("order must be >= 1")
+        if unit not in ("word", "char"):
+            raise ValueError(f"unit must be 'word' or 'char', got {unit!r}")
         self.order = order
+        self.unit = unit
         self.chain = defaultdict(Counter)
         self.starts = Counter()
 
+    def _tokenize(self, text):
+        if self.unit == "char":
+            return [list(text)]
+        return [line.split() for line in text.splitlines()]
+
+    def _join(self, tokens):
+        return "".join(tokens) if self.unit == "char" else " ".join(tokens)
+
+    def _seed_tokens(self, seed):
+        return list(seed) if self.unit == "char" else seed.split()
+
     def train(self, text):
-        for line in text.splitlines():
-            words = line.split()
-            if len(words) <= self.order:
+        for tokens in self._tokenize(text):
+            if len(tokens) <= self.order:
                 continue
-            self.starts[tuple(words[: self.order])] += 1
-            for i in range(len(words) - self.order):
-                state = tuple(words[i : i + self.order])
-                nxt = words[i + self.order]
+            self.starts[tuple(tokens[: self.order])] += 1
+            for i in range(len(tokens) - self.order):
+                state = tuple(tokens[i : i + self.order])
+                nxt = tokens[i + self.order]
                 self.chain[state][nxt] += 1
 
     def generate(self, length=50, rng=None, seed=None, temperature=1.0):
@@ -37,30 +50,35 @@ class MarkovModel:
             raise ValueError(f"temperature must be > 0, got {temperature}")
         rng = rng or random.Random()
         if seed is not None:
-            state = tuple(seed.split())
+            state = tuple(self._seed_tokens(seed))
             if len(state) != self.order:
+                unit_name = "character" if self.unit == "char" else "word"
                 raise ValueError(
-                    f"seed must have exactly {self.order} word(s), got {len(state)}"
+                    f"seed must have exactly {self.order} {unit_name}(s), got {len(state)}"
                 )
         else:
             if not self.starts:
                 return ""
             state = _weighted_choice(rng, self.starts, temperature)
 
-        words = list(state)
-        while len(words) < length:
+        tokens = list(state)
+        while len(tokens) < length:
             choices = self.chain.get(state)
             if not choices:
                 break
             nxt = _weighted_choice(rng, choices, temperature)
-            words.append(nxt)
-            state = tuple(words[-self.order :])
-        return " ".join(words)
+            tokens.append(nxt)
+            state = tuple(tokens[-self.order :])
+        return self._join(tokens)
 
     def merge(self, other):
         if other.order != self.order:
             raise ValueError(
                 f"cannot merge order-{other.order} model into order-{self.order} model"
+            )
+        if other.unit != self.unit:
+            raise ValueError(
+                f"cannot merge a {other.unit}-level model into a {self.unit}-level model"
             )
         for state, counter in other.chain.items():
             self.chain[state].update(counter)
@@ -79,6 +97,7 @@ class MarkovModel:
         sep = "\x1f"
         return {
             "order": self.order,
+            "unit": self.unit,
             "chain": {
                 sep.join(state): dict(counter)
                 for state, counter in self.chain.items()
@@ -89,7 +108,7 @@ class MarkovModel:
     @classmethod
     def from_dict(cls, data):
         sep = "\x1f"
-        model = cls(order=data["order"])
+        model = cls(order=data["order"], unit=data.get("unit", "word"))
         for key, counts in data["chain"].items():
             model.chain[tuple(key.split(sep))] = Counter(counts)
         for key, count in data["starts"].items():
