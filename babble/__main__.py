@@ -6,13 +6,13 @@ from .storage import load_model, save_model
 
 
 def cmd_train(args):
-    model = MarkovModel(order=args.order)
+    model = MarkovModel(order=args.order, unit=args.unit)
     for corpus_path in args.corpus:
         with open(corpus_path) as f:
             model.train(f.read())
     save_model(model, args.out)
-    print(f"trained order-{args.order} model on {len(args.corpus)} file(s) "
-          f"-> {args.out} ({model.vocab_size()} distinct words, "
+    print(f"trained order-{args.order} {args.unit}-level model on {len(args.corpus)} file(s) "
+          f"-> {args.out} ({model.vocab_size()} distinct {args.unit}s, "
           f"{len(model.chain)} states)")
 
 
@@ -54,7 +54,8 @@ def cmd_merge(args):
 def cmd_info(args):
     model = load_model(args.model)
     print(f"order: {model.order}")
-    print(f"distinct words: {model.vocab_size()}")
+    print(f"unit: {model.unit}")
+    print(f"distinct {model.unit}s: {model.vocab_size()}")
     print(f"states: {len(model.chain)}")
     print(f"sentence starts: {len(model.starts)}")
 
@@ -66,6 +67,8 @@ def main(argv=None):
     p_train = sub.add_parser("train", help="train a model from one or more text files")
     p_train.add_argument("corpus", nargs="+", help="text file(s) to train on")
     p_train.add_argument("--order", type=int, default=2, help="Markov chain order (default: 2)")
+    p_train.add_argument("--unit", choices=["word", "char"], default="word",
+                          help="tokenize by whole words or individual characters (default: word)")
     p_train.add_argument("--out", default="model.json", help="path to write the trained model (default: model.json)")
     p_train.set_defaults(func=cmd_train)
 

@@ -241,6 +241,95 @@ def test_cli_generate_bad_temperature_prints_clean_error(tmp_path, capsys):
     assert "error:" in err
 
 
+def test_char_mode_trains_on_individual_characters():
+    model = MarkovModel(order=2, unit="char")
+    model.train("abcabc")
+    assert model.chain[("a", "b")]["c"] == 2
+    assert model.starts[("a", "b")] == 1
+
+
+def test_char_mode_generate_joins_without_spaces():
+    model = MarkovModel(order=2, unit="char")
+    model.train("abcabcabc")
+    text = model.generate(length=6, seed="ab", rng=random.Random(1))
+    assert text.startswith("ab")
+    assert " " not in text
+
+
+def test_char_mode_seed_uses_raw_characters_not_split():
+    model = MarkovModel(order=3, unit="char")
+    model.train("hello world\n")
+    text = model.generate(length=5, seed="hel", rng=random.Random(1))
+    assert text.startswith("hel")
+
+
+def test_char_mode_rejects_wrong_length_seed():
+    model = MarkovModel(order=2, unit="char")
+    model.train("abcabc")
+    with pytest.raises(ValueError):
+        model.generate(seed="a")
+
+
+def test_word_mode_is_still_the_default():
+    model = MarkovModel(order=2)
+    assert model.unit == "word"
+
+
+def test_rejects_invalid_unit():
+    with pytest.raises(ValueError):
+        MarkovModel(order=1, unit="syllable")
+
+
+def test_char_model_round_trips_through_save_and_load(tmp_path):
+    model = MarkovModel(order=2, unit="char")
+    model.train("abcabcabc")
+    path = tmp_path / "char_model.json"
+    save_model(model, path)
+    loaded = load_model(path)
+    assert loaded.unit == "char"
+    text1 = model.generate(length=8, rng=random.Random(5))
+    text2 = loaded.generate(length=8, rng=random.Random(5))
+    assert text1 == text2
+
+
+def test_loading_legacy_model_without_unit_field_defaults_to_word(tmp_path):
+    model = MarkovModel(order=1)
+    model.train("a b\na c\n")
+    data = model.to_dict()
+    del data["unit"]
+    path = tmp_path / "legacy.json"
+    path.write_text(__import__("json").dumps(data))
+    loaded = load_model(path)
+    assert loaded.unit == "word"
+
+
+def test_merge_rejects_mismatched_unit():
+    a = MarkovModel(order=1, unit="word")
+    a.train("a b\n")
+    b = MarkovModel(order=1, unit="char")
+    b.train("ab")
+    with pytest.raises(ValueError):
+        a.merge(b)
+
+
+def test_cli_train_char_unit_end_to_end(tmp_path, capsys):
+    corpus_path = tmp_path / "corpus.txt"
+    corpus_path.write_text("abcabcabcabc")
+    model_path = tmp_path / "model.json"
+
+    main(["train", str(corpus_path), "--order", "2", "--unit", "char", "--out", str(model_path)])
+    train_out = capsys.readouterr().out
+    assert "char-level" in train_out
+
+    main(["info", str(model_path)])
+    info_out = capsys.readouterr().out
+    assert "unit: char" in info_out
+
+    main(["generate", str(model_path), "--length", "6", "--seed", "ab"])
+    gen_out = capsys.readouterr().out
+    assert gen_out.startswith("ab")
+
+
 def test_cli_merge_rejects_mismatched_order(tmp_path, capsys):
     corpus_path = tmp_path / "corpus.txt"
     corpus_path.write_text(CORPUS)
