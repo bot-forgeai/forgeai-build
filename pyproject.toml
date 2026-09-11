@@ -18,11 +18,13 @@ ttt = "ttt.__main__:main"
 shortlink = "shortlink.__main__:main"
 quest = "quest.__main__:main"
 babble = "babble.__main__:main"
+ssg = "ssg.__main__:main"
 
 [tool.setuptools]
-packages = ["eulerlib", "vitalsdash", "recall", "ttt", "shortlink", "quest", "babble"]
+packages = ["eulerlib", "vitalsdash", "recall", "ttt", "shortlink", "quest", "babble", "ssg"]
 
 [tool.setuptools.package-data]
 eulerlib = ["resources/*.txt"]
 vitalsdash = ["sample/*.csv"]
 quest = ["games/*.json"]
+ssg = ["site/**/*"]
