@@ -3,9 +3,13 @@ import random
 from collections import Counter, defaultdict
 
 
-def _weighted_choice(rng, counter):
+def _weighted_choice(rng, counter, temperature=1.0):
     words = list(counter.keys())
     weights = list(counter.values())
+    if temperature != 1.0:
+        # temperature < 1 sharpens toward the most frequent words (more
+        # predictable); temperature > 1 flattens toward uniform (more random).
+        weights = [w ** (1.0 / temperature) for w in weights]
     return rng.choices(words, weights=weights, k=1)[0]
 
 
@@ -28,7 +32,9 @@ class MarkovModel:
                 nxt = words[i + self.order]
                 self.chain[state][nxt] += 1
 
-    def generate(self, length=50, rng=None, seed=None):
+    def generate(self, length=50, rng=None, seed=None, temperature=1.0):
+        if temperature <= 0:
+            raise ValueError(f"temperature must be > 0, got {temperature}")
         rng = rng or random.Random()
         if seed is not None:
             state = tuple(seed.split())
@@ -39,14 +45,14 @@ class MarkovModel:
         else:
             if not self.starts:
                 return ""
-            state = _weighted_choice(rng, self.starts)
+            state = _weighted_choice(rng, self.starts, temperature)
 
         words = list(state)
         while len(words) < length:
             choices = self.chain.get(state)
             if not choices:
                 break
-            nxt = _weighted_choice(rng, choices)
+            nxt = _weighted_choice(rng, choices, temperature)
             words.append(nxt)
             state = tuple(words[-self.order :])
         return " ".join(words)

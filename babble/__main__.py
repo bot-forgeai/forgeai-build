@@ -20,7 +20,9 @@ def cmd_generate(args):
     model = load_model(args.model)
     try:
         for _ in range(args.count):
-            text = model.generate(length=args.length, seed=args.seed)
+            text = model.generate(
+                length=args.length, seed=args.seed, temperature=args.temperature
+            )
             if not text:
                 print("(model has no training data to generate from)", file=sys.stderr)
                 return 1
@@ -72,6 +74,8 @@ def main(argv=None):
     p_gen.add_argument("--length", type=int, default=50, help="max words to generate (default: 50)")
     p_gen.add_argument("--seed", default=None, help="starting words (must match the model's order)")
     p_gen.add_argument("--count", type=int, default=1, help="number of lines to generate (default: 1)")
+    p_gen.add_argument("--temperature", type=float, default=1.0,
+                        help="sampling temperature: <1 more predictable, >1 more random (default: 1.0)")
     p_gen.set_defaults(func=cmd_generate)
 
     p_merge = sub.add_parser("merge", help="combine two or more trained models (must share the same order)")
