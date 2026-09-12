@@ -37,16 +37,25 @@ def _read_template(templates_dir, name, fallback):
     return fallback
 
 
+def _is_draft(page):
+    return str(page.get("draft", "")).strip().lower() in ("true", "yes", "1")
+
+
 def build_site(content_dir, templates_dir, output_dir, static_dir=None, site_title="My Site",
-                base_url=None):
+                base_url=None, drafts=False):
     """Render every content page plus an index, writing HTML into output_dir.
 
     If base_url is given, also writes an RSS feed to feed.xml -- feed
     links need an absolute URL, so the feed is skipped without one.
 
+    A page with a front-matter `draft: true` field is excluded from the
+    build (and the feed) unless drafts=True is passed.
+
     Returns the list of page dicts that were built (useful for tests).
     """
     pages = load_pages(content_dir)
+    if not drafts:
+        pages = [p for p in pages if not _is_draft(p)]
     pages.sort(key=lambda p: p.get("date", ""), reverse=True)
 
     os.makedirs(output_dir, exist_ok=True)
