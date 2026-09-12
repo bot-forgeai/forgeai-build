@@ -5,6 +5,7 @@ import pytest
 
 from ssg.build import build_site
 from ssg.content import ContentError, load_page, load_pages, parse_front_matter
+from ssg.feed import render_rss
 from ssg.markdown import render as render_markdown
 from ssg.render import apply_template
 
@@ -179,3 +180,75 @@ def test_cli_build_missing_content_dir(tmp_path, capsys):
     parser = build_parser()
     args = parser.parse_args(["--site", str(site_dir), "build"])
     assert args.func(args) == 1
+
+
+def test_render_rss_basic():
+    pages = [
+        {"slug": "two", "title": "Two", "date": "2026-02-01"},
+        {"slug": "one", "title": "One", "date": "2026-01-01"},
+    ]
+    xml = render_rss(pages, "My Site", "http://example.com")
+    assert "<title>My Site</title>" in xml
+    assert "<link>http://example.com</link>" in xml
+    assert "<link>http://example.com/two.html</link>" in xml
+    assert "<link>http://example.com/one.html</link>" in xml
+    # newest-first order preserved as given
+    assert xml.index("two.html") < xml.index("one.html")
+    assert "<pubDate>" in xml
+
+
+def test_render_rss_trailing_slash_base_url():
+    pages = [{"slug": "a", "title": "A", "date": "2026-01-01"}]
+    xml = render_rss(pages, "S", "http://example.com/")
+    assert "<link>http://example.com/a.html</link>" in xml
+
+
+def test_render_rss_escapes_title():
+    pages = [{"slug": "a", "title": "A & B <tag>", "date": "2026-01-01"}]
+    xml = render_rss(pages, "S", "http://example.com")
+    assert "A &amp; B &lt;tag&gt;" in xml
+    assert "<tag>" not in xml
+
+
+def test_render_rss_missing_date_omits_pubdate():
+    pages = [{"slug": "a", "title": "A"}]
+    xml = render_rss(pages, "S", "http://example.com")
+    assert "<pubDate>" not in xml
+    assert "<link>http://example.com/a.html</link>" in xml
+
+
+def test_build_site_writes_feed_when_base_url_given(tmp_path):
+    content_dir = tmp_path / "content"
+    content_dir.mkdir()
+    (content_dir / "a.md").write_text("---\ntitle: A\ndate: 2026-01-01\n---\nbody")
+    output_dir = tmp_path / "_build"
+
+    build_site(str(content_dir), str(tmp_path / "templates"), str(output_dir), None, "S",
+               base_url="http://example.com")
+
+    feed_path = output_dir / "feed.xml"
+    assert feed_path.exists()
+    assert "http://example.com/a.html" in feed_path.read_text()
+
+
+def test_build_site_skips_feed_without_base_url(tmp_path):
+    content_dir = tmp_path / "content"
+    content_dir.mkdir()
+    (content_dir / "a.md").write_text("---\ntitle: A\n---\nbody")
+    output_dir = tmp_path / "_build"
+
+    build_site(str(content_dir), str(tmp_path / "templates"), str(output_dir), None, "S")
+
+    assert not (output_dir / "feed.xml").exists()
+
+
+def test_cli_build_with_base_url_writes_feed(tmp_path):
+    from ssg.__main__ import build_parser
+
+    site_dir = tmp_path / "site"
+    parser = build_parser()
+    new_args = parser.parse_args(["--site", str(site_dir), "new", "My Post"])
+    new_args.func(new_args)
+    args = parser.parse_args(["--site", str(site_dir), "--base-url", "http://example.com", "build"])
+    assert args.func(args) == 0
+    assert (site_dir / "_build" / "feed.xml").exists()

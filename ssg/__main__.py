@@ -28,8 +28,11 @@ def cmd_build(args):
         print(f"error: no content directory at {content_dir}", file=sys.stderr)
         return 1
 
-    pages = build_site(content_dir, templates_dir, output_dir, static_dir, args.title)
+    pages = build_site(content_dir, templates_dir, output_dir, static_dir, args.title,
+                        args.base_url)
     print(f"Built {len(pages)} page(s) into {output_dir}")
+    if args.base_url:
+        print(f"Wrote feed.xml (base URL: {args.base_url})")
     return 0
 
 
@@ -60,7 +63,7 @@ def cmd_serve(args):
         print(f"error: no content directory at {content_dir}", file=sys.stderr)
         return 1
 
-    build_site(content_dir, templates_dir, output_dir, static_dir, args.title)
+    build_site(content_dir, templates_dir, output_dir, static_dir, args.title, args.base_url)
     handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=output_dir)
     server = http.server.ThreadingHTTPServer((args.host, args.port), handler)
     print(f"Serving {output_dir} on http://{args.host}:{server.server_port}/")
@@ -77,6 +80,9 @@ def build_parser():
     parser = argparse.ArgumentParser(prog="ssg", description="A small static site generator")
     parser.add_argument("--site", default=DEFAULT_SITE_DIR, help="site directory (default: site)")
     parser.add_argument("--title", default="My Site", help="site title for the index page")
+    parser.add_argument("--base-url", default=None,
+                         help="public site root (e.g. https://example.com); "
+                              "if given, also writes feed.xml")
     sub = parser.add_subparsers(dest="command", required=True)
 
     build_p = sub.add_parser("build", help="render content into static HTML")
