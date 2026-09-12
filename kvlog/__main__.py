@@ -39,6 +39,18 @@ def cmd_dump(args):
             print(f"{key}\t{json.dumps(value)}")
 
 
+def cmd_prefix(args):
+    with KVStore(args.db) as store:
+        for key, value in store.prefix(args.prefix):
+            print(f"{key}\t{json.dumps(value)}")
+
+
+def cmd_range(args):
+    with KVStore(args.db) as store:
+        for key, value in store.range(args.start, args.end):
+            print(f"{key}\t{json.dumps(value)}")
+
+
 def cmd_compact(args):
     with KVStore(args.db) as store:
         before = _log_size(args.db)
@@ -76,6 +88,15 @@ def build_parser():
 
     p_dump = sub.add_parser("dump", help="print every key/value pair")
     p_dump.set_defaults(func=cmd_dump)
+
+    p_prefix = sub.add_parser("prefix", help="list all key/value pairs whose key starts with a prefix")
+    p_prefix.add_argument("prefix")
+    p_prefix.set_defaults(func=cmd_prefix)
+
+    p_range = sub.add_parser("range", help="list all key/value pairs with start <= key <= end")
+    p_range.add_argument("--start", default=None, help="inclusive lower bound (omit for unbounded)")
+    p_range.add_argument("--end", default=None, help="inclusive upper bound (omit for unbounded)")
+    p_range.set_defaults(func=cmd_range)
 
     p_compact = sub.add_parser("compact", help="rewrite the log, dropping stale history")
     p_compact.set_defaults(func=cmd_compact)

@@ -46,6 +46,25 @@ def test_keys_and_dump(tmp_path):
     assert lines == ['a\t"1"', 'b\t"2"']
 
 
+def test_prefix(tmp_path):
+    db = str(tmp_path / "cli.db")
+    run_cli(db, "put", "user:1", "ada")
+    run_cli(db, "put", "user:2", "bob")
+    run_cli(db, "put", "group:1", "admins")
+    result = run_cli(db, "prefix", "user:")
+    assert result.returncode == 0
+    assert result.stdout.strip().splitlines() == ['user:1\t"ada"', 'user:2\t"bob"']
+
+
+def test_range(tmp_path):
+    db = str(tmp_path / "cli.db")
+    for k in ["a", "b", "c", "d"]:
+        run_cli(db, "put", k, k.upper())
+    result = run_cli(db, "range", "--start", "b", "--end", "c")
+    assert result.returncode == 0
+    assert result.stdout.strip().splitlines() == ['b\t"B"', 'c\t"C"']
+
+
 def test_compact_reports_sizes(tmp_path):
     db = str(tmp_path / "cli.db")
     for i in range(10):

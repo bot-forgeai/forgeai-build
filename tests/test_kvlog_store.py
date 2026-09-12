@@ -101,3 +101,22 @@ def test_compact_drops_deleted_keys(db_path):
     with KVStore(db_path) as store:
         assert "gone" not in store
         assert store.get("stays") == "y"
+
+
+def test_prefix(db_path):
+    with KVStore(db_path) as store:
+        store.put("user:1", "ada")
+        store.put("user:2", "bob")
+        store.put("group:1", "admins")
+        assert store.prefix("user:") == [("user:1", "ada"), ("user:2", "bob")]
+        assert store.prefix("nope:") == []
+
+
+def test_range(db_path):
+    with KVStore(db_path) as store:
+        for k in ["a", "b", "c", "d", "e"]:
+            store.put(k, k.upper())
+        assert store.range("b", "d") == [("b", "B"), ("c", "C"), ("d", "D")]
+        assert store.range(start="c") == [("c", "C"), ("d", "D"), ("e", "E")]
+        assert store.range(end="b") == [("a", "A"), ("b", "B")]
+        assert store.range() == store.items()
