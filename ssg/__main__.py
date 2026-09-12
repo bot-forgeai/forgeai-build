@@ -6,8 +6,10 @@ import http.server
 import os
 import re
 import sys
+import threading
 
 from .build import build_site
+from .watch import watch_loop
 
 DEFAULT_SITE_DIR = "site"
 
@@ -53,6 +55,29 @@ def cmd_new(args):
     return 0
 
 
+def cmd_watch(args):
+    site_dir = args.site
+    content_dir = os.path.join(site_dir, "content")
+    templates_dir = os.path.join(site_dir, "templates")
+    static_dir = os.path.join(site_dir, "static")
+    output_dir = args.output or os.path.join(site_dir, "_build")
+
+    if not os.path.isdir(content_dir):
+        print(f"error: no content directory at {content_dir}", file=sys.stderr)
+        return 1
+
+    def on_build(pages):
+        print(f"Built {len(pages)} page(s) into {output_dir}")
+
+    print(f"Watching {content_dir}, {templates_dir}, {static_dir} for changes (Ctrl+C to stop)")
+    try:
+        watch_loop(content_dir, templates_dir, output_dir, static_dir, args.title,
+                   args.base_url, args.drafts, poll_interval=args.interval, on_build=on_build)
+    except KeyboardInterrupt:
+        pass
+    return 0
+
+
 def cmd_serve(args):
     site_dir = args.site
     output_dir = args.output or os.path.join(site_dir, "_build")
@@ -64,8 +89,25 @@ def cmd_serve(args):
         print(f"error: no content directory at {content_dir}", file=sys.stderr)
         return 1
 
-    build_site(content_dir, templates_dir, output_dir, static_dir, args.title, args.base_url,
-               args.drafts)
+    watch_thread = None
+    stop_event = threading.Event()
+    if args.watch:
+        def on_build(pages):
+            print(f"Rebuilt {len(pages)} page(s)")
+
+        watch_thread = threading.Thread(
+            target=watch_loop,
+            args=(content_dir, templates_dir, output_dir, static_dir, args.title,
+                  args.base_url, args.drafts),
+            kwargs={"poll_interval": args.interval, "stop_event": stop_event,
+                    "on_build": on_build},
+            daemon=True,
+        )
+        watch_thread.start()
+    else:
+        build_site(content_dir, templates_dir, output_dir, static_dir, args.title, args.base_url,
+                   args.drafts)
+
     handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=output_dir)
     server = http.server.ThreadingHTTPServer((args.host, args.port), handler)
     print(f"Serving {output_dir} on http://{args.host}:{server.server_port}/")
@@ -74,6 +116,7 @@ def cmd_serve(args):
     except KeyboardInterrupt:
         pass
     finally:
+        stop_event.set()
         server.server_close()
     return 0
 
@@ -103,7 +146,17 @@ def build_parser():
     serve_p.add_argument("--output", help="output directory (default: <site>/_build)")
     serve_p.add_argument("--host", default="127.0.0.1")
     serve_p.add_argument("--port", type=int, default=8000)
+    serve_p.add_argument("--watch", action="store_true",
+                          help="rebuild automatically when source files change")
+    serve_p.add_argument("--interval", type=float, default=1.0,
+                          help="seconds between change checks with --watch (default: 1.0)")
     serve_p.set_defaults(func=cmd_serve)
+
+    watch_p = sub.add_parser("watch", help="rebuild automatically when source files change")
+    watch_p.add_argument("--output", help="output directory (default: <site>/_build)")
+    watch_p.add_argument("--interval", type=float, default=1.0,
+                          help="seconds between change checks (default: 1.0)")
+    watch_p.set_defaults(func=cmd_watch)
 
     return parser
 

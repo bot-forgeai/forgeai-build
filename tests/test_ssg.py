@@ -1,4 +1,5 @@
 import os
+import threading
 import urllib.request
 
 import pytest
@@ -9,6 +10,7 @@ from ssg.feed import render_rss
 from ssg.markdown import render as render_markdown
 from ssg.render import apply_template
 from ssg.tags import group_by_tag, parse_tags, slugify_tag
+from ssg.watch import scan_signature, watch_loop
 
 
 def test_parse_front_matter_basic():
@@ -402,3 +404,87 @@ def test_build_site_excludes_draft_from_tag_pages(tmp_path):
     python_html = (output_dir / "tags" / "python.html").read_text()
     assert ">A</a>" not in python_html
     assert ">B</a>" in python_html
+
+
+def test_scan_signature_detects_added_file(tmp_path):
+    content_dir = tmp_path / "content"
+    content_dir.mkdir()
+    (content_dir / "a.md").write_text("---\ntitle: A\n---\nBody.\n")
+
+    before = scan_signature([str(content_dir)])
+    (content_dir / "b.md").write_text("---\ntitle: B\n---\nBody.\n")
+    after = scan_signature([str(content_dir)])
+
+    assert before != after
+    assert len(after) == len(before) + 1
+
+
+def test_scan_signature_skips_missing_dirs(tmp_path):
+    missing = str(tmp_path / "does-not-exist")
+    assert scan_signature([missing, None]) == {}
+
+
+def test_watch_loop_builds_once_immediately(tmp_path):
+    content_dir = tmp_path / "content"
+    content_dir.mkdir()
+    (content_dir / "a.md").write_text("---\ntitle: A\n---\nBody.\n")
+    output_dir = tmp_path / "_build"
+
+    stop_event = threading.Event()
+    stop_event.set()  # stop before the poll loop ever sleeps
+    builds = []
+
+    watch_loop(str(content_dir), str(tmp_path / "templates"), str(output_dir), None, "Test",
+               stop_event=stop_event, sleep_fn=lambda s: None, on_build=builds.append)
+
+    assert len(builds) == 1
+    assert (output_dir / "a.html").exists()
+
+
+def test_watch_loop_rebuilds_on_change(tmp_path):
+    content_dir = tmp_path / "content"
+    content_dir.mkdir()
+    page_path = content_dir / "a.md"
+    page_path.write_text("---\ntitle: A\n---\nOriginal body.\n")
+    output_dir = tmp_path / "_build"
+
+    stop_event = threading.Event()
+    builds = []
+    calls = {"n": 0}
+
+    def fake_sleep(_interval):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            # ensure a distinct mtime even on filesystems with coarse resolution
+            new_mtime = os.path.getmtime(page_path) + 5
+            page_path.write_text("---\ntitle: A\n---\nUpdated body.\n")
+            os.utime(page_path, (new_mtime, new_mtime))
+        else:
+            stop_event.set()
+
+    watch_loop(str(content_dir), str(tmp_path / "templates"), str(output_dir), None, "Test",
+               stop_event=stop_event, sleep_fn=fake_sleep, on_build=builds.append)
+
+    assert len(builds) == 2
+    assert "Updated body" in (output_dir / "a.html").read_text()
+
+
+def test_watch_loop_no_rebuild_without_changes(tmp_path):
+    content_dir = tmp_path / "content"
+    content_dir.mkdir()
+    (content_dir / "a.md").write_text("---\ntitle: A\n---\nBody.\n")
+    output_dir = tmp_path / "_build"
+
+    stop_event = threading.Event()
+    builds = []
+    calls = {"n": 0}
+
+    def fake_sleep(_interval):
+        calls["n"] += 1
+        if calls["n"] >= 3:
+            stop_event.set()
+
+    watch_loop(str(content_dir), str(tmp_path / "templates"), str(output_dir), None, "Test",
+               stop_event=stop_event, sleep_fn=fake_sleep, on_build=builds.append)
+
+    assert len(builds) == 1
