@@ -327,3 +327,11 @@ A page's front-matter `tags:` field (a comma-separated string, e.g.
 page count; the default page template links each of a page's own tags
 back to its tag listing. Sites with no tagged pages get no `tags/`
 directory at all.
+
+`ssg --site ssg/site watch` rebuilds once, then polls `content/`,
+`templates/`, and `static/` for changes (added, removed, or edited
+files) and rebuilds again on each change, until interrupted with
+Ctrl+C. `serve --watch` runs the same polling rebuild in a background
+thread alongside the HTTP server, so editing a post and reloading the
+browser shows the new content without restarting anything. `--interval`
+sets the poll period in seconds (default: 1.0) for either mode.
