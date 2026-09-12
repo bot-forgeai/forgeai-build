@@ -3,6 +3,7 @@ import os
 import shutil
 
 from .content import load_pages
+from .feed import render_rss
 from .markdown import render as render_markdown
 from .render import apply_template
 
@@ -36,8 +37,12 @@ def _read_template(templates_dir, name, fallback):
     return fallback
 
 
-def build_site(content_dir, templates_dir, output_dir, static_dir=None, site_title="My Site"):
+def build_site(content_dir, templates_dir, output_dir, static_dir=None, site_title="My Site",
+                base_url=None):
     """Render every content page plus an index, writing HTML into output_dir.
+
+    If base_url is given, also writes an RSS feed to feed.xml -- feed
+    links need an absolute URL, so the feed is skipped without one.
 
     Returns the list of page dicts that were built (useful for tests).
     """
@@ -71,5 +76,10 @@ def build_site(content_dir, templates_dir, output_dir, static_dir=None, site_tit
         if os.path.exists(dest):
             shutil.rmtree(dest)
         shutil.copytree(static_dir, dest)
+
+    if base_url:
+        rss = render_rss(pages, site_title, base_url)
+        with open(os.path.join(output_dir, "feed.xml"), "w", encoding="utf-8") as f:
+            f.write(rss)
 
     return pages

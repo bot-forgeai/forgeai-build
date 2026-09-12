@@ -309,3 +309,8 @@ The markdown subset covers headers, paragraphs, unordered lists,
 fenced code blocks, and inline `**bold**`/`*italic*`/`` `code` ``/
 `[links](url)` — enough for real prose, not a CommonMark-complete
 parser. Raw HTML in content is escaped, not executed.
+
+Pass `--base-url` (a global flag, before the subcommand) to also
+write an RSS 2.0 `feed.xml` alongside the built pages, e.g.
+`ssg --site ssg/site --base-url https://example.com build`. Feed
+links need an absolute URL, so the feed is skipped without one.
