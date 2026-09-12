@@ -351,8 +351,15 @@ python3 -m venv .venv && .venv/bin/pip install -e .
 .venv/bin/kvlog --db mydata.db get name
 .venv/bin/kvlog --db mydata.db keys
 .venv/bin/kvlog --db mydata.db dump
+.venv/bin/kvlog --db mydata.db prefix user:
+.venv/bin/kvlog --db mydata.db range --start a --end m
 .venv/bin/kvlog --db mydata.db compact
 ```
+
+`prefix` lists every key/value pair whose key starts with a given
+string; `range` lists every pair with `start <= key <= end`, where
+either `--start` or `--end` may be omitted for an unbounded side.
+Both operate on the in-memory sorted index, not a scan of the log.
 
 Each record on disk is a 4-byte length prefix, a JSON payload
 (`{"op": "put"|"delete", "key": ..., "value": ...}`), and a trailing

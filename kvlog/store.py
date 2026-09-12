@@ -48,6 +48,21 @@ class KVStore:
     def items(self):
         return sorted(self._data.items())
 
+    def prefix(self, prefix):
+        """Return sorted (key, value) pairs whose key starts with prefix."""
+        return [(k, v) for k, v in self.items() if k.startswith(prefix)]
+
+    def range(self, start=None, end=None):
+        """Return sorted (key, value) pairs with start <= key <= end.
+
+        Either bound may be omitted (None) to leave that side unbounded.
+        """
+        return [
+            (k, v)
+            for k, v in self.items()
+            if (start is None or k >= start) and (end is None or k <= end)
+        ]
+
     def __len__(self):
         return len(self._data)
 
