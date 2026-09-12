@@ -251,4 +251,76 @@ def test_cli_build_with_base_url_writes_feed(tmp_path):
     new_args.func(new_args)
     args = parser.parse_args(["--site", str(site_dir), "--base-url", "http://example.com", "build"])
     assert args.func(args) == 0
-    assert (site_dir / "_build" / "feed.xml").exists()
+
+
+def test_build_site_excludes_draft_by_default(tmp_path):
+    content_dir = tmp_path / "content"
+    content_dir.mkdir()
+    (content_dir / "a.md").write_text("---\ntitle: A\ndate: 2026-01-01\n---\npublished")
+    (content_dir / "b.md").write_text("---\ntitle: B\ndate: 2026-02-01\ndraft: true\n---\nsecret")
+    output_dir = tmp_path / "_build"
+
+    pages = build_site(str(content_dir), str(tmp_path / "templates"), str(output_dir), None, "S")
+
+    assert len(pages) == 1
+    assert pages[0]["title"] == "A"
+    assert (output_dir / "a.html").exists()
+    assert not (output_dir / "b.html").exists()
+    assert "b.html" not in (output_dir / "index.html").read_text()
+
+
+def test_build_site_includes_draft_when_requested(tmp_path):
+    content_dir = tmp_path / "content"
+    content_dir.mkdir()
+    (content_dir / "a.md").write_text("---\ntitle: A\n---\npublished")
+    (content_dir / "b.md").write_text("---\ntitle: B\ndraft: true\n---\nsecret")
+    output_dir = tmp_path / "_build"
+
+    pages = build_site(str(content_dir), str(tmp_path / "templates"), str(output_dir), None, "S",
+                        drafts=True)
+
+    assert len(pages) == 2
+    assert (output_dir / "b.html").exists()
+
+
+def test_build_site_draft_excluded_from_feed(tmp_path):
+    content_dir = tmp_path / "content"
+    content_dir.mkdir()
+    (content_dir / "a.md").write_text("---\ntitle: A\ndate: 2026-01-01\n---\npublished")
+    (content_dir / "b.md").write_text("---\ntitle: B\ndate: 2026-02-01\ndraft: true\n---\nsecret")
+    output_dir = tmp_path / "_build"
+
+    build_site(str(content_dir), str(tmp_path / "templates"), str(output_dir), None, "S",
+               base_url="http://example.com")
+
+    feed_text = (output_dir / "feed.xml").read_text()
+    assert "a.html" in feed_text
+    assert "b.html" not in feed_text
+
+
+def test_cli_new_draft_flag_sets_front_matter(tmp_path):
+    from ssg.__main__ import build_parser
+
+    site_dir = tmp_path / "site"
+    parser = build_parser()
+    args = parser.parse_args(["--site", str(site_dir), "new", "Secret Post", "--draft"])
+    assert args.func(args) == 0
+    text = (site_dir / "content" / "posts" / "secret-post.md").read_text()
+    assert "draft: true" in text
+
+
+def test_cli_build_drafts_flag_includes_drafts(tmp_path):
+    from ssg.__main__ import build_parser
+
+    site_dir = tmp_path / "site"
+    parser = build_parser()
+    new_args = parser.parse_args(["--site", str(site_dir), "new", "Secret Post", "--draft"])
+    new_args.func(new_args)
+
+    args = parser.parse_args(["--site", str(site_dir), "build"])
+    args.func(args)
+    assert not (site_dir / "_build" / "secret-post.html").exists()
+
+    drafts_args = parser.parse_args(["--site", str(site_dir), "--drafts", "build"])
+    drafts_args.func(drafts_args)
+    assert (site_dir / "_build" / "secret-post.html").exists()

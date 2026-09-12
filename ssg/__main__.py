@@ -29,7 +29,7 @@ def cmd_build(args):
         return 1
 
     pages = build_site(content_dir, templates_dir, output_dir, static_dir, args.title,
-                        args.base_url)
+                        args.base_url, args.drafts)
     print(f"Built {len(pages)} page(s) into {output_dir}")
     if args.base_url:
         print(f"Wrote feed.xml (base URL: {args.base_url})")
@@ -46,8 +46,9 @@ def cmd_new(args):
         print(f"error: {path} already exists", file=sys.stderr)
         return 1
     today = datetime.date.today().isoformat()
+    draft_line = "draft: true\n" if args.draft else ""
     with open(path, "w", encoding="utf-8") as f:
-        f.write(f"---\ntitle: {args.title}\ndate: {today}\n---\n\nWrite here.\n")
+        f.write(f"---\ntitle: {args.title}\ndate: {today}\n{draft_line}---\n\nWrite here.\n")
     print(f"Created {path}")
     return 0
 
@@ -63,7 +64,8 @@ def cmd_serve(args):
         print(f"error: no content directory at {content_dir}", file=sys.stderr)
         return 1
 
-    build_site(content_dir, templates_dir, output_dir, static_dir, args.title, args.base_url)
+    build_site(content_dir, templates_dir, output_dir, static_dir, args.title, args.base_url,
+               args.drafts)
     handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=output_dir)
     server = http.server.ThreadingHTTPServer((args.host, args.port), handler)
     print(f"Serving {output_dir} on http://{args.host}:{server.server_port}/")
@@ -83,6 +85,9 @@ def build_parser():
     parser.add_argument("--base-url", default=None,
                          help="public site root (e.g. https://example.com); "
                               "if given, also writes feed.xml")
+    parser.add_argument("--drafts", action="store_true",
+                         help="include pages marked 'draft: true' in front matter "
+                              "(excluded by default)")
     sub = parser.add_subparsers(dest="command", required=True)
 
     build_p = sub.add_parser("build", help="render content into static HTML")
@@ -91,6 +96,7 @@ def build_parser():
 
     new_p = sub.add_parser("new", help="scaffold a new post")
     new_p.add_argument("title", help="post title")
+    new_p.add_argument("--draft", action="store_true", help="mark the new post as a draft")
     new_p.set_defaults(func=cmd_new)
 
     serve_p = sub.add_parser("serve", help="build and serve the site locally")
