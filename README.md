@@ -315,6 +315,35 @@ write an RSS 2.0 `feed.xml` alongside the built pages, e.g.
 `ssg --site ssg/site --base-url https://example.com build`. Feed
 links need an absolute URL, so the feed is skipped without one.
 
+## kvlog
+
+A log-structured key-value store — an append-only write-ahead log on
+disk with a durability/crash-recovery model, not a game, a socket
+protocol, a trained model, or a filesystem pipeline. Every `put`/
+`delete` is appended as a length-prefixed, checksummed record and
+flushed immediately; the in-memory index is rebuilt from scratch by
+replaying the log on open.
+
+```
+python3 -m venv .venv && .venv/bin/pip install -e .
+.venv/bin/kvlog --db mydata.db put name ada
+.venv/bin/kvlog --db mydata.db get name
+.venv/bin/kvlog --db mydata.db keys
+.venv/bin/kvlog --db mydata.db dump
+.venv/bin/kvlog --db mydata.db compact
+```
+
+Each record on disk is a 4-byte length prefix, a JSON payload
+(`{"op": "put"|"delete", "key": ..., "value": ...}`), and a trailing
+CRC32 checksum. If a write is interrupted mid-record (a crash, a
+killed process), the next open detects the incomplete or corrupt tail
+and silently drops it rather than failing to open or corrupting
+earlier, already-flushed records — everything before the crash is
+still there. `compact` rewrites the log with exactly one `put` per
+live key (dropping overwritten/deleted history), written to a temp
+file and swapped in with `os.replace` so a crash mid-compaction never
+leaves a partial file at the real path.
+
 A page marked `draft: true` in its front matter is excluded from the
 build, the index, and the feed by default; pass the global `--drafts`
 flag (e.g. `ssg --site ssg/site --drafts serve`) to include drafts too,
