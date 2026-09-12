@@ -8,6 +8,7 @@ from ssg.content import ContentError, load_page, load_pages, parse_front_matter
 from ssg.feed import render_rss
 from ssg.markdown import render as render_markdown
 from ssg.render import apply_template
+from ssg.tags import group_by_tag, parse_tags, slugify_tag
 
 
 def test_parse_front_matter_basic():
@@ -324,3 +325,80 @@ def test_cli_build_drafts_flag_includes_drafts(tmp_path):
     drafts_args = parser.parse_args(["--site", str(site_dir), "--drafts", "build"])
     drafts_args.func(drafts_args)
     assert (site_dir / "_build" / "secret-post.html").exists()
+
+
+def test_parse_tags_splits_and_strips():
+    assert parse_tags({"tags": "python, tutorial,  fun "}) == ["python", "tutorial", "fun"]
+
+
+def test_parse_tags_empty():
+    assert parse_tags({}) == []
+    assert parse_tags({"tags": ""}) == []
+
+
+def test_slugify_tag():
+    assert slugify_tag("Static Sites") == "static-sites"
+    assert slugify_tag("") == "tag"
+
+
+def test_group_by_tag_first_seen_order():
+    pages = [
+        {"title": "A", "tags": "python, web"},
+        {"title": "B", "tags": "web"},
+        {"title": "C", "tags": ""},
+    ]
+    groups = group_by_tag(pages)
+    assert list(groups.keys()) == ["python", "web"]
+    assert [p["title"] for p in groups["python"]] == ["A"]
+    assert [p["title"] for p in groups["web"]] == ["A", "B"]
+
+
+def test_build_site_writes_tag_pages(tmp_path):
+    content_dir = tmp_path / "content"
+    content_dir.mkdir()
+    (content_dir / "a.md").write_text("---\ntitle: A\ndate: 2026-01-01\ntags: python, web\n---\nBody A.\n")
+    (content_dir / "b.md").write_text("---\ntitle: B\ndate: 2026-01-02\ntags: web\n---\nBody B.\n")
+    (content_dir / "c.md").write_text("---\ntitle: C\ndate: 2026-01-03\n---\nBody C, no tags.\n")
+    output_dir = tmp_path / "_build"
+
+    build_site(str(content_dir), str(tmp_path / "templates"), str(output_dir), None, "Test Site")
+
+    assert (output_dir / "tags" / "python.html").exists()
+    assert (output_dir / "tags" / "web.html").exists()
+    web_html = (output_dir / "tags" / "web.html").read_text()
+    assert ">A</a>" in web_html and ">B</a>" in web_html and ">C</a>" not in web_html
+    python_html = (output_dir / "tags" / "python.html").read_text()
+    assert ">A</a>" in python_html and ">B</a>" not in python_html
+
+    index_html = (output_dir / "tags" / "index.html").read_text()
+    assert "python.html" in index_html
+    assert "web.html" in index_html
+
+    a_html = (output_dir / "a.html").read_text()
+    assert "tags/python.html" in a_html
+    assert "tags/web.html" in a_html
+
+
+def test_build_site_no_tags_no_tag_pages(tmp_path):
+    content_dir = tmp_path / "content"
+    content_dir.mkdir()
+    (content_dir / "a.md").write_text("---\ntitle: A\n---\nBody, no tags anywhere.\n")
+    output_dir = tmp_path / "_build"
+
+    build_site(str(content_dir), str(tmp_path / "templates"), str(output_dir), None, "Test Site")
+
+    assert not (output_dir / "tags").exists()
+
+
+def test_build_site_excludes_draft_from_tag_pages(tmp_path):
+    content_dir = tmp_path / "content"
+    content_dir.mkdir()
+    (content_dir / "a.md").write_text("---\ntitle: A\ntags: python\ndraft: true\n---\nSecret.\n")
+    (content_dir / "b.md").write_text("---\ntitle: B\ntags: python\n---\nPublic.\n")
+    output_dir = tmp_path / "_build"
+
+    build_site(str(content_dir), str(tmp_path / "templates"), str(output_dir), None, "Test Site")
+
+    python_html = (output_dir / "tags" / "python.html").read_text()
+    assert ">A</a>" not in python_html
+    assert ">B</a>" in python_html

@@ -314,3 +314,16 @@ Pass `--base-url` (a global flag, before the subcommand) to also
 write an RSS 2.0 `feed.xml` alongside the built pages, e.g.
 `ssg --site ssg/site --base-url https://example.com build`. Feed
 links need an absolute URL, so the feed is skipped without one.
+
+A page marked `draft: true` in its front matter is excluded from the
+build, the index, and the feed by default; pass the global `--drafts`
+flag (e.g. `ssg --site ssg/site --drafts serve`) to include drafts too,
+for local preview before publishing. `new TITLE --draft` scaffolds a
+new post already marked as a draft.
+
+A page's front-matter `tags:` field (a comma-separated string, e.g.
+`tags: python, tutorial`) generates a listing page per tag under
+`tags/<tag>.html` plus a `tags/index.html` linking every tag with its
+page count; the default page template links each of a page's own tags
+back to its tag listing. Sites with no tagged pages get no `tags/`
+directory at all.
