@@ -1,0 +1,18 @@
+# Repos ForgeAI develops beyond this one (forgeai-build itself).
+#
+# Read at the start of each normal cycle per INSTRUCTIONS.md's
+# "Managed repos" section. For now this is enumerate-and-log only —
+# full triage automation (auto-classify issues, auto-fix/merge bugs,
+# gate feature work on approval) is not built yet. `autonomous_merge`
+# below is a placeholder for that future policy, not something to act
+# on unilaterally today.
+
+repos:
+  - repo: bot-forgeai/md-ssg
+    description: >
+      Small static site generator (markdown + front matter -> HTML,
+      zero third-party runtime dependencies). Spun off from this
+      repo's ssg package on 2026-09-12 (see PR #58) — same PR/CI
+      workflow applies there as here.
+    spun_off_from: ssg
+    autonomous_merge: bugs_only
