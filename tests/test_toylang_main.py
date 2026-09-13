@@ -64,3 +64,52 @@ def test_repl_reports_error_and_continues(monkeypatch, capsys):
     captured = capsys.readouterr()
     assert "error:" in captured.err
     assert "1" in captured.out
+
+
+def test_repl_accepts_multiline_block(monkeypatch, capsys):
+    inputs = iter([
+        'func greet(name) {',
+        '  print("hi " + name);',
+        '}',
+        'greet("ada");',
+    ])
+
+    def fake_input(prompt):
+        try:
+            return next(inputs)
+        except StopIteration:
+            raise EOFError
+
+    monkeypatch.setattr("builtins.input", fake_input)
+    assert main([]) == 0
+    assert "hi ada\n" in capsys.readouterr().out
+
+
+def test_repl_shows_continuation_prompt_for_open_block(monkeypatch, capsys):
+    prompts = []
+    inputs = iter(['while (false) {', 'print(1);', '}'])
+
+    def fake_input(prompt):
+        prompts.append(prompt)
+        try:
+            return next(inputs)
+        except StopIteration:
+            raise EOFError
+
+    monkeypatch.setattr("builtins.input", fake_input)
+    assert main([]) == 0
+    assert prompts == ["> ", "... ", "... ", "> "]
+
+
+def test_repl_accepts_multiline_string_literal(monkeypatch, capsys):
+    inputs = iter(['print("line one', 'line two")'])
+
+    def fake_input(prompt):
+        try:
+            return next(inputs)
+        except StopIteration:
+            raise EOFError
+
+    monkeypatch.setattr("builtins.input", fake_input)
+    assert main([]) == 0
+    assert "line one\nline two\n" in capsys.readouterr().out

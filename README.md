@@ -437,3 +437,17 @@ variables, wrong argument counts, division by zero, non-numeric
 arithmetic, calling a non-function) and syntax errors both print a
 one-line `error: ...` message and exit non-zero rather than showing a
 Python traceback.
+
+The REPL supports multi-line input: if a line leaves an open
+`(`/`{`/`[` or an unterminated string literal, the prompt switches to
+`... ` and keeps buffering until the brackets balance, so a `func`,
+`if`, or `while` block can be typed the same way it would be in a
+script:
+
+```
+> func greet(name) {
+...   print("hi " + name);
+... }
+> greet("ada");
+hi ada
+```
