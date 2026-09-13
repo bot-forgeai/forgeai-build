@@ -2,8 +2,11 @@ import argparse
 import sys
 
 from .interpreter import Interpreter, ToylangRuntimeError
-from .lexer import ToylangSyntaxError
+from .lexer import ToylangSyntaxError, tokenize
 from .parser import parse
+
+OPEN_BRACKETS = {"(": ")", "{": "}", "[": "]"}
+CLOSE_BRACKETS = {v: k for k, v in OPEN_BRACKETS.items()}
 
 
 def run_source(source, interpreter):
@@ -23,26 +26,50 @@ def cmd_run(args):
     return 0
 
 
+def bracket_depth(source):
+    """Net (/{/[ minus )/}/] depth, or None if source doesn't even tokenize
+    yet (e.g. a string literal whose closing quote hasn't been typed)."""
+    try:
+        tokens = tokenize(source)
+    except ToylangSyntaxError:
+        return None
+    depth = 0
+    for tok in tokens:
+        if tok.type in OPEN_BRACKETS:
+            depth += 1
+        elif tok.type in CLOSE_BRACKETS:
+            depth -= 1
+    return depth
+
+
 def cmd_repl(args):
     print("toylang REPL (Ctrl-D to exit)")
     interpreter = Interpreter()
+    buffer_lines = []
     while True:
         try:
-            line = input("> ")
+            line = input("... " if buffer_lines else "> ")
         except EOFError:
             print()
             return 0
-        if not line.strip():
+        if not line.strip() and not buffer_lines:
+            continue
+        buffer_lines.append(line)
+        source_so_far = "\n".join(buffer_lines)
+        depth = bracket_depth(source_so_far)
+        if depth is None or depth > 0:
+            # Unterminated string, or an open block/call: keep reading.
             continue
         # Let statements/blocks end themselves; bare expressions need a
         # trailing ';' the grammar requires but a REPL user won't type.
-        stripped = line.rstrip()
-        if not stripped.endswith((";", "}")):
+        stripped = source_so_far.rstrip()
+        if depth == 0 and not stripped.endswith((";", "}")):
             stripped += ";"
         try:
             run_source(stripped, interpreter)
         except (ToylangSyntaxError, ToylangRuntimeError) as exc:
             print(f"error: {exc}", file=sys.stderr)
+        buffer_lines = []
 
 
 def build_parser():
