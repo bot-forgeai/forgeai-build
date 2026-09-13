@@ -1,5 +1,7 @@
 """Tree-walking interpreter over the AST."""
 
+import math
+
 from . import ast_nodes as ast
 
 
@@ -121,6 +123,123 @@ def _builtin_pop(args):
     return lst.pop()
 
 
+def _builtin_upper(args):
+    if len(args) != 1 or not isinstance(args[0], str):
+        raise ToylangRuntimeError("upper: expected 1 string argument")
+    return args[0].upper()
+
+
+def _builtin_lower(args):
+    if len(args) != 1 or not isinstance(args[0], str):
+        raise ToylangRuntimeError("lower: expected 1 string argument")
+    return args[0].lower()
+
+
+def _builtin_trim(args):
+    if len(args) != 1 or not isinstance(args[0], str):
+        raise ToylangRuntimeError("trim: expected 1 string argument")
+    return args[0].strip()
+
+
+def _builtin_split(args):
+    if len(args) != 2 or not isinstance(args[0], str) or not isinstance(args[1], str):
+        raise ToylangRuntimeError("split: expected (string, separator)")
+    text, sep = args
+    if sep == "":
+        raise ToylangRuntimeError("split: separator must not be empty")
+    return text.split(sep)
+
+
+def _builtin_join(args):
+    if len(args) != 2 or not isinstance(args[0], list) or not isinstance(args[1], str):
+        raise ToylangRuntimeError("join: expected (list, separator)")
+    lst, sep = args
+    if not all(isinstance(v, str) for v in lst):
+        raise ToylangRuntimeError("join: list must contain only strings")
+    return sep.join(lst)
+
+
+def _builtin_contains(args):
+    if len(args) != 2:
+        raise ToylangRuntimeError("contains: expected 2 arguments (collection, value)")
+    collection, value = args
+    if isinstance(collection, (str, list)):
+        return value in collection
+    raise ToylangRuntimeError(f"contains: unsupported collection {_stringify(collection)!r}")
+
+
+def _builtin_str(args):
+    if len(args) != 1:
+        raise ToylangRuntimeError("str: expected 1 argument")
+    return _stringify(args[0])
+
+
+def _builtin_num(args):
+    if len(args) != 1 or not isinstance(args[0], str):
+        raise ToylangRuntimeError("num: expected 1 string argument")
+    try:
+        return float(args[0])
+    except ValueError:
+        raise ToylangRuntimeError(f"num: cannot convert {args[0]!r} to a number")
+
+
+def _check_number(value, who):
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        raise ToylangRuntimeError(f"{who}: expected a number, got {_stringify(value)!r}")
+
+
+def _builtin_abs(args):
+    if len(args) != 1:
+        raise ToylangRuntimeError("abs: expected 1 argument")
+    _check_number(args[0], "abs")
+    return abs(args[0])
+
+
+def _builtin_floor(args):
+    if len(args) != 1:
+        raise ToylangRuntimeError("floor: expected 1 argument")
+    _check_number(args[0], "floor")
+    return float(math.floor(args[0]))
+
+
+def _builtin_sqrt(args):
+    if len(args) != 1:
+        raise ToylangRuntimeError("sqrt: expected 1 argument")
+    _check_number(args[0], "sqrt")
+    if args[0] < 0:
+        raise ToylangRuntimeError("sqrt: cannot take the square root of a negative number")
+    return math.sqrt(args[0])
+
+
+def _builtin_min(args):
+    if len(args) < 1:
+        raise ToylangRuntimeError("min: expected at least 1 argument")
+    for value in args:
+        _check_number(value, "min")
+    return min(args)
+
+
+def _builtin_max(args):
+    if len(args) < 1:
+        raise ToylangRuntimeError("max: expected at least 1 argument")
+    for value in args:
+        _check_number(value, "max")
+    return max(args)
+
+
+def _builtin_range(args):
+    if len(args) == 1:
+        start, end = 0, args[0]
+    elif len(args) == 2:
+        start, end = args
+    else:
+        raise ToylangRuntimeError("range: expected 1 or 2 arguments")
+    for value in (start, end):
+        if not isinstance(value, int) or isinstance(value, bool):
+            raise ToylangRuntimeError("range: arguments must be integers")
+    return list(range(start, end))
+
+
 class BuiltinFunction:
     def __init__(self, name, fn):
         self.name = name
@@ -135,6 +254,20 @@ BUILTINS = {
     "len": BuiltinFunction("len", _builtin_len),
     "push": BuiltinFunction("push", _builtin_push),
     "pop": BuiltinFunction("pop", _builtin_pop),
+    "upper": BuiltinFunction("upper", _builtin_upper),
+    "lower": BuiltinFunction("lower", _builtin_lower),
+    "trim": BuiltinFunction("trim", _builtin_trim),
+    "split": BuiltinFunction("split", _builtin_split),
+    "join": BuiltinFunction("join", _builtin_join),
+    "contains": BuiltinFunction("contains", _builtin_contains),
+    "str": BuiltinFunction("str", _builtin_str),
+    "num": BuiltinFunction("num", _builtin_num),
+    "abs": BuiltinFunction("abs", _builtin_abs),
+    "floor": BuiltinFunction("floor", _builtin_floor),
+    "sqrt": BuiltinFunction("sqrt", _builtin_sqrt),
+    "min": BuiltinFunction("min", _builtin_min),
+    "max": BuiltinFunction("max", _builtin_max),
+    "range": BuiltinFunction("range", _builtin_range),
 }
 
 

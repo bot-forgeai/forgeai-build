@@ -200,3 +200,67 @@ def test_pop_empty_list_raises():
 def test_index_assign_on_non_list_raises():
     with pytest.raises(ToylangRuntimeError):
         run('let x = 5; x[0] = 1;')
+
+
+def test_string_case_and_trim(capsys):
+    out = run_capture('print(upper("hi")); print(lower("HI")); print(trim("  hi  "));', capsys)
+    assert out == "HI\nhi\nhi\n"
+
+
+def test_split_and_join(capsys):
+    out = run_capture(
+        'let parts = split("a,b,c", ","); print(parts); print(join(parts, "-"));',
+        capsys,
+    )
+    assert out == "[a, b, c]\na-b-c\n"
+
+
+def test_split_empty_separator_raises():
+    with pytest.raises(ToylangRuntimeError):
+        run('split("abc", "");')
+
+
+def test_contains(capsys):
+    out = run_capture(
+        'print(contains("hello", "ell")); print(contains([1, 2, 3], 2)); '
+        'print(contains([1, 2, 3], 9));',
+        capsys,
+    )
+    assert out == "true\ntrue\nfalse\n"
+
+
+def test_str_and_num(capsys):
+    out = run_capture('print(str(42) + "!"); print(num("3.5") + 1);', capsys)
+    assert out == "42!\n4.5\n"
+
+
+def test_num_invalid_raises():
+    with pytest.raises(ToylangRuntimeError):
+        run('num("not a number");')
+
+
+def test_math_builtins(capsys):
+    out = run_capture(
+        'print(abs(-5)); print(floor(3.7)); print(sqrt(9)); print(min(3, 1, 2)); print(max(3, 1, 2));',
+        capsys,
+    )
+    assert out == "5\n3\n3\n1\n3\n"
+
+
+def test_sqrt_negative_raises():
+    with pytest.raises(ToylangRuntimeError):
+        run('sqrt(-1);')
+
+
+def test_range(capsys):
+    out = run_capture('print(range(3)); print(range(2, 5));', capsys)
+    assert out == "[0, 1, 2]\n[2, 3, 4]\n"
+
+
+def test_range_used_in_loop(capsys):
+    out = run_capture(
+        'let total = 0; let xs = range(5); let i = 0; '
+        'while (i < len(xs)) { total = total + xs[i]; i = i + 1; } print(total);',
+        capsys,
+    )
+    assert out == "10\n"
