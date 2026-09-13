@@ -371,7 +371,7 @@ A tiny interpreted scripting language — a lexer, a recursive-descent
 parser, and a tree-walking interpreter, not a game, a database, or a
 trained model. Variables, arithmetic/comparison/logical operators,
 `if`/`else`, `while`, functions (including closures and recursion),
-and a couple of builtins (`print`, `len`).
+lists, and a handful of builtins (`print`, `len`, `push`, `pop`).
 
 ```
 python3 -m venv .venv && .venv/bin/pip install -e .
@@ -401,6 +401,22 @@ func make_counter() {
 let c = make_counter();
 print(c(), c(), c());   # 1 2 3
 ```
+
+Lists are mutable and zero-indexed, with `[]` literals, `[i]` indexing
+(also works for reading a character out of a string), and `push`/`pop`
+builtins:
+
+```
+let xs = [1, 2, 3];
+push(xs, 4);
+xs[0] = 99;
+print(xs);        # [99, 2, 3, 4]
+print(len(xs));   # 4
+print(pop(xs));   # 4
+```
+
+Indexing out of range, or index-assigning into a non-list, raises a
+runtime error rather than silently corrupting state.
 
 `toylang` with no file argument starts a REPL; each line is evaluated
 in the same persistent environment, so variables and functions defined

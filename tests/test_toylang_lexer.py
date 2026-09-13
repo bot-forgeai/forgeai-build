@@ -53,3 +53,8 @@ def test_line_tracking():
     let_tokens = [t for t in tokens if t.type == "LET"]
     assert let_tokens[0].line == 1
     assert let_tokens[1].line == 2
+
+
+def test_brackets_tokenized():
+    tokens = tokenize("[1, 2]")
+    assert types(tokens) == ["[", "NUMBER", ",", "NUMBER", "]", "EOF"]

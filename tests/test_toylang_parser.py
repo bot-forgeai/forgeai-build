@@ -71,3 +71,27 @@ def test_missing_semicolon_raises():
 def test_unclosed_block_raises():
     with pytest.raises(ToylangSyntaxError):
         parse("if (x) { let a = 1; ")
+
+
+def test_list_literal_parses():
+    program = parse("let xs = [1, 2, 3];")
+    lit = program.statements[0].value
+    assert isinstance(lit, ast.ListLit)
+    assert len(lit.elements) == 3
+
+
+def test_index_expr_parses():
+    program = parse("let x = xs[0];")
+    idx = program.statements[0].value
+    assert isinstance(idx, ast.Index)
+
+
+def test_index_assignment_parses():
+    program = parse("xs[0] = 1;")
+    stmt = program.statements[0].expr
+    assert isinstance(stmt, ast.IndexAssign)
+
+
+def test_invalid_assignment_target_raises():
+    with pytest.raises(ToylangSyntaxError):
+        parse("1 = 2;")

@@ -81,6 +81,8 @@ def _stringify(value):
         return str(int(value))
     if isinstance(value, Function):
         return f"<function {value.name}>"
+    if isinstance(value, list):
+        return "[" + ", ".join(_stringify(v) for v in value) + "]"
     return str(value)
 
 
@@ -93,9 +95,30 @@ def _builtin_len(args):
     if len(args) != 1:
         raise ToylangRuntimeError("len: expected 1 argument")
     value = args[0]
-    if isinstance(value, str):
+    if isinstance(value, (str, list)):
         return len(value)
     raise ToylangRuntimeError(f"len: unsupported value {_stringify(value)!r}")
+
+
+def _builtin_push(args):
+    if len(args) != 2:
+        raise ToylangRuntimeError("push: expected 2 arguments (list, value)")
+    lst, value = args
+    if not isinstance(lst, list):
+        raise ToylangRuntimeError(f"push: expected a list, got {_stringify(lst)!r}")
+    lst.append(value)
+    return lst
+
+
+def _builtin_pop(args):
+    if len(args) != 1:
+        raise ToylangRuntimeError("pop: expected 1 argument (list)")
+    lst = args[0]
+    if not isinstance(lst, list):
+        raise ToylangRuntimeError(f"pop: expected a list, got {_stringify(lst)!r}")
+    if not lst:
+        raise ToylangRuntimeError("pop: list is empty")
+    return lst.pop()
 
 
 class BuiltinFunction:
@@ -110,6 +133,8 @@ class BuiltinFunction:
 BUILTINS = {
     "print": BuiltinFunction("print", _builtin_print),
     "len": BuiltinFunction("len", _builtin_len),
+    "push": BuiltinFunction("push", _builtin_push),
+    "pop": BuiltinFunction("pop", _builtin_pop),
 }
 
 
@@ -261,3 +286,40 @@ class Interpreter:
 
     def _eval_FuncExpr(self, node, env):
         return Function(node.params, node.body, env)
+
+    def _eval_ListLit(self, node, env):
+        return [self._eval(el, env) for el in node.elements]
+
+    def _eval_Index(self, node, env):
+        collection = self._eval(node.collection, env)
+        index = self._eval(node.index, env)
+        return self._index_get(collection, index)
+
+    def _eval_IndexAssign(self, node, env):
+        collection = self._eval(node.collection, env)
+        index = self._eval(node.index, env)
+        value = self._eval(node.value, env)
+        if not isinstance(collection, list):
+            raise ToylangRuntimeError(
+                f"cannot index-assign into {_stringify(collection)!r}"
+            )
+        i = self._check_index(collection, index)
+        collection[i] = value
+        return value
+
+    @staticmethod
+    def _check_index(collection, index):
+        if not isinstance(index, int) or isinstance(index, bool):
+            raise ToylangRuntimeError(f"index must be an integer, got {_stringify(index)!r}")
+        if index < 0 or index >= len(collection):
+            raise ToylangRuntimeError(f"index {index} out of range (length {len(collection)})")
+        return index
+
+    def _index_get(self, collection, index):
+        if isinstance(collection, list):
+            i = self._check_index(collection, index)
+            return collection[i]
+        if isinstance(collection, str):
+            i = self._check_index(collection, index)
+            return collection[i]
+        raise ToylangRuntimeError(f"cannot index {_stringify(collection)!r}")
