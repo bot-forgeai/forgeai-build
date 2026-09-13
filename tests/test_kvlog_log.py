@@ -41,3 +41,23 @@ def test_corrupt_checksum_stops_replay():
 
 def test_empty_log():
     assert list(iter_records(io.BytesIO(b""))) == []
+
+
+def test_append_record_fsync_false_skips_os_fsync(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr("os.fsync", lambda fd: calls.append(fd))
+    path = tmp_path / "log.bin"
+    with open(path, "ab") as f:
+        append_record(f, "put", "a", "1", fsync=False)
+    assert calls == []
+    with open(path, "rb") as f:
+        assert list(iter_records(f)) == [("put", "a", "1")]
+
+
+def test_append_record_fsync_true_calls_os_fsync(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr("os.fsync", lambda fd: calls.append(fd))
+    path = tmp_path / "log.bin"
+    with open(path, "ab") as f:
+        append_record(f, "put", "a", "1", fsync=True)
+    assert len(calls) == 1

@@ -288,8 +288,8 @@ A log-structured key-value store — an append-only write-ahead log on
 disk with a durability/crash-recovery model, not a game, a socket
 protocol, a trained model, or a filesystem pipeline. Every `put`/
 `delete` is appended as a length-prefixed, checksummed record and
-flushed immediately; the in-memory index is rebuilt from scratch by
-replaying the log on open.
+flushed (and, by default, `fsync`'d) immediately; the in-memory index
+is rebuilt from scratch by replaying the log on open.
 
 ```
 python3 -m venv .venv && .venv/bin/pip install -e .
@@ -317,6 +317,29 @@ still there. `compact` rewrites the log with exactly one `put` per
 live key (dropping overwritten/deleted history), written to a temp
 file and swapped in with `os.replace` so a crash mid-compaction never
 leaves a partial file at the real path.
+
+### fsync policy
+
+By default every write calls `os.fsync` after flushing, so a `put` or
+`delete` only returns once the record is actually on disk — a power
+loss right after a successful write can't lose it, only a crash mid-write
+(which the checksum/length-prefix format already tolerates). Pass
+`--fsync never` to skip the `fsync` call and just flush to the OS page
+cache: writes are still visible to the same process immediately and
+still survive a process crash, but a power loss before the OS decides
+to write the page cache back to disk can lose the most recent writes.
+This trades that guarantee for throughput, since `fsync` is a real
+syscall cost per write:
+
+```
+.venv/bin/kvlog --db mydata.db --fsync never put name ada
+.venv/bin/kvlog --db shared.db --fsync never serve --port 9999
+```
+
+`--fsync` is a global flag (before the subcommand) and applies to
+`compact` as well as `put`/`delete`. It only affects a local `--db`;
+a `--remote` client's writes are governed by whatever policy the
+server it's talking to was started with.
 
 ### Remote access
 

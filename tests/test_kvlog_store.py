@@ -112,6 +112,45 @@ def test_prefix(db_path):
         assert store.prefix("nope:") == []
 
 
+def test_fsync_always_calls_os_fsync(db_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(os, "fsync", lambda fd: calls.append(fd))
+    with KVStore(db_path, fsync="always") as store:
+        store.put("a", 1)
+        store.put("b", 2)
+        store.delete("a")
+    assert len(calls) == 3
+
+
+def test_fsync_never_skips_os_fsync(db_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(os, "fsync", lambda fd: calls.append(fd))
+    with KVStore(db_path, fsync="never") as store:
+        store.put("a", 1)
+        store.put("b", 2)
+    assert calls == []
+    # still durable across a normal reopen since flush() still happens
+    with KVStore(db_path, fsync="never") as store:
+        assert store.get("a") == 1
+        assert store.get("b") == 2
+
+
+def test_fsync_never_compact_skips_os_fsync(db_path, monkeypatch):
+    with KVStore(db_path, fsync="never") as store:
+        store.put("a", 1)
+        store.put("a", 2)
+    calls = []
+    monkeypatch.setattr(os, "fsync", lambda fd: calls.append(fd))
+    with KVStore(db_path, fsync="never") as store:
+        store.compact()
+    assert calls == []
+
+
+def test_invalid_fsync_value_rejected(db_path):
+    with pytest.raises(ValueError):
+        KVStore(db_path, fsync="sometimes")
+
+
 def test_range(db_path):
     with KVStore(db_path) as store:
         for k in ["a", "b", "c", "d", "e"]:

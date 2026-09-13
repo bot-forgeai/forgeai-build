@@ -86,6 +86,28 @@ def test_compact_reports_sizes(tmp_path):
     assert "1 keys" in result.stdout
 
 
+def test_fsync_never_flag_still_works(tmp_path):
+    db = str(tmp_path / "cli.db")
+    result = subprocess.run(
+        [sys.executable, "-m", "kvlog", "--db", db, "--fsync", "never", "put", "name", "ada"],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0
+    result = run_cli(db, "get", "name")
+    assert result.stdout.strip() == "ada"
+
+
+def test_invalid_fsync_flag_rejected(tmp_path):
+    db = str(tmp_path / "cli.db")
+    result = subprocess.run(
+        [sys.executable, "-m", "kvlog", "--db", db, "--fsync", "sometimes", "put", "a", "1"],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode != 0
+
+
 def test_remote_put_and_get(tmp_path):
     db = str(tmp_path / "net.db")
     server = KVServer(("127.0.0.1", 0), db)
