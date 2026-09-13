@@ -418,6 +418,18 @@ print(pop(xs));   # 4
 Indexing out of range, or index-assigning into a non-list, raises a
 runtime error rather than silently corrupting state.
 
+A small standard library of builtins covers strings, numbers, and
+ranges: `upper`/`lower`/`trim`, `split`/`join`, `contains`
+(substring or list membership), `str`/`num` (conversion), `abs`/
+`floor`/`sqrt`/`min`/`max`, and `range(end)`/`range(start, end)` for
+generating a list to loop over:
+
+```
+let xs = range(1, 4);           # [1, 2, 3]
+print(join(split("a,b,c", ","), " - "));  # a - b - c
+print(sqrt(16) + max(1, 9, 3)); # 13
+```
+
 `toylang` with no file argument starts a REPL; each line is evaluated
 in the same persistent environment, so variables and functions defined
 on one line are visible on the next. Runtime errors (undefined
