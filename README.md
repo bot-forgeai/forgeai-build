@@ -317,3 +317,27 @@ still there. `compact` rewrites the log with exactly one `put` per
 live key (dropping overwritten/deleted history), written to a temp
 file and swapped in with `os.replace` so a crash mid-compaction never
 leaves a partial file at the real path.
+
+### Remote access
+
+`kvlog serve` exposes a `--db` file over a threaded TCP server so more
+than one client (or a client on another LAN device) can read/write the
+same store without sharing a filesystem. Every other subcommand
+accepts `--remote HOST:PORT` to talk to a running server instead of
+opening `--db` locally:
+
+```
+.venv/bin/kvlog --db shared.db serve --port 9999
+# on the same or another LAN machine:
+.venv/bin/kvlog --remote 127.0.0.1:9999 put name ada
+.venv/bin/kvlog --remote 127.0.0.1:9999 get name
+```
+
+The wire protocol is one JSON request/response object per line
+(`kvlog/protocol.py`'s `dispatch` is the pure logic shared by the
+server and its tests). A single `KVStore` instance is shared across
+all connections, guarded by one lock, since the store's file handle
+and in-memory index aren't safe for concurrent access on their own.
+Pass `--host 0.0.0.0` to `serve` to accept connections from elsewhere
+on the LAN (still LAN-only per this project's network limits — no
+port-forwarding or tunneling).

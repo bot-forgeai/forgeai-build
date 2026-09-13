@@ -1,10 +1,21 @@
 import subprocess
 import sys
+import threading
+
+from kvlog.server import KVServer
 
 
 def run_cli(db_path, *args):
     return subprocess.run(
         [sys.executable, "-m", "kvlog", "--db", db_path, *args],
+        capture_output=True,
+        text=True,
+    )
+
+
+def run_remote_cli(host, port, *args):
+    return subprocess.run(
+        [sys.executable, "-m", "kvlog", "--remote", f"{host}:{port}", *args],
         capture_output=True,
         text=True,
     )
@@ -73,3 +84,37 @@ def test_compact_reports_sizes(tmp_path):
     assert result.returncode == 0
     assert "compacted:" in result.stdout
     assert "1 keys" in result.stdout
+
+
+def test_remote_put_and_get(tmp_path):
+    db = str(tmp_path / "net.db")
+    server = KVServer(("127.0.0.1", 0), db)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    host, port = server.server_address
+    try:
+        result = run_remote_cli(host, port, "put", "name", "ada")
+        assert result.returncode == 0
+        result = run_remote_cli(host, port, "get", "name")
+        assert result.returncode == 0
+        assert result.stdout.strip() == "ada"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_remote_get_missing_key_errors_cleanly(tmp_path):
+    db = str(tmp_path / "net.db")
+    server = KVServer(("127.0.0.1", 0), db)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    host, port = server.server_address
+    try:
+        result = run_remote_cli(host, port, "get", "nope")
+        assert result.returncode == 1
+        assert "no such key" in result.stderr
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
