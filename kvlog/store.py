@@ -12,8 +12,11 @@ class KVStore:
     incomplete record is simply dropped by iter_records).
     """
 
-    def __init__(self, path):
+    def __init__(self, path, fsync="always"):
+        if fsync not in ("always", "never"):
+            raise ValueError(f"fsync must be 'always' or 'never', got {fsync!r}")
         self.path = path
+        self._fsync = fsync == "always"
         self._data = {}
         self._replay()
         self._file = open(self.path, "ab")
@@ -29,7 +32,7 @@ class KVStore:
                     self._data.pop(key, None)
 
     def put(self, key, value):
-        append_record(self._file, "put", key, value)
+        append_record(self._file, "put", key, value, fsync=self._fsync)
         self._data[key] = value
 
     def get(self, key, default=None):
@@ -38,7 +41,7 @@ class KVStore:
     def delete(self, key):
         if key not in self._data:
             return False
-        append_record(self._file, "delete", key)
+        append_record(self._file, "delete", key, fsync=self._fsync)
         del self._data[key]
         return True
 
@@ -79,7 +82,7 @@ class KVStore:
         tmp_path = self.path + ".compact.tmp"
         with open(tmp_path, "ab") as tmp:
             for key, value in self.items():
-                append_record(tmp, "put", key, value)
+                append_record(tmp, "put", key, value, fsync=self._fsync)
         os.replace(tmp_path, self.path)
         self._file = open(self.path, "ab")
 

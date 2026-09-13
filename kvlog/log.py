@@ -3,6 +3,7 @@ checksum per record, so a crash mid-write leaves a detectable, truncatable
 tail instead of corrupting earlier records.
 """
 import json
+import os
 import struct
 import zlib
 
@@ -16,9 +17,18 @@ def encode_record(op, key, value=None):
     return _LEN_STRUCT.pack(len(payload)) + payload + _CRC_STRUCT.pack(crc)
 
 
-def append_record(fileobj, op, key, value=None):
+def append_record(fileobj, op, key, value=None, fsync=False):
+    """Write one record. `flush()` alone only hands the bytes to the OS's
+    page cache — a power loss (not just a crashed process) can still lose
+    them. `fsync` forces the write to disk before returning, at the cost of
+    a syscall per record; callers that can tolerate losing the last few
+    writes on a power loss (not just a process crash) may pass fsync=False
+    for higher throughput.
+    """
     fileobj.write(encode_record(op, key, value))
     fileobj.flush()
+    if fsync:
+        os.fsync(fileobj.fileno())
 
 
 def iter_records(fileobj):

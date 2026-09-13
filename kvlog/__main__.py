@@ -20,7 +20,7 @@ def cmd_put(args):
         host, port = _parse_remote(args.remote)
         call(host, port, "put", key=args.key, value=args.value)
     else:
-        with KVStore(args.db) as store:
+        with KVStore(args.db, fsync=args.fsync) as store:
             store.put(args.key, args.value)
     print(f"put {args.key!r}")
 
@@ -31,7 +31,7 @@ def cmd_get(args):
         response = call(host, port, "get", key=args.key)
         print(response["value"])
     else:
-        with KVStore(args.db) as store:
+        with KVStore(args.db, fsync=args.fsync) as store:
             if args.key not in store:
                 print(f"error: no such key {args.key!r}", file=sys.stderr)
                 sys.exit(1)
@@ -43,7 +43,7 @@ def cmd_delete(args):
         host, port = _parse_remote(args.remote)
         call(host, port, "delete", key=args.key)
     else:
-        with KVStore(args.db) as store:
+        with KVStore(args.db, fsync=args.fsync) as store:
             if not store.delete(args.key):
                 print(f"error: no such key {args.key!r}", file=sys.stderr)
                 sys.exit(1)
@@ -57,7 +57,7 @@ def cmd_keys(args):
         for key in response["keys"]:
             print(key)
     else:
-        with KVStore(args.db) as store:
+        with KVStore(args.db, fsync=args.fsync) as store:
             for key in store.keys():
                 print(key)
 
@@ -69,7 +69,7 @@ def cmd_dump(args):
         for key, value in response["items"]:
             print(f"{key}\t{json.dumps(value)}")
     else:
-        with KVStore(args.db) as store:
+        with KVStore(args.db, fsync=args.fsync) as store:
             for key, value in store.items():
                 print(f"{key}\t{json.dumps(value)}")
 
@@ -81,7 +81,7 @@ def cmd_prefix(args):
         for key, value in response["items"]:
             print(f"{key}\t{json.dumps(value)}")
     else:
-        with KVStore(args.db) as store:
+        with KVStore(args.db, fsync=args.fsync) as store:
             for key, value in store.prefix(args.prefix):
                 print(f"{key}\t{json.dumps(value)}")
 
@@ -93,7 +93,7 @@ def cmd_range(args):
         for key, value in response["items"]:
             print(f"{key}\t{json.dumps(value)}")
     else:
-        with KVStore(args.db) as store:
+        with KVStore(args.db, fsync=args.fsync) as store:
             for key, value in store.range(args.start, args.end):
                 print(f"{key}\t{json.dumps(value)}")
 
@@ -104,7 +104,7 @@ def cmd_compact(args):
         response = call(host, port, "compact")
         print(f"compacted: {response['before']} -> {response['after']} bytes, {response['count']} keys")
     else:
-        with KVStore(args.db) as store:
+        with KVStore(args.db, fsync=args.fsync) as store:
             before = _log_size(args.db)
             store.compact()
             after = _log_size(args.db)
@@ -112,8 +112,8 @@ def cmd_compact(args):
 
 
 def cmd_serve(args):
-    print(f"kvlog serving {args.db} on {args.host}:{args.port}")
-    serve(args.host, args.port, args.db)
+    print(f"kvlog serving {args.db} on {args.host}:{args.port} (fsync={args.fsync})")
+    serve(args.host, args.port, args.db, fsync=args.fsync)
 
 
 def _log_size(path):
@@ -127,6 +127,14 @@ def build_parser():
         "--remote",
         default=None,
         help="HOST:PORT of a running 'kvlog serve' to talk to instead of opening --db locally",
+    )
+    parser.add_argument(
+        "--fsync",
+        choices=["always", "never"],
+        default="always",
+        help="fsync every write to disk before returning ('always', the safe default) or "
+        "just flush to the OS page cache ('never', faster but a power loss can lose the "
+        "last few writes even though the process itself would have recovered them)",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 

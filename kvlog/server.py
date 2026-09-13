@@ -37,8 +37,8 @@ class KVServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
     allow_reuse_address = True
     daemon_threads = True
 
-    def __init__(self, addr, db_path):
-        self.store = KVStore(db_path)
+    def __init__(self, addr, db_path, fsync="always"):
+        self.store = KVStore(db_path, fsync=fsync)
         self.lock = threading.Lock()
         super().__init__(addr, KVRequestHandler)
 
@@ -47,8 +47,8 @@ class KVServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
         self.store.close()
 
 
-def serve(host, port, db_path):
-    server = KVServer((host, port), db_path)
+def serve(host, port, db_path, fsync="always"):
+    server = KVServer((host, port), db_path, fsync=fsync)
     try:
         server.serve_forever()
     finally:
