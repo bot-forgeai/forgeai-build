@@ -56,6 +56,24 @@ class Call(Node):
         self.args = args
 
 
+class ListLit(Node):
+    def __init__(self, elements):
+        self.elements = elements
+
+
+class Index(Node):
+    def __init__(self, collection, index):
+        self.collection = collection
+        self.index = index
+
+
+class IndexAssign(Node):
+    def __init__(self, collection, index, value):
+        self.collection = collection
+        self.index = index
+        self.value = value
+
+
 class FuncExpr(Node):
     def __init__(self, params, body):
         self.params = params

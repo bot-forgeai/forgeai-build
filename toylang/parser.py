@@ -124,12 +124,16 @@ class Parser:
         return self._assignment()
 
     def _assignment(self):
-        if self._at("IDENT") and self.tokens[self.pos + 1].type == "=":
-            name = self._advance().value
-            self._advance()  # '='
+        expr = self._logic_or()
+        if self._at("="):
+            eq_line = self._advance().line
             value = self._assignment()
-            return ast.Assign(name, value)
-        return self._logic_or()
+            if isinstance(expr, ast.Var):
+                return ast.Assign(expr.name, value)
+            if isinstance(expr, ast.Index):
+                return ast.IndexAssign(expr.collection, expr.index, value)
+            raise ToylangSyntaxError("invalid assignment target", eq_line)
+        return expr
 
     def _logic_or(self):
         expr = self._logic_and()
@@ -181,16 +185,22 @@ class Parser:
 
     def _call(self):
         expr = self._primary()
-        while self._at("("):
-            self._advance()
-            args = []
-            if not self._at(")"):
-                args.append(self._expr())
-                while self._at(","):
-                    self._advance()
+        while self._at("(", "["):
+            if self._at("("):
+                self._advance()
+                args = []
+                if not self._at(")"):
                     args.append(self._expr())
-            self._expect(")")
-            expr = ast.Call(expr, args)
+                    while self._at(","):
+                        self._advance()
+                        args.append(self._expr())
+                self._expect(")")
+                expr = ast.Call(expr, args)
+            else:
+                self._advance()
+                index = self._expr()
+                self._expect("]")
+                expr = ast.Index(expr, index)
         return expr
 
     def _primary(self):
@@ -218,6 +228,16 @@ class Parser:
             expr = self._expr()
             self._expect(")")
             return expr
+        if tok.type == "[":
+            self._advance()
+            elements = []
+            if not self._at("]"):
+                elements.append(self._expr())
+                while self._at(","):
+                    self._advance()
+                    elements.append(self._expr())
+            self._expect("]")
+            return ast.ListLit(elements)
         if tok.type == "FUNC":
             self._advance()
             params = self._param_list()

@@ -138,3 +138,65 @@ def test_type_error_on_arithmetic_with_string():
 def test_calling_non_function_raises():
     with pytest.raises(ToylangRuntimeError):
         run("let x = 5; x();")
+
+
+def test_list_literal_and_index(capsys):
+    out = run_capture('let xs = [1, 2, 3]; print(xs[0]); print(xs[2]);', capsys)
+    assert out == "1\n3\n"
+
+
+def test_list_printed_as_bracketed(capsys):
+    out = run_capture('print([1, "a", true]);', capsys)
+    assert out == '[1, a, true]\n'
+
+
+def test_index_assignment(capsys):
+    out = run_capture('let xs = [1, 2, 3]; xs[1] = 99; print(xs);', capsys)
+    assert out == "[1, 99, 3]\n"
+
+
+def test_nested_list_index(capsys):
+    out = run_capture('let xs = [[1, 2], [3, 4]]; print(xs[1][0]);', capsys)
+    assert out == "3\n"
+
+
+def test_string_indexing(capsys):
+    out = run_capture('print("hello"[1]);', capsys)
+    assert out == "e\n"
+
+
+def test_len_on_list(capsys):
+    out = run_capture('print(len([1, 2, 3, 4]));', capsys)
+    assert out == "4\n"
+
+
+def test_push_and_pop(capsys):
+    out = run_capture(
+        'let xs = [1, 2]; push(xs, 3); print(xs); let x = pop(xs); print(x); print(xs);',
+        capsys,
+    )
+    assert out == "[1, 2, 3]\n3\n[1, 2]\n"
+
+
+def test_list_in_loop(capsys):
+    out = run_capture(
+        'let xs = [1, 2, 3]; let total = 0; let i = 0; '
+        'while (i < len(xs)) { total = total + xs[i]; i = i + 1; } print(total);',
+        capsys,
+    )
+    assert out == "6\n"
+
+
+def test_index_out_of_range_raises():
+    with pytest.raises(ToylangRuntimeError):
+        run("let xs = [1, 2]; print(xs[5]);")
+
+
+def test_pop_empty_list_raises():
+    with pytest.raises(ToylangRuntimeError):
+        run("let xs = []; pop(xs);")
+
+
+def test_index_assign_on_non_list_raises():
+    with pytest.raises(ToylangRuntimeError):
+        run('let x = 5; x[0] = 1;')
