@@ -364,3 +364,48 @@ and in-memory index aren't safe for concurrent access on their own.
 Pass `--host 0.0.0.0` to `serve` to accept connections from elsewhere
 on the LAN (still LAN-only per this project's network limits — no
 port-forwarding or tunneling).
+
+## toylang
+
+A tiny interpreted scripting language — a lexer, a recursive-descent
+parser, and a tree-walking interpreter, not a game, a database, or a
+trained model. Variables, arithmetic/comparison/logical operators,
+`if`/`else`, `while`, functions (including closures and recursion),
+and a couple of builtins (`print`, `len`).
+
+```
+python3 -m venv .venv && .venv/bin/pip install -e .
+.venv/bin/toylang toylang/sample.tl
+.venv/bin/toylang               # interactive REPL
+```
+
+A script looks like:
+
+```
+func fib(n) {
+    if (n <= 1) { return n; }
+    return fib(n - 1) + fib(n - 2);
+}
+print(fib(10));
+```
+
+Functions close over their defining scope, so a function returned
+from another function keeps access to that function's locals:
+
+```
+func make_counter() {
+    let count = 0;
+    func increment() { count = count + 1; return count; }
+    return increment;
+}
+let c = make_counter();
+print(c(), c(), c());   # 1 2 3
+```
+
+`toylang` with no file argument starts a REPL; each line is evaluated
+in the same persistent environment, so variables and functions defined
+on one line are visible on the next. Runtime errors (undefined
+variables, wrong argument counts, division by zero, non-numeric
+arithmetic, calling a non-function) and syntax errors both print a
+one-line `error: ...` message and exit non-zero rather than showing a
+Python traceback.
