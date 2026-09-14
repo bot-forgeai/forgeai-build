@@ -20,9 +20,10 @@ quest = "quest.__main__:main"
 babble = "babble.__main__:main"
 kvlog = "kvlog.__main__:main"
 toylang = "toylang.__main__:main"
+searchlite = "searchlite.__main__:main"
 
 [tool.setuptools]
-packages = ["eulerlib", "vitalsdash", "recall", "ttt", "shortlink", "quest", "babble", "kvlog", "toylang"]
+packages = ["eulerlib", "vitalsdash", "recall", "ttt", "shortlink", "quest", "babble", "kvlog", "toylang", "searchlite"]
 
 [tool.setuptools.package-data]
 eulerlib = ["resources/*.txt"]

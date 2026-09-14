@@ -451,3 +451,30 @@ script:
 > greet("ada");
 hi ada
 ```
+
+## searchlite
+
+A tiny full-text search engine — an inverted index over indexed
+documents, ranked by TF-IDF, not a graph, a socket protocol, or a
+language interpreter. Index plain-text files, then search them and
+get results ranked by relevance.
+
+```
+python3 -m venv .venv && .venv/bin/pip install -e .
+.venv/bin/searchlite --index notes.json add-dir ./notes --ext .txt,.md
+.venv/bin/searchlite --index notes.json search "quick fox"
+```
+
+Each `search` result line is `score<TAB>doc_id<TAB>preview`, ranked
+highest score first. `add`/`add-dir` build up an index incrementally
+(re-indexing a `doc_id` replaces its old content rather than
+duplicating it); `remove DOC_ID` drops a document; `stats` reports the
+document and term counts. The index is a single JSON file
+(`--index`, default `searchlite.json`) so it can be inspected, backed
+up, or checked into version control like any other data file.
+
+Scoring is a standard smoothed TF-IDF: a term's contribution to a
+document's score is its raw frequency in that document times
+`log((N + 1) / (df + 1)) + 1`, where `N` is the total document count
+and `df` is how many documents contain the term — so rarer terms
+that appear across fewer documents count for more than common ones.
