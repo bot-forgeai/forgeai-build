@@ -53,7 +53,10 @@ def cmd_search(args):
         print("no results")
         return
     for doc_id, score in results:
-        preview = index.doc_titles.get(doc_id, "")
+        if args.snippet:
+            preview = index.snippet(doc_id, args.query)
+        else:
+            preview = index.doc_titles.get(doc_id, "")
         print(f"{score:.4f}\t{doc_id}\t{preview}")
 
 
@@ -84,6 +87,7 @@ def build_parser():
     p_search = sub.add_parser("search", help="search the index and print ranked results")
     p_search.add_argument("query")
     p_search.add_argument("--top", type=int, default=10, help="max number of results (default: 10)")
+    p_search.add_argument("--snippet", action="store_true", help="show a query-term-highlighted excerpt instead of the leading preview")
     p_search.set_defaults(func=cmd_search)
 
     p_stats = sub.add_parser("stats", help="print index size stats")

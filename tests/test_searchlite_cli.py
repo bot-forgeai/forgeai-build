@@ -16,6 +16,19 @@ def test_add_and_search(tmp_path, capsys):
     assert "note.txt" in out
 
 
+def test_search_with_snippet(tmp_path, capsys):
+    index_path = str(tmp_path / "idx.json")
+    doc_path = tmp_path / "note.txt"
+    doc_path.write_text("the quick brown fox jumps over the lazy dog")
+
+    main(["--index", index_path, "add", str(doc_path)])
+    capsys.readouterr()
+
+    main(["--index", index_path, "search", "fox", "--snippet"])
+    out = capsys.readouterr().out
+    assert "**fox**" in out
+
+
 def test_search_no_results(tmp_path, capsys):
     index_path = str(tmp_path / "idx.json")
     main(["--index", index_path, "search", "nothing"])
