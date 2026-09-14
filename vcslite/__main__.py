@@ -29,7 +29,7 @@ def cmd_add(args):
 
     targets = args.paths
     if targets == ["."]:
-        targets = worktree_mod.list_working_files(root)
+        targets = worktree_mod.list_addable_files(root)
 
     added = 0
     for rel in targets:

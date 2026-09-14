@@ -320,3 +320,56 @@ def test_checkout_unknown_branch_falls_back_to_sha_error(project):
 def test_checkout_no_args_errors(project):
     main(["init"])
     assert main(["checkout"]) == 1
+
+
+def test_ignore_file_excludes_from_add_dot(project, capsys):
+    main(["init"])
+    write(".vcsliteignore", "*.log\n")
+    write("a.txt", "a")
+    write("debug.log", "noisy")
+    main(["add", "."])
+    capsys.readouterr()
+    main(["status"])
+    out = capsys.readouterr().out
+    assert "a.txt" in out
+    assert "debug.log" not in out
+
+
+def test_ignore_file_excludes_from_untracked_status(project, capsys):
+    main(["init"])
+    write(".vcsliteignore", "build\n")
+    write("a.txt", "a")
+    main(["add", "a.txt"])
+    main(["commit", "-m", "first"])
+    os.makedirs("build", exist_ok=True)
+    write("build/out.o", "binary")
+    capsys.readouterr()
+    main(["status"])
+    out = capsys.readouterr().out
+    assert "build/out.o" not in out
+
+
+def test_ignore_file_does_not_hide_already_tracked_files(project, capsys):
+    main(["init"])
+    write("a.txt", "v1")
+    main(["add", "a.txt"])
+    main(["commit", "-m", "first"])
+    write(".vcsliteignore", "*.txt\n")
+    write("a.txt", "v2")
+    capsys.readouterr()
+    main(["status"])
+    out = capsys.readouterr().out
+    assert "modified, not staged" in out
+    assert "a.txt" in out
+
+
+def test_explicit_add_of_ignored_file_still_works(project, capsys):
+    main(["init"])
+    write(".vcsliteignore", "*.log\n")
+    write("debug.log", "noisy")
+    assert main(["add", "debug.log"]) == 0
+    capsys.readouterr()
+    main(["status"])
+    out = capsys.readouterr().out
+    assert "staged for commit" in out
+    assert "debug.log" in out
