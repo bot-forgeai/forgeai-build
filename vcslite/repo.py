@@ -38,13 +38,51 @@ def init(path: str = ".") -> str:
     return root
 
 
-def read_head_ref(root: str) -> str:
-    """Return the ref path HEAD points at, e.g. 'refs/heads/main'."""
+def _read_head_raw(root: str) -> str:
     with open(os.path.join(repo_dir(root), "HEAD")) as f:
-        line = f.read().strip()
+        return f.read().strip()
+
+
+def read_head_ref(root: str) -> str:
+    """Return the ref path HEAD points at, e.g. 'refs/heads/main'.
+
+    Raises ValueError if HEAD is detached (points directly at a commit).
+    """
+    line = _read_head_raw(root)
     if line.startswith("ref: "):
         return line[len("ref: "):]
     raise ValueError(f"detached or malformed HEAD: {line!r}")
+
+
+def current_branch(root: str) -> str | None:
+    """The branch name HEAD points at, or None if HEAD is detached."""
+    line = _read_head_raw(root)
+    if line.startswith("ref: refs/heads/"):
+        return line[len("ref: refs/heads/"):]
+    return None
+
+
+def set_head_branch(root: str, name: str) -> None:
+    """Point HEAD at a branch (symbolic ref)."""
+    with open(os.path.join(repo_dir(root), "HEAD"), "w") as f:
+        f.write(f"ref: refs/heads/{name}\n")
+
+
+def set_head_detached(root: str, sha: str) -> None:
+    """Point HEAD directly at a commit, leaving no branch behind it."""
+    with open(os.path.join(repo_dir(root), "HEAD"), "w") as f:
+        f.write(sha + "\n")
+
+
+def list_branches(root: str) -> list[str]:
+    heads_dir = os.path.join(repo_dir(root), "refs", "heads")
+    if not os.path.isdir(heads_dir):
+        return []
+    return sorted(os.listdir(heads_dir))
+
+
+def branch_exists(root: str, name: str) -> bool:
+    return os.path.isfile(os.path.join(repo_dir(root), "refs", "heads", name))
 
 
 def read_ref(root: str, ref: str) -> str | None:
@@ -63,5 +101,7 @@ def write_ref(root: str, ref: str, sha: str) -> None:
 
 
 def current_commit(root: str) -> str | None:
-    ref = read_head_ref(root)
-    return read_ref(root, ref)
+    line = _read_head_raw(root)
+    if line.startswith("ref: "):
+        return read_ref(root, line[len("ref: "):])
+    return line or None

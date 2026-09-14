@@ -38,3 +38,33 @@ def test_head_ref_and_current_commit(tmp_path):
     assert repo.current_commit(root) is None
     repo.write_ref(root, "refs/heads/main", "abc123")
     assert repo.current_commit(root) == "abc123"
+
+
+def test_current_branch_defaults_to_main(tmp_path):
+    root = repo.init(str(tmp_path))
+    assert repo.current_branch(root) == "main"
+
+
+def test_list_branches_and_branch_exists(tmp_path):
+    root = repo.init(str(tmp_path))
+    # main isn't a real ref file until the first commit (an "unborn" branch,
+    # same idea as git's own behavior on a fresh repo).
+    assert repo.list_branches(root) == []
+    assert not repo.branch_exists(root, "main")
+    repo.write_ref(root, "refs/heads/main", "abc123")
+    assert repo.branch_exists(root, "main")
+    assert not repo.branch_exists(root, "feature")
+    repo.write_ref(root, "refs/heads/feature", "abc123")
+    assert repo.list_branches(root) == ["feature", "main"]
+
+
+def test_set_head_detached_and_current_branch(tmp_path):
+    root = repo.init(str(tmp_path))
+    repo.write_ref(root, "refs/heads/main", "abc123")
+    repo.set_head_detached(root, "abc123")
+    assert repo.current_branch(root) is None
+    assert repo.current_commit(root) == "abc123"
+
+    repo.set_head_branch(root, "main")
+    assert repo.current_branch(root) == "main"
+    assert repo.current_commit(root) == "abc123"

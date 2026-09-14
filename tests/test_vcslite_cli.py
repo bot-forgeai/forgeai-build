@@ -188,3 +188,135 @@ def test_add_dot_stages_everything(project, capsys):
 def test_add_missing_file_errors(project):
     main(["init"])
     assert main(["add", "nope.txt"]) == 1
+
+
+def test_branch_list_shows_main_and_marks_current(project, capsys):
+    main(["init"])
+    write("a.txt", "v1")
+    main(["add", "a.txt"])
+    main(["commit", "-m", "first"])
+    capsys.readouterr()
+
+    main(["branch"])
+    out = capsys.readouterr().out
+    assert "* main" in out
+
+
+def test_branch_create_before_first_commit_errors(project):
+    main(["init"])
+    assert main(["branch", "feature"]) == 1
+
+
+def test_branch_create_and_list(project, capsys):
+    main(["init"])
+    write("a.txt", "v1")
+    main(["add", "a.txt"])
+    main(["commit", "-m", "first"])
+    capsys.readouterr()
+
+    assert main(["branch", "feature"]) == 0
+    main(["branch"])
+    out = capsys.readouterr().out
+    assert "* main" in out
+    assert "feature" in out
+
+
+def test_branch_duplicate_name_errors(project):
+    main(["init"])
+    write("a.txt", "v1")
+    main(["add", "a.txt"])
+    main(["commit", "-m", "first"])
+    main(["branch", "feature"])
+    assert main(["branch", "feature"]) == 1
+
+
+def test_checkout_branch_switches_head_and_files(project, capsys):
+    main(["init"])
+    write("a.txt", "on-main")
+    main(["add", "a.txt"])
+    main(["commit", "-m", "first"])
+    main(["branch", "feature"])
+    main(["checkout", "feature"])
+    write("a.txt", "on-feature")
+    main(["add", "a.txt"])
+    main(["commit", "-m", "second"])
+
+    capsys.readouterr()
+    assert main(["checkout", "main"]) == 0
+    with open("a.txt") as f:
+        assert f.read() == "on-main"
+
+    main(["status"])
+    out = capsys.readouterr().out
+    assert "on branch main" in out
+
+
+def test_checkout_new_branch_flag(project, capsys):
+    main(["init"])
+    write("a.txt", "v1")
+    main(["add", "a.txt"])
+    main(["commit", "-m", "first"])
+
+    capsys.readouterr()
+    assert main(["checkout", "-b", "feature"]) == 0
+    main(["status"])
+    out = capsys.readouterr().out
+    assert "on branch feature" in out
+
+    main(["branch"])
+    out = capsys.readouterr().out
+    assert "* feature" in out
+    assert "main" in out
+
+
+def test_commits_on_separate_branches_dont_move_each_other(project):
+    main(["init"])
+    write("a.txt", "v1")
+    main(["add", "a.txt"])
+    main(["commit", "-m", "first"])
+    with open(".vcslite/refs/heads/main") as f:
+        main_sha = f.read().strip()
+
+    main(["checkout", "-b", "feature"])
+    write("a.txt", "v2")
+    main(["add", "a.txt"])
+    main(["commit", "-m", "second"])
+
+    with open(".vcslite/refs/heads/main") as f:
+        assert f.read().strip() == main_sha
+    with open(".vcslite/refs/heads/feature") as f:
+        assert f.read().strip() != main_sha
+
+
+def test_checkout_detached_then_commit_does_not_move_branch(project):
+    main(["init"])
+    write("a.txt", "v1")
+    main(["add", "a.txt"])
+    main(["commit", "-m", "first"])
+    with open(".vcslite/refs/heads/main") as f:
+        first_sha = f.read().strip()
+
+    write("a.txt", "v2")
+    main(["add", "a.txt"])
+    main(["commit", "-m", "second"])
+    with open(".vcslite/refs/heads/main") as f:
+        second_sha = f.read().strip()
+
+    main(["checkout", first_sha])
+    write("a.txt", "detached-edit")
+    main(["add", "a.txt"])
+    main(["commit", "-m", "detached commit"])
+
+    with open(".vcslite/refs/heads/main") as f:
+        main_sha_after = f.read().strip()
+    assert main_sha_after == second_sha
+
+
+def test_checkout_unknown_branch_falls_back_to_sha_error(project):
+    main(["init"])
+    assert main(["checkout", "nope"]) == 1
+
+
+def test_checkout_no_args_errors(project):
+    main(["init"])
+    assert main(["checkout"]) == 1
