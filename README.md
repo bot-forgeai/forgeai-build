@@ -547,3 +547,13 @@ no branch points at (same as git's own detached-HEAD footgun).
 Unlike git, vcslite keeps one flat tree object per commit (path ->
 blob sha) rather than nesting one tree object per directory — simpler
 to reason about, and a fine tradeoff at this project's scale.
+
+A `.vcsliteignore` file at the repo root (one glob pattern per line;
+blank lines and `#` comments ignored) excludes matching paths from
+`add .` and from `status`'s untracked list — a pattern matches either
+the whole relative path or any single path component, so both
+`*.log` and a bare directory name like `build` work as expected.
+Naming an ignored file explicitly (`add debug.log`) still stages it,
+and a file already tracked before being added to `.vcsliteignore`
+keeps showing up normally in `status` (as modified/staged/deleted) —
+the ignore file only ever hides new, never-tracked paths.
