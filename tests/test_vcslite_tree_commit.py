@@ -37,6 +37,15 @@ def test_commit_with_parent(tmp_path):
     sha = commit.write_commit(rdir, "treesha", "parentsha", "second", timestamp=200.0)
     c = commit.read_commit(rdir, sha)
     assert c["parent"] == "parentsha"
+    assert c["parents"] == ["parentsha"]
+
+
+def test_commit_with_multiple_parents(tmp_path):
+    rdir = str(tmp_path)
+    sha = commit.write_commit(rdir, "treesha", ["p1", "p2"], "merge", timestamp=300.0)
+    c = commit.read_commit(rdir, sha)
+    assert c["parents"] == ["p1", "p2"]
+    assert c["parent"] == "p1"
 
 
 def test_commit_message_with_newlines(tmp_path):
