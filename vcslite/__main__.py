@@ -5,11 +5,27 @@ import os
 import sys
 
 from . import commit as commit_mod
+from . import merge as merge_mod
 from . import objects as objects_mod
 from . import repo as repo_mod
 from . import tree as tree_mod
 from . import worktree as worktree_mod
 from .index import read_index, write_index
+
+
+def _write_tree_to_worktree(root, rdir, target_tree):
+    """Make the working tree match `target_tree` exactly: write every
+    blob in it, and remove any tracked-eligible file not in it.
+    """
+    current_files = set(worktree_mod.list_working_files(root))
+    for path in current_files - set(target_tree.keys()):
+        os.remove(os.path.join(root, path))
+    for path, blob_sha in target_tree.items():
+        _, data = objects_mod.read_object(rdir, blob_sha)
+        abs_path = os.path.join(root, path)
+        os.makedirs(os.path.dirname(abs_path) or ".", exist_ok=True)
+        with open(abs_path, "wb") as f:
+            f.write(data)
 
 
 def cmd_init(args):
@@ -57,13 +73,15 @@ def cmd_commit(args):
 
     tree_sha = tree_mod.write_tree(rdir, index)
     parent = repo_mod.current_commit(root)
-    if parent is not None:
+    merge_parent = repo_mod.merge_head(root)
+    if parent is not None and merge_parent is None:
         parent_tree = commit_mod.read_commit(rdir, parent)["tree"]
         if parent_tree == tree_sha:
             print("error: nothing to commit (tree unchanged)", file=sys.stderr)
             return 1
 
-    sha = commit_mod.write_commit(rdir, tree_sha, parent, args.message)
+    parents = [p for p in (parent, merge_parent) if p is not None]
+    sha = commit_mod.write_commit(rdir, tree_sha, parents, args.message)
     branch = repo_mod.current_branch(root)
     if branch is not None:
         repo_mod.write_ref(root, f"refs/heads/{branch}", sha)
@@ -71,6 +89,9 @@ def cmd_commit(args):
     else:
         repo_mod.set_head_detached(root, sha)
         label = "detached HEAD"
+    if merge_parent is not None:
+        repo_mod.clear_merge_head(root)
+        repo_mod.clear_merge_conflicts(root)
     print(f"[{label} {sha[:8]}] {args.message}")
     return 0
 
@@ -106,9 +127,21 @@ def cmd_status(args):
     else:
         sha = repo_mod.current_commit(root)
         print(f"HEAD detached at {sha[:8] if sha else '(no commits)'}")
+    merging = repo_mod.merge_head(root)
+    conflicts = repo_mod.merge_conflicts(root) if merging is not None else []
+    if merging is not None:
+        print(f"merging {merging[:8]} — resolve conflicts, add, then commit")
+        if conflicts:
+            print("conflicted:")
+            for p in conflicts:
+                print(f"  {p}")
+
     s = worktree_mod.status(root)
+    if conflicts:
+        s = {key: [p for p in paths if p not in conflicts] for key, paths in s.items()}
     if not any(s.values()):
-        print("nothing to commit, working tree clean")
+        if merging is None:
+            print("nothing to commit, working tree clean")
         return 0
     if s["staged"]:
         print("staged for commit:")
@@ -138,7 +171,10 @@ def cmd_log(args):
         return 0
     while sha:
         c = commit_mod.read_commit(rdir, sha)
-        print(f"commit {sha}")
+        header = f"commit {sha}"
+        if len(c["parents"]) > 1:
+            header += f" (merge: {', '.join(p[:8] for p in c['parents'])})"
+        print(header)
         print(f"    {c['message']}")
         sha = c["parent"]
     return 0
@@ -206,18 +242,7 @@ def cmd_checkout(args):
         return 1
 
     target_tree = tree_mod.read_tree(rdir, c["tree"])
-    current_files = set(worktree_mod.list_working_files(root))
-
-    for path in current_files - set(target_tree.keys()):
-        os.remove(os.path.join(root, path))
-
-    for path, blob_sha in target_tree.items():
-        _, data = objects_mod.read_object(rdir, blob_sha)
-        abs_path = os.path.join(root, path)
-        os.makedirs(os.path.dirname(abs_path) or ".", exist_ok=True)
-        with open(abs_path, "wb") as f:
-            f.write(data)
-
+    _write_tree_to_worktree(root, rdir, target_tree)
     write_index(root, dict(target_tree))
 
     if branch_name is not None:
@@ -249,6 +274,116 @@ def cmd_diff(args):
         sys.stdout.writelines(diff_lines)
     if not changed:
         print("no staged changes")
+    return 0
+
+
+def cmd_merge(args):
+    root = repo_mod.find_repo_root(".")
+    rdir = repo_mod.repo_dir(root)
+
+    if args.abort:
+        if repo_mod.merge_head(root) is None:
+            print("error: no merge in progress", file=sys.stderr)
+            return 1
+        head_sha = repo_mod.current_commit(root)
+        c = commit_mod.read_commit(rdir, head_sha)
+        target_tree = tree_mod.read_tree(rdir, c["tree"])
+        _write_tree_to_worktree(root, rdir, target_tree)
+        write_index(root, dict(target_tree))
+        repo_mod.clear_merge_head(root)
+        repo_mod.clear_merge_conflicts(root)
+        print("merge aborted")
+        return 0
+
+    if args.branch is None:
+        print("error: merge requires a branch name or commit", file=sys.stderr)
+        return 1
+
+    if repo_mod.merge_head(root) is not None:
+        print("error: a merge is already in progress (resolve conflicts, then commit)",
+              file=sys.stderr)
+        return 1
+
+    current_branch = repo_mod.current_branch(root)
+    if current_branch is None:
+        print("error: cannot merge while HEAD is detached", file=sys.stderr)
+        return 1
+
+    ours_sha = repo_mod.current_commit(root)
+    if ours_sha is None:
+        print("error: cannot merge before the first commit", file=sys.stderr)
+        return 1
+
+    if repo_mod.branch_exists(root, args.branch):
+        theirs_sha = repo_mod.read_ref(root, f"refs/heads/{args.branch}")
+        if theirs_sha is None:
+            print(f"error: branch {args.branch!r} has no commits yet", file=sys.stderr)
+            return 1
+    else:
+        try:
+            theirs_sha = _resolve_commit(root, args.branch)
+        except (KeyError, ValueError) as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 1
+
+    if theirs_sha == ours_sha:
+        print("already up to date")
+        return 0
+
+    base_sha = merge_mod.merge_base(rdir, ours_sha, theirs_sha)
+
+    if base_sha == theirs_sha:
+        print("already up to date")
+        return 0
+
+    if base_sha == ours_sha:
+        c = commit_mod.read_commit(rdir, theirs_sha)
+        target_tree = tree_mod.read_tree(rdir, c["tree"])
+        _write_tree_to_worktree(root, rdir, target_tree)
+        write_index(root, dict(target_tree))
+        repo_mod.write_ref(root, f"refs/heads/{current_branch}", theirs_sha)
+        print(f"fast-forwarded {current_branch} to {theirs_sha[:8]}")
+        return 0
+
+    base_tree = (tree_mod.read_tree(rdir, commit_mod.read_commit(rdir, base_sha)["tree"])
+                 if base_sha else {})
+    ours_tree = tree_mod.read_tree(rdir, commit_mod.read_commit(rdir, ours_sha)["tree"])
+    theirs_tree = tree_mod.read_tree(rdir, commit_mod.read_commit(rdir, theirs_sha)["tree"])
+
+    merged, conflicts = merge_mod.merge_trees(base_tree, ours_tree, theirs_tree)
+
+    worktree_content = {path: objects_mod.read_object(rdir, sha)[1]
+                         for path, sha in merged.items()}
+    for path in conflicts:
+        worktree_content[path] = merge_mod.conflict_markers(
+            rdir, ours_tree.get(path), theirs_tree.get(path), args.branch
+        )
+
+    current_files = set(worktree_mod.list_working_files(root))
+    for path in current_files - set(worktree_content.keys()):
+        os.remove(os.path.join(root, path))
+    for path, data in worktree_content.items():
+        abs_path = os.path.join(root, path)
+        os.makedirs(os.path.dirname(abs_path) or ".", exist_ok=True)
+        with open(abs_path, "wb") as f:
+            f.write(data)
+
+    write_index(root, dict(merged))
+
+    if conflicts:
+        repo_mod.set_merge_head(root, theirs_sha)
+        repo_mod.set_merge_conflicts(root, conflicts)
+        print(f"conflict: {len(conflicts)} file(s) need manual resolution:")
+        for p in conflicts:
+            print(f"  {p}")
+        print("resolve, then `vcslite add` and `vcslite commit`")
+        return 1
+
+    sha = commit_mod.write_commit(rdir, tree_mod.write_tree(rdir, merged),
+                                   [ours_sha, theirs_sha],
+                                   f"merge {args.branch} into {current_branch}")
+    repo_mod.write_ref(root, f"refs/heads/{current_branch}", sha)
+    print(f"merged {args.branch} into {current_branch} at {sha[:8]}")
     return 0
 
 
@@ -290,6 +425,13 @@ def build_parser():
 
     p_diff = sub.add_parser("diff", help="show staged changes vs HEAD")
     p_diff.set_defaults(func=cmd_diff)
+
+    p_merge = sub.add_parser("merge", help="merge a branch into the current one")
+    p_merge.add_argument("branch", nargs="?", default=None,
+                          help="branch name or commit to merge in")
+    p_merge.add_argument("--abort", action="store_true",
+                          help="abandon an in-progress conflicted merge")
+    p_merge.set_defaults(func=cmd_merge)
 
     return parser
 

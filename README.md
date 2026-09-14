@@ -557,3 +557,20 @@ Naming an ignored file explicitly (`add debug.log`) still stages it,
 and a file already tracked before being added to `.vcsliteignore`
 keeps showing up normally in `status` (as modified/staged/deleted) —
 the ignore file only ever hides new, never-tracked paths.
+
+`merge BRANCH` merges another branch into the current one. If the
+current branch is a plain ancestor of `BRANCH`, it just fast-forwards
+(moves the branch ref, no new commit). Otherwise it finds the nearest
+common ancestor commit and does a 3-way merge of the two trees against
+it, path by path: a path only one side touched is taken as-is, and a
+path both sides changed identically (or both deleted) needs no
+resolution. A path both sides changed *differently* becomes a
+conflict: vcslite writes git-style `<<<<<<< HEAD` / `=======` /
+`>>>>>>> BRANCH` markers into the working-tree file (each side's full
+content, since vcslite doesn't attempt a line-level merge) and stops
+short of committing. `status` shows an in-progress merge and which
+paths are still conflicted; after hand-editing a conflicted file,
+`add` it and `commit` as normal to finish the merge as a commit with
+two parents (`log` marks these `(merge: ..., ...)`). `merge --abort`
+throws away an unresolved merge and restores the working tree to
+where it was before `merge` ran.

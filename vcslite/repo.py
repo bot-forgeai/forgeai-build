@@ -1,4 +1,5 @@
 """Repository discovery and initialization."""
+import json
 import os
 
 REPO_DIR_NAME = ".vcslite"
@@ -105,3 +106,50 @@ def current_commit(root: str) -> str | None:
     if line.startswith("ref: "):
         return read_ref(root, line[len("ref: "):])
     return line or None
+
+
+def _merge_head_path(root: str) -> str:
+    return os.path.join(repo_dir(root), "MERGE_HEAD")
+
+
+def merge_head(root: str) -> str | None:
+    """The sha of the other branch's tip mid-merge, or None if not merging."""
+    path = _merge_head_path(root)
+    if not os.path.isfile(path):
+        return None
+    with open(path) as f:
+        return f.read().strip() or None
+
+
+def set_merge_head(root: str, sha: str) -> None:
+    with open(_merge_head_path(root), "w") as f:
+        f.write(sha + "\n")
+
+
+def clear_merge_head(root: str) -> None:
+    path = _merge_head_path(root)
+    if os.path.isfile(path):
+        os.remove(path)
+
+
+def _merge_conflicts_path(root: str) -> str:
+    return os.path.join(repo_dir(root), "MERGE_CONFLICTS")
+
+
+def merge_conflicts(root: str) -> list[str]:
+    path = _merge_conflicts_path(root)
+    if not os.path.isfile(path):
+        return []
+    with open(path) as f:
+        return json.load(f)
+
+
+def set_merge_conflicts(root: str, paths: list[str]) -> None:
+    with open(_merge_conflicts_path(root), "w") as f:
+        json.dump(paths, f)
+
+
+def clear_merge_conflicts(root: str) -> None:
+    path = _merge_conflicts_path(root)
+    if os.path.isfile(path):
+        os.remove(path)
