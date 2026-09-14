@@ -107,6 +107,44 @@ def test_snippet_missing_doc_texts_key_falls_back_to_title():
     assert snippet == restored.doc_titles["a"]
 
 
+def test_bm25_ranks_more_relevant_doc_higher():
+    index = Index()
+    index.add_document("fox_doc", "fox fox fox jumps over the dog")
+    index.add_document("dog_doc", "dog barks at the mailman")
+    results = index.search("fox", rank="bm25")
+    assert results[0][0] == "fox_doc"
+    assert results[0][1] > 0
+
+
+def test_bm25_no_match_returns_empty():
+    index = Index()
+    index.add_document("a", "apples and oranges")
+    assert index.search("zzzznomatch", rank="bm25") == []
+
+
+def test_bm25_empty_index_returns_empty():
+    index = Index()
+    assert index.search("anything", rank="bm25") == []
+
+
+def test_bm25_penalizes_longer_documents_for_equal_term_frequency():
+    index = Index()
+    index.add_document("short", "fox " + "filler " * 5)
+    index.add_document("long", "fox " + "filler " * 500)
+    results = dict(index.search("fox", rank="bm25"))
+    assert results["short"] > results["long"]
+
+
+def test_unknown_rank_method_raises():
+    index = Index()
+    index.add_document("a", "hello world")
+    try:
+        index.search("hello", rank="nope")
+        assert False, "expected ValueError"
+    except ValueError:
+        pass
+
+
 def test_idf_favors_rarer_terms():
     index = Index()
     index.add_document("a", "common common rare")

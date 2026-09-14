@@ -488,3 +488,15 @@ document:
 ```
 .venv/bin/searchlite --index notes.json search "quick fox" --snippet
 ```
+
+`search --rank {tfidf,bm25}` (default `tfidf`) switches the scoring
+method. BM25 adds two things TF-IDF lacks: term-frequency saturation
+(a term matching 100 times in a document scores only a little higher
+than matching 10 times, not 10x higher) and document-length
+normalization (a long document isn't unfairly favored just for having
+more words overall, and isn't unfairly penalized either) via the
+standard `k1=1.5, b=0.75` constants:
+
+```
+.venv/bin/searchlite --index notes.json search "quick fox" --rank bm25
+```

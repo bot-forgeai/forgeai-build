@@ -29,6 +29,28 @@ def test_search_with_snippet(tmp_path, capsys):
     assert "**fox**" in out
 
 
+def test_search_with_bm25_rank(tmp_path, capsys):
+    index_path = str(tmp_path / "idx.json")
+    doc_path = tmp_path / "note.txt"
+    doc_path.write_text("the quick brown fox jumps over the lazy dog")
+
+    main(["--index", index_path, "add", str(doc_path)])
+    capsys.readouterr()
+
+    main(["--index", index_path, "search", "fox", "--rank", "bm25"])
+    out = capsys.readouterr().out
+    assert "note.txt" in out
+
+
+def test_search_invalid_rank_exits_nonzero(tmp_path):
+    index_path = str(tmp_path / "idx.json")
+    try:
+        main(["--index", index_path, "search", "fox", "--rank", "nope"])
+        assert False, "expected SystemExit"
+    except SystemExit as exc:
+        assert exc.code == 2
+
+
 def test_search_no_results(tmp_path, capsys):
     index_path = str(tmp_path / "idx.json")
     main(["--index", index_path, "search", "nothing"])
