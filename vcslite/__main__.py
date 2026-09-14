@@ -64,14 +64,48 @@ def cmd_commit(args):
             return 1
 
     sha = commit_mod.write_commit(rdir, tree_sha, parent, args.message)
-    ref = repo_mod.read_head_ref(root)
-    repo_mod.write_ref(root, ref, sha)
-    print(f"[{ref.split('/')[-1]} {sha[:8]}] {args.message}")
+    branch = repo_mod.current_branch(root)
+    if branch is not None:
+        repo_mod.write_ref(root, f"refs/heads/{branch}", sha)
+        label = branch
+    else:
+        repo_mod.set_head_detached(root, sha)
+        label = "detached HEAD"
+    print(f"[{label} {sha[:8]}] {args.message}")
+    return 0
+
+
+def cmd_branch(args):
+    root = repo_mod.find_repo_root(".")
+    if args.name is None:
+        current = repo_mod.current_branch(root)
+        for name in repo_mod.list_branches(root):
+            marker = "*" if name == current else " "
+            print(f"{marker} {name}")
+        return 0
+
+    if repo_mod.branch_exists(root, args.name):
+        print(f"error: branch {args.name!r} already exists", file=sys.stderr)
+        return 1
+
+    sha = repo_mod.current_commit(root)
+    if sha is None:
+        print("error: cannot create a branch before the first commit", file=sys.stderr)
+        return 1
+
+    repo_mod.write_ref(root, f"refs/heads/{args.name}", sha)
+    print(f"created branch '{args.name}' at {sha[:8]}")
     return 0
 
 
 def cmd_status(args):
     root = repo_mod.find_repo_root(".")
+    branch = repo_mod.current_branch(root)
+    if branch is not None:
+        print(f"on branch {branch}")
+    else:
+        sha = repo_mod.current_commit(root)
+        print(f"HEAD detached at {sha[:8] if sha else '(no commits)'}")
     s = worktree_mod.status(root)
     if not any(s.values()):
         print("nothing to commit, working tree clean")
@@ -130,10 +164,44 @@ def _resolve_commit(root: str, prefix: str) -> str:
 def cmd_checkout(args):
     root = repo_mod.find_repo_root(".")
     rdir = repo_mod.repo_dir(root)
+
+    if args.new_branch:
+        if repo_mod.branch_exists(root, args.new_branch):
+            print(f"error: branch {args.new_branch!r} already exists", file=sys.stderr)
+            return 1
+        if args.commit is None:
+            target = repo_mod.current_commit(root)
+            if target is None:
+                print("error: cannot create a branch before the first commit", file=sys.stderr)
+                return 1
+        else:
+            try:
+                target = _resolve_commit(root, args.commit)
+            except (KeyError, ValueError) as e:
+                print(f"error: {e}", file=sys.stderr)
+                return 1
+        repo_mod.write_ref(root, f"refs/heads/{args.new_branch}", target)
+        branch_name = args.new_branch
+    elif args.commit is None:
+        print("error: checkout requires a branch name or commit", file=sys.stderr)
+        return 1
+    elif repo_mod.branch_exists(root, args.commit):
+        branch_name = args.commit
+        target = repo_mod.read_ref(root, f"refs/heads/{branch_name}")
+        if target is None:
+            print(f"error: branch {branch_name!r} has no commits yet", file=sys.stderr)
+            return 1
+    else:
+        try:
+            target = _resolve_commit(root, args.commit)
+        except (KeyError, ValueError) as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 1
+        branch_name = None
+
     try:
-        sha = _resolve_commit(root, args.commit)
-        c = commit_mod.read_commit(rdir, sha)
-    except (KeyError, ValueError) as e:
+        c = commit_mod.read_commit(rdir, target)
+    except ValueError as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
 
@@ -151,9 +219,13 @@ def cmd_checkout(args):
             f.write(data)
 
     write_index(root, dict(target_tree))
-    ref = repo_mod.read_head_ref(root)
-    repo_mod.write_ref(root, ref, sha)
-    print(f"checked out {sha[:8]}")
+
+    if branch_name is not None:
+        repo_mod.set_head_branch(root, branch_name)
+        print(f"switched to branch '{branch_name}' at {target[:8]}")
+    else:
+        repo_mod.set_head_detached(root, target)
+        print(f"checked out {target[:8]} (detached HEAD)")
     return 0
 
 
@@ -202,8 +274,18 @@ def build_parser():
     p_log = sub.add_parser("log", help="show commit history")
     p_log.set_defaults(func=cmd_log)
 
-    p_checkout = sub.add_parser("checkout", help="restore working tree to a commit")
-    p_checkout.add_argument("commit")
+    p_branch = sub.add_parser("branch", help="list branches, or create one")
+    p_branch.add_argument("name", nargs="?", default=None,
+                           help="name for a new branch pointing at HEAD")
+    p_branch.set_defaults(func=cmd_branch)
+
+    p_checkout = sub.add_parser(
+        "checkout", help="switch to a branch, or restore working tree to a commit"
+    )
+    p_checkout.add_argument("commit", nargs="?", default=None,
+                             help="branch name or commit sha")
+    p_checkout.add_argument("-b", dest="new_branch", metavar="NAME",
+                             help="create NAME as a new branch and switch to it")
     p_checkout.set_defaults(func=cmd_checkout)
 
     p_diff = sub.add_parser("diff", help="show staged changes vs HEAD")

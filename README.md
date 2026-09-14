@@ -528,15 +528,22 @@ object and a commit object linking back to the previous commit,
 refusing to commit when nothing is staged or the tree is unchanged
 since the last commit. `status` classifies every path as staged
 (differs from HEAD), modified (working copy differs from what's
-staged), untracked, or deleted. `diff` shows a unified diff of staged
-changes against HEAD. `log` walks the commit chain from HEAD back to
-the first commit. `checkout SHA` (a full or unambiguous short prefix)
-restores the working tree and index to exactly that commit's
-snapshot, removing any file not present in it.
+staged), untracked, or deleted (plus the branch `status` is on, or
+where HEAD is detached). `diff` shows a unified diff of staged changes
+against HEAD. `log` walks the commit chain from HEAD back to the
+first commit.
+
+`branch` lists every branch, marking the current one with `*`;
+`branch NAME` creates a new branch pointing at HEAD's commit.
+`checkout NAME` switches HEAD to that branch and restores the working
+tree/index to its tip; `checkout -b NAME [START]` creates a branch
+(at HEAD, or at `START` if given) and switches to it in one step,
+mirroring git's own `-b` shorthand. `checkout SHA` (a full or
+unambiguous short prefix) restores the working tree to that exact
+commit and detaches HEAD — a commit made in this state advances HEAD
+itself without moving any branch, so it's easy to end up with commits
+no branch points at (same as git's own detached-HEAD footgun).
 
 Unlike git, vcslite keeps one flat tree object per commit (path ->
 blob sha) rather than nesting one tree object per directory — simpler
-to reason about, and a fine tradeoff at this project's scale. There
-are no branches yet beyond the implicit `main`; `checkout` moves
-`main`'s own ref rather than supporting a detached HEAD or additional
-branches.
+to reason about, and a fine tradeoff at this project's scale.
