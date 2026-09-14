@@ -44,7 +44,17 @@ class Index:
         self.doc_texts.pop(doc_id, None)
         return True
 
-    def search(self, query, top_k=10):
+    def search(self, query, top_k=10, rank="tfidf"):
+        if rank == "bm25":
+            scores = self._score_bm25(query)
+        elif rank == "tfidf":
+            scores = self._score_tfidf(query)
+        else:
+            raise ValueError(f"unknown rank method {rank!r} (expected 'tfidf' or 'bm25')")
+        ranked = sorted(scores.items(), key=lambda kv: (-kv[1], kv[0]))
+        return ranked[:top_k]
+
+    def _score_tfidf(self, query):
         tokens = tokenize(query)
         scores = defaultdict(float)
         n = self.doc_count
@@ -55,8 +65,25 @@ class Index:
             idf = math.log((n + 1) / (len(postings) + 1)) + 1
             for doc_id, tf in postings.items():
                 scores[doc_id] += tf * idf
-        ranked = sorted(scores.items(), key=lambda kv: (-kv[1], kv[0]))
-        return ranked[:top_k]
+        return scores
+
+    def _score_bm25(self, query, k1=1.5, b=0.75):
+        tokens = tokenize(query)
+        scores = defaultdict(float)
+        n = self.doc_count
+        if n == 0:
+            return scores
+        avg_doc_len = sum(self.doc_lengths.values()) / n
+        for term in tokens:
+            postings = self.postings.get(term)
+            if not postings:
+                continue
+            idf = math.log((n - len(postings) + 0.5) / (len(postings) + 0.5) + 1)
+            for doc_id, tf in postings.items():
+                doc_len = self.doc_lengths.get(doc_id, 0)
+                denom = tf + k1 * (1 - b + b * doc_len / avg_doc_len)
+                scores[doc_id] += idf * (tf * (k1 + 1)) / denom
+        return scores
 
     def snippet(self, doc_id, query, radius=40):
         """Return a short excerpt of doc_id's text around the first query

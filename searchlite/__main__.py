@@ -48,7 +48,7 @@ def cmd_remove(args):
 
 def cmd_search(args):
     index = load_or_new_index(args.index)
-    results = index.search(args.query, top_k=args.top)
+    results = index.search(args.query, top_k=args.top, rank=args.rank)
     if not results:
         print("no results")
         return
@@ -88,6 +88,7 @@ def build_parser():
     p_search.add_argument("query")
     p_search.add_argument("--top", type=int, default=10, help="max number of results (default: 10)")
     p_search.add_argument("--snippet", action="store_true", help="show a query-term-highlighted excerpt instead of the leading preview")
+    p_search.add_argument("--rank", choices=["tfidf", "bm25"], default="tfidf", help="ranking method (default: tfidf)")
     p_search.set_defaults(func=cmd_search)
 
     p_stats = sub.add_parser("stats", help="print index size stats")
