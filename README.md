@@ -478,3 +478,13 @@ document's score is its raw frequency in that document times
 `log((N + 1) / (df + 1)) + 1`, where `N` is the total document count
 and `df` is how many documents contain the term — so rarer terms
 that appear across fewer documents count for more than common ones.
+
+`search --snippet` swaps the plain leading preview for a short excerpt
+built around the first place a query term actually appears in the
+document, with each matched term wrapped in `**asterisks**` — useful
+when the query terms don't happen to occur near the start of a longer
+document:
+
+```
+.venv/bin/searchlite --index notes.json search "quick fox" --snippet
+```

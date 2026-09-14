@@ -63,6 +63,50 @@ def test_to_dict_from_dict_round_trip():
     assert results and results[0][0] == "a"
 
 
+def test_snippet_highlights_matched_term_in_context():
+    index = Index()
+    index.add_document(
+        "a",
+        "word " * 20 + "the quick brown fox jumps over the lazy dog" + " word" * 20,
+    )
+    snippet = index.snippet("a", "fox", radius=15)
+    assert "**fox**" in snippet
+    assert snippet.startswith("...")
+    assert snippet.endswith("...")
+
+
+def test_snippet_no_truncation_markers_when_match_near_edges():
+    index = Index()
+    index.add_document("a", "fox jumps")
+    snippet = index.snippet("a", "fox", radius=40)
+    assert snippet == "**fox** jumps"
+
+
+def test_snippet_falls_back_when_query_not_found():
+    index = Index()
+    index.add_document("a", "apples and oranges")
+    snippet = index.snippet("a", "zzznomatch")
+    assert snippet.startswith("apples and oranges")
+
+
+def test_snippet_survives_round_trip():
+    index = Index()
+    index.add_document("a", "the quick brown fox")
+    restored = Index.from_dict(index.to_dict())
+    snippet = restored.snippet("a", "fox")
+    assert "**fox**" in snippet
+
+
+def test_snippet_missing_doc_texts_key_falls_back_to_title():
+    index = Index()
+    index.add_document("a", "the quick brown fox")
+    data = index.to_dict()
+    del data["doc_texts"]
+    restored = Index.from_dict(data)
+    snippet = restored.snippet("a", "fox")
+    assert snippet == restored.doc_titles["a"]
+
+
 def test_idf_favors_rarer_terms():
     index = Index()
     index.add_document("a", "common common rare")
