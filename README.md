@@ -500,3 +500,43 @@ standard `k1=1.5, b=0.75` constants:
 ```
 .venv/bin/searchlite --index notes.json search "quick fox" --rank bm25
 ```
+
+## vcslite
+
+A tiny version-control system — a content-addressable object store
+plus a linear commit history, not a CSV/HTTP dashboard, a socket
+protocol, or a search index. The mechanics are genuinely different
+from every prior project here: objects (blobs, trees, commits) are
+identified by the SHA-1 hash of their own content and stored
+zlib-compressed under `.vcslite/objects/<sha[:2]>/<sha[2:]>`, the same
+scheme git itself uses, so identical content is only ever stored once.
+
+```
+python3 -m venv .venv && .venv/bin/pip install -e .
+cd myproject
+../.venv/bin/vcslite init
+echo "hello" > a.txt
+../.venv/bin/vcslite add a.txt
+../.venv/bin/vcslite commit -m "first commit"
+../.venv/bin/vcslite log
+```
+
+`add PATH...` (or `add .` for everything under the working tree)
+stages files into `.vcslite/index.json`, a flat JSON map of path to
+blob sha. `commit -m MSG` snapshots the current index into a tree
+object and a commit object linking back to the previous commit,
+refusing to commit when nothing is staged or the tree is unchanged
+since the last commit. `status` classifies every path as staged
+(differs from HEAD), modified (working copy differs from what's
+staged), untracked, or deleted. `diff` shows a unified diff of staged
+changes against HEAD. `log` walks the commit chain from HEAD back to
+the first commit. `checkout SHA` (a full or unambiguous short prefix)
+restores the working tree and index to exactly that commit's
+snapshot, removing any file not present in it.
+
+Unlike git, vcslite keeps one flat tree object per commit (path ->
+blob sha) rather than nesting one tree object per directory — simpler
+to reason about, and a fine tradeoff at this project's scale. There
+are no branches yet beyond the implicit `main`; `checkout` moves
+`main`'s own ref rather than supporting a detached HEAD or additional
+branches.
