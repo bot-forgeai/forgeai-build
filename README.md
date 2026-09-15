@@ -626,3 +626,28 @@ control evaluation — not a strong engine, but a real adversarial
 search rather than a random-legal-move bot, and deep enough (depth 2
 by default, `--depth` to go further) to reliably punish an undefended
 free capture.
+
+`chesslite` also plays over a TCP socket, following the same
+serve/join/ai shape as `ttt`:
+
+```
+.venv/bin/chesslite serve --host 0.0.0.0 --port 5060   # on the host machine
+.venv/bin/chesslite join <host-ip> --port 5060         # White's terminal
+.venv/bin/chesslite join <host-ip> --port 5060         # Black's terminal
+```
+
+`serve` accepts exactly two connections (White first, then Black) and
+relays moves between them: each `MOVE <e2e4-style text>` is validated
+server-side (right player's turn, legal per the same engine `play`
+uses) and the resulting position is broadcast to both players after
+every valid move as a FEN string plus a status (`TURN:w`/`TURN:b`,
+`CHECK:w`/`CHECK:b`, `CHECKMATE:w`/`CHECKMATE:b`, `STALEMATE`, or
+`DRAW`) — the FEN lets each client reconstruct the exact board,
+including castling rights and the en-passant target, without
+replaying move history. If one player disconnects mid-game the other
+gets an `OPPONENT_LEFT` notice instead of hanging.
+
+For solo play, `chesslite ai <host> --port 5060 [--depth N]` connects
+as an automated opponent instead of a second human — it speaks the
+same protocol as `join`, reconstructing the board from each broadcast
+FEN and running the same `choose_move` search `play --ai` uses.
