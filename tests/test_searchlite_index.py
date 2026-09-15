@@ -44,6 +44,13 @@ def test_remove_missing_document_returns_false():
     assert index.remove_document("nope") is False
 
 
+def test_remove_document_clears_phrase_positions():
+    index = Index()
+    index.add_document("a", "quick brown fox")
+    index.remove_document("a")
+    assert index.search_phrase("quick brown fox") == []
+
+
 def test_reindexing_same_doc_id_replaces_content():
     index = Index()
     index.add_document("a", "apples")
@@ -143,6 +150,66 @@ def test_unknown_rank_method_raises():
         assert False, "expected ValueError"
     except ValueError:
         pass
+
+
+def test_search_phrase_matches_exact_sequence():
+    index = Index()
+    index.add_document("a", "the quick brown fox jumps over the lazy dog")
+    index.add_document("b", "a fox that is quick and brown but never jumps")
+    results = index.search_phrase("quick brown fox")
+    assert [doc_id for doc_id, _ in results] == ["a"]
+
+
+def test_search_phrase_rejects_out_of_order_terms():
+    index = Index()
+    index.add_document("a", "brown quick fox")
+    assert index.search_phrase("quick brown fox") == []
+
+
+def test_search_phrase_single_term_matches_postings():
+    index = Index()
+    index.add_document("a", "fox fox fox")
+    index.add_document("b", "fox")
+    results = index.search_phrase("fox")
+    assert results[0] == ("a", 3)
+
+
+def test_search_phrase_no_match_returns_empty():
+    index = Index()
+    index.add_document("a", "apples and oranges")
+    assert index.search_phrase("zzznomatch phrase") == []
+
+
+def test_search_phrase_counts_multiple_occurrences():
+    index = Index()
+    index.add_document("a", "red fox brown fox red fox brown fox")
+    results = dict(index.search_phrase("red fox"))
+    assert results["a"] == 2
+
+
+def test_search_phrase_respects_top_k():
+    index = Index()
+    for i in range(5):
+        index.add_document(f"doc{i}", "shared phrase term")
+    results = index.search_phrase("shared phrase", top_k=2)
+    assert len(results) == 2
+
+
+def test_search_phrase_survives_round_trip():
+    index = Index()
+    index.add_document("a", "the quick brown fox")
+    restored = Index.from_dict(index.to_dict())
+    results = restored.search_phrase("quick brown fox")
+    assert [doc_id for doc_id, _ in results] == ["a"]
+
+
+def test_search_phrase_missing_positions_key_finds_nothing():
+    index = Index()
+    index.add_document("a", "the quick brown fox")
+    data = index.to_dict()
+    del data["positions"]
+    restored = Index.from_dict(data)
+    assert restored.search_phrase("quick brown fox") == []
 
 
 def test_idf_favors_rarer_terms():

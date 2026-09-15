@@ -10,6 +10,7 @@ class Index:
 
     def __init__(self):
         self.postings = {}      # term -> {doc_id: term_freq}
+        self.positions = {}     # term -> {doc_id: [token positions]}
         self.doc_lengths = {}   # doc_id -> token count
         self.doc_titles = {}    # doc_id -> short preview text
         self.doc_texts = {}     # doc_id -> full text, for snippet generation
@@ -25,6 +26,11 @@ class Index:
         counts = Counter(tokens)
         for term, freq in counts.items():
             self.postings.setdefault(term, {})[doc_id] = freq
+        term_positions = defaultdict(list)
+        for i, term in enumerate(tokens):
+            term_positions[term].append(i)
+        for term, positions in term_positions.items():
+            self.positions.setdefault(term, {})[doc_id] = positions
         self.doc_lengths[doc_id] = len(tokens)
         preview = text.strip().replace("\n", " ")
         self.doc_titles[doc_id] = preview[:200]
@@ -39,10 +45,49 @@ class Index:
                 del postings[doc_id]
                 if not postings:
                     del self.postings[term]
+        for term in list(self.positions.keys()):
+            positions = self.positions[term]
+            if doc_id in positions:
+                del positions[doc_id]
+                if not positions:
+                    del self.positions[term]
         del self.doc_lengths[doc_id]
         del self.doc_titles[doc_id]
         self.doc_texts.pop(doc_id, None)
         return True
+
+    def search_phrase(self, phrase, top_k=10):
+        """Find documents containing the exact sequence of query terms
+        (after tokenization/stopword-filtering, same as ranked search), in
+        the order given. Ranked by number of phrase occurrences per
+        document. Requires a positional index built by add_document — an
+        index loaded from an older save file with no positions data will
+        find no matches even for terms that are otherwise indexed.
+        """
+        terms = tokenize(phrase)
+        if not terms:
+            return []
+        if len(terms) == 1:
+            postings = self.postings.get(terms[0], {})
+            ranked = sorted(postings.items(), key=lambda kv: (-kv[1], kv[0]))
+            return ranked[:top_k]
+        term_positions = [self.positions.get(term, {}) for term in terms]
+        if any(not tp for tp in term_positions):
+            return []
+        candidate_docs = set(term_positions[0].keys())
+        for tp in term_positions[1:]:
+            candidate_docs &= set(tp.keys())
+        matches = {}
+        for doc_id in candidate_docs:
+            offset_sets = [set(tp[doc_id]) for tp in term_positions[1:]]
+            count = 0
+            for start in term_positions[0][doc_id]:
+                if all((start + i + 1) in offsets for i, offsets in enumerate(offset_sets)):
+                    count += 1
+            if count:
+                matches[doc_id] = count
+        ranked = sorted(matches.items(), key=lambda kv: (-kv[1], kv[0]))
+        return ranked[:top_k]
 
     def search(self, query, top_k=10, rank="tfidf"):
         if rank == "bm25":
@@ -117,6 +162,7 @@ class Index:
     def to_dict(self):
         return {
             "postings": self.postings,
+            "positions": self.positions,
             "doc_lengths": self.doc_lengths,
             "doc_titles": self.doc_titles,
             "doc_texts": self.doc_texts,
@@ -127,6 +173,10 @@ class Index:
         index = cls()
         index.postings = {
             term: dict(docs) for term, docs in data.get("postings", {}).items()
+        }
+        index.positions = {
+            term: {doc_id: list(positions) for doc_id, positions in docs.items()}
+            for term, docs in data.get("positions", {}).items()
         }
         index.doc_lengths = dict(data.get("doc_lengths", {}))
         index.doc_titles = dict(data.get("doc_titles", {}))

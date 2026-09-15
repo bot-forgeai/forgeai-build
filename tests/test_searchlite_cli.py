@@ -51,6 +51,22 @@ def test_search_invalid_rank_exits_nonzero(tmp_path):
         assert exc.code == 2
 
 
+def test_search_with_phrase_flag(tmp_path, capsys):
+    index_path = str(tmp_path / "idx.json")
+    doc_a = tmp_path / "a.txt"
+    doc_a.write_text("the quick brown fox jumps over the lazy dog")
+    doc_b = tmp_path / "b.txt"
+    doc_b.write_text("a fox that is quick and brown but never jumps")
+
+    main(["--index", index_path, "add", str(doc_a), str(doc_b)])
+    capsys.readouterr()
+
+    main(["--index", index_path, "search", "quick brown fox", "--phrase"])
+    out = capsys.readouterr().out
+    assert "a.txt" in out
+    assert "b.txt" not in out
+
+
 def test_search_no_results(tmp_path, capsys):
     index_path = str(tmp_path / "idx.json")
     main(["--index", index_path, "search", "nothing"])
