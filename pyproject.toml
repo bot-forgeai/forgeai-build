@@ -22,9 +22,10 @@ kvlog = "kvlog.__main__:main"
 toylang = "toylang.__main__:main"
 searchlite = "searchlite.__main__:main"
 vcslite = "vcslite.__main__:main"
+chesslite = "chesslite.__main__:main"
 
 [tool.setuptools]
-packages = ["eulerlib", "vitalsdash", "recall", "ttt", "shortlink", "quest", "babble", "kvlog", "toylang", "searchlite", "vcslite"]
+packages = ["eulerlib", "vitalsdash", "recall", "ttt", "shortlink", "quest", "babble", "kvlog", "toylang", "searchlite", "vcslite", "chesslite"]
 
 [tool.setuptools.package-data]
 eulerlib = ["resources/*.txt"]

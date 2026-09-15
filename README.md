@@ -588,3 +588,38 @@ paths are still conflicted; after hand-editing a conflicted file,
 two parents (`log` marks these `(merge: ..., ...)`). `merge --abort`
 throws away an unresolved merge and restores the working tree to
 where it was before `merge` ran.
+
+## chesslite
+
+A small chess engine — full legal move generation (castling, en
+passant, promotion) with check/checkmate/stalemate detection, plus a
+minimax-with-alpha-beta AI opponent. The interesting part is the game
+logic itself: pseudo-legal moves per piece type are filtered down to
+legal ones by simulating each move and checking whether it leaves the
+mover's own king in check, which is also how castling's "can't
+castle through/into check" rule and checkmate/stalemate detection
+(no legal moves, with or without check) fall out for free.
+
+```
+python3 -m venv .venv && .venv/bin/pip install -e .
+.venv/bin/chesslite play                       # two human players
+.venv/bin/chesslite play --ai b --depth 3       # play White against the engine
+```
+
+Moves are entered in coordinate notation (`e2e4`, or `e7e8q` to
+promote to a queen — `q`/`r`/`b`/`n` are accepted, defaulting to a
+queen if omitted). The board is a dict of `(file, rank)` coordinates
+to single-character pieces (uppercase White, lowercase Black), with
+castling rights, the en-passant target square, and a halfmove clock
+(for the 50-move draw rule) tracked alongside it — enough state to
+apply and unapply the same rules a real game needs, short of
+threefold repetition. An illegal move (wrong syntax or an illegal
+destination) prints a clean `error: ...` message and reprompts rather
+than crashing.
+
+`chesslite.ai.choose_move(board, color, depth=N)` runs a fixed-depth
+negamax search with alpha-beta pruning over a material-plus-center-
+control evaluation — not a strong engine, but a real adversarial
+search rather than a random-legal-move bot, and deep enough (depth 2
+by default, `--depth` to go further) to reliably punish an undefended
+free capture.
