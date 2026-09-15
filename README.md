@@ -501,6 +501,20 @@ standard `k1=1.5, b=0.75` constants:
 .venv/bin/searchlite --index notes.json search "quick fox" --rank bm25
 ```
 
+`search --phrase` requires the query terms to appear as an exact
+consecutive sequence (after the same tokenization/stopword-filtering
+used elsewhere), not just anywhere in the document — results are
+ranked by phrase occurrence count instead of tfidf/bm25. Backed by a
+positional index (`Index.positions`, term -> doc_id -> token
+positions) built alongside the regular postings on every `add`; an
+index saved before this feature existed has no positions data, so
+`--phrase` searches against it find nothing until the documents are
+re-added:
+
+```
+.venv/bin/searchlite --index notes.json search "quick brown fox" --phrase
+```
+
 ## vcslite
 
 A tiny version-control system — a content-addressable object store
