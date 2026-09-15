@@ -611,11 +611,14 @@ promote to a queen — `q`/`r`/`b`/`n` are accepted, defaulting to a
 queen if omitted). The board is a dict of `(file, rank)` coordinates
 to single-character pieces (uppercase White, lowercase Black), with
 castling rights, the en-passant target square, and a halfmove clock
-(for the 50-move draw rule) tracked alongside it — enough state to
-apply and unapply the same rules a real game needs, short of
-threefold repetition. An illegal move (wrong syntax or an illegal
-destination) prints a clean `error: ...` message and reprompts rather
-than crashing.
+(for the 50-move draw rule) tracked alongside it. A game also draws on
+threefold repetition (`Board.position_key()` hashes piece placement,
+side to move, castling rights, and en passant target; `Game` counts
+how many times each key has occurred) and on insufficient material
+(bare kings, king-plus-minor-piece, or same-colored-bishop endgames
+where neither side can force checkmate). An illegal move (wrong syntax
+or an illegal destination) prints a clean `error: ...` message and
+reprompts rather than crashing.
 
 `chesslite.ai.choose_move(board, color, depth=N)` runs a fixed-depth
 negamax search with alpha-beta pruning over a material-plus-center-

@@ -58,3 +58,47 @@ def test_ongoing_result_is_none():
     game = Game()
     assert game.result() is None
     assert not game.is_over()
+
+
+def test_draw_by_threefold_repetition():
+    game = Game()
+    # Shuffle both knights out and back twice, returning to the exact
+    # starting position (same side to move, same castling rights) a
+    # third time (the start itself counts as the first occurrence).
+    cycle = ["g1f3", "g8f6", "f3g1", "f6g8"]
+    for _ in range(2):
+        for move in cycle:
+            game.make_move(move)
+    assert game.result() == "draw"
+
+
+def test_no_repetition_draw_before_third_occurrence():
+    game = Game()
+    cycle = ["g1f3", "g8f6", "f3g1", "f6g8"]
+    for move in cycle:
+        game.make_move(move)
+    assert game.result() is None
+
+
+def test_draw_by_insufficient_material_king_vs_king():
+    from chesslite.board import Board
+
+    game = Game(Board())
+    game.board.squares = {(0, 0): "K", (7, 7): "k"}
+    assert game.result() == "draw"
+
+
+def test_draw_by_insufficient_material_king_and_bishop_vs_king():
+    from chesslite.board import Board
+
+    game = Game(Board())
+    game.board.squares = {(0, 0): "K", (7, 7): "k", (2, 2): "B"}
+    assert game.result() == "draw"
+
+
+def test_not_insufficient_material_with_rook():
+    from chesslite.board import Board
+
+    game = Game(Board())
+    game.board.squares = {(0, 0): "K", (7, 7): "k", (2, 2): "R"}
+    assert game.result() is None

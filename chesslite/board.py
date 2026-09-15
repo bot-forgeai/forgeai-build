@@ -76,3 +76,33 @@ class Board:
             lines.append(f"{r + 1} " + " ".join(row))
         lines.append("  " + " ".join(FILES))
         return "\n".join(lines)
+
+    def position_key(self):
+        """Hashable snapshot of everything that makes two positions
+        the same for repetition purposes: piece placement, side to
+        move, castling rights, and en-passant target square."""
+        pieces = tuple(sorted(self.squares.items()))
+        castling = tuple(sorted(self.castling.items()))
+        return (pieces, self.to_move, castling, self.en_passant)
+
+    def has_insufficient_material(self) -> bool:
+        """True when neither side has enough material to deliver
+        checkmate: K vs K, K+minor vs K, or K+B vs K+B with
+        same-colored bishops."""
+        pieces = [p for p in self.squares.values() if p not in ("K", "k")]
+        if not pieces:
+            return True
+        if len(pieces) > 2:
+            return False
+        if any(p.upper() in ("P", "R", "Q") for p in pieces):
+            return False
+        if len(pieces) == 1:
+            return True  # K+minor vs K
+        # two minors left: only a same-colored bishop pair is a draw
+        if any(p.upper() == "N" for p in pieces):
+            return False
+        bishop_squares = [
+            coord for coord, p in self.squares.items() if p.upper() == "B"
+        ]
+        colors = {(f + r) % 2 for f, r in bishop_squares}
+        return len(colors) == 1
