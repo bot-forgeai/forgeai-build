@@ -1,0 +1,216 @@
+"""Recursive-descent parser for nanosql's SQL subset."""
+
+from .ast_nodes import BoolOp, CreateTable, Cmp, Delete, Insert, Select, Update
+from .lexer import tokenize
+
+COMPARISON_OPS = {"=", "!=", "<", "<=", ">", ">="}
+
+
+class ParseError(Exception):
+    pass
+
+
+class Parser:
+    def __init__(self, tokens):
+        self.tokens = tokens
+        self.pos = 0
+
+    def peek(self):
+        return self.tokens[self.pos]
+
+    def advance(self):
+        tok = self.tokens[self.pos]
+        self.pos += 1
+        return tok
+
+    def expect(self, kind, value=None):
+        tok = self.peek()
+        if tok.kind != kind or (value is not None and tok.value != value):
+            raise ParseError(f"expected {kind} {value!r}, got {tok.kind} {tok.value!r}")
+        return self.advance()
+
+    def at_keyword(self, *words):
+        tok = self.peek()
+        return tok.kind == "KEYWORD" and tok.value in words
+
+    def parse_statement(self):
+        if self.at_keyword("CREATE"):
+            stmt = self.parse_create_table()
+        elif self.at_keyword("INSERT"):
+            stmt = self.parse_insert()
+        elif self.at_keyword("SELECT"):
+            stmt = self.parse_select()
+        elif self.at_keyword("UPDATE"):
+            stmt = self.parse_update()
+        elif self.at_keyword("DELETE"):
+            stmt = self.parse_delete()
+        else:
+            tok = self.peek()
+            raise ParseError(f"unrecognized statement starting at {tok.kind} {tok.value!r}")
+        if self.peek().kind == "PUNCT" and self.peek().value == ";":
+            self.advance()
+        self.expect("EOF")
+        return stmt
+
+    def parse_ident(self):
+        tok = self.peek()
+        if tok.kind == "IDENT":
+            return self.advance().value
+        raise ParseError(f"expected identifier, got {tok.kind} {tok.value!r}")
+
+    def parse_create_table(self):
+        self.expect("KEYWORD", "CREATE")
+        self.expect("KEYWORD", "TABLE")
+        table = self.parse_ident()
+        self.expect("PUNCT", "(")
+        columns = []
+        while True:
+            name = self.parse_ident()
+            type_tok = self.expect("KEYWORD")
+            if type_tok.value not in ("INT", "REAL", "TEXT"):
+                raise ParseError(f"unknown column type {type_tok.value!r}")
+            columns.append((name, type_tok.value))
+            if self.peek().kind == "PUNCT" and self.peek().value == ",":
+                self.advance()
+                continue
+            break
+        self.expect("PUNCT", ")")
+        return CreateTable(table, columns)
+
+    def parse_literal(self):
+        tok = self.peek()
+        if tok.kind == "NUMBER":
+            return self.advance().value
+        if tok.kind == "STRING":
+            return self.advance().value
+        if tok.kind == "KEYWORD" and tok.value == "NULL":
+            self.advance()
+            return None
+        if tok.kind == "KEYWORD" and tok.value == "TRUE":
+            self.advance()
+            return True
+        if tok.kind == "KEYWORD" and tok.value == "FALSE":
+            self.advance()
+            return False
+        raise ParseError(f"expected a literal value, got {tok.kind} {tok.value!r}")
+
+    def parse_insert(self):
+        self.expect("KEYWORD", "INSERT")
+        self.expect("KEYWORD", "INTO")
+        table = self.parse_ident()
+        columns = None
+        if self.peek().kind == "PUNCT" and self.peek().value == "(":
+            self.advance()
+            columns = []
+            while True:
+                columns.append(self.parse_ident())
+                if self.peek().kind == "PUNCT" and self.peek().value == ",":
+                    self.advance()
+                    continue
+                break
+            self.expect("PUNCT", ")")
+        self.expect("KEYWORD", "VALUES")
+        self.expect("PUNCT", "(")
+        values = []
+        while True:
+            values.append(self.parse_literal())
+            if self.peek().kind == "PUNCT" and self.peek().value == ",":
+                self.advance()
+                continue
+            break
+        self.expect("PUNCT", ")")
+        return Insert(table, columns, values)
+
+    def parse_where(self):
+        return self.parse_or_expr()
+
+    def parse_or_expr(self):
+        left = self.parse_and_expr()
+        while self.at_keyword("OR"):
+            self.advance()
+            right = self.parse_and_expr()
+            left = BoolOp("OR", left, right)
+        return left
+
+    def parse_and_expr(self):
+        left = self.parse_comparison()
+        while self.at_keyword("AND"):
+            self.advance()
+            right = self.parse_comparison()
+            left = BoolOp("AND", left, right)
+        return left
+
+    def parse_comparison(self):
+        column = self.parse_ident()
+        op_tok = self.peek()
+        if op_tok.kind != "OP" or op_tok.value not in COMPARISON_OPS:
+            raise ParseError(f"expected a comparison operator, got {op_tok.kind} {op_tok.value!r}")
+        self.advance()
+        value = self.parse_literal()
+        return Cmp(column, op_tok.value, value)
+
+    def parse_select(self):
+        self.expect("KEYWORD", "SELECT")
+        columns = ["*"]
+        if self.peek().kind == "PUNCT" and self.peek().value == "*":
+            self.advance()
+        else:
+            columns = [self.parse_ident()]
+            while self.peek().kind == "PUNCT" and self.peek().value == ",":
+                self.advance()
+                columns.append(self.parse_ident())
+        self.expect("KEYWORD", "FROM")
+        table = self.parse_ident()
+        where = None
+        if self.at_keyword("WHERE"):
+            self.advance()
+            where = self.parse_where()
+        order_by = None
+        if self.at_keyword("ORDER"):
+            self.advance()
+            self.expect("KEYWORD", "BY")
+            col = self.parse_ident()
+            direction = "ASC"
+            if self.at_keyword("ASC", "DESC"):
+                direction = self.advance().value
+            order_by = (col, direction)
+        limit = None
+        if self.at_keyword("LIMIT"):
+            self.advance()
+            tok = self.expect("NUMBER")
+            limit = int(tok.value)
+        return Select(table, columns, where, order_by, limit)
+
+    def parse_update(self):
+        self.expect("KEYWORD", "UPDATE")
+        table = self.parse_ident()
+        self.expect("KEYWORD", "SET")
+        assignments = []
+        while True:
+            col = self.parse_ident()
+            self.expect("OP", "=")
+            value = self.parse_literal()
+            assignments.append((col, value))
+            if self.peek().kind == "PUNCT" and self.peek().value == ",":
+                self.advance()
+                continue
+            break
+        where = None
+        if self.at_keyword("WHERE"):
+            self.advance()
+            where = self.parse_where()
+        return Update(table, assignments, where)
+
+    def parse_delete(self):
+        self.expect("KEYWORD", "DELETE")
+        self.expect("KEYWORD", "FROM")
+        table = self.parse_ident()
+        where = None
+        if self.at_keyword("WHERE"):
+            self.advance()
+            where = self.parse_where()
+        return Delete(table, where)
+
+
+def parse(sql):
+    return Parser(tokenize(sql)).parse_statement()
