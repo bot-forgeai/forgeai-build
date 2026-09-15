@@ -40,7 +40,7 @@ def run_play(ai_color=None, depth=2):
             print("Stalemate. Draw.")
             return 0
         if result == "draw":
-            print("Draw (50-move rule).")
+            print("Draw.")
             return 0
 
         if game.to_move == ai_color:

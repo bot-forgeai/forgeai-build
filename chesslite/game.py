@@ -14,6 +14,7 @@ class Game:
     def __init__(self, board=None):
         self.board = board or Board()
         self.history = []  # list of Move applied so far
+        self.position_counts = {self.board.position_key(): 1}
 
     @property
     def to_move(self):
@@ -27,10 +28,15 @@ class Game:
 
     def result(self):
         """Returns one of: None (ongoing), 'checkmate', 'stalemate',
-        'draw' (50-move rule)."""
+        'draw' (50-move rule, threefold repetition, or insufficient
+        material)."""
         if not self.legal_moves():
             return "checkmate" if self.in_check() else "stalemate"
         if self.board.halfmove_clock >= 100:
+            return "draw"
+        if self.position_counts.get(self.board.position_key(), 0) >= 3:
+            return "draw"
+        if self.board.has_insufficient_material():
             return "draw"
         return None
 
@@ -71,6 +77,8 @@ class Game:
             raise IllegalMoveError(f"illegal move: {move}")
         self.board = apply_move(self.board, move)
         self.history.append(move)
+        key = self.board.position_key()
+        self.position_counts[key] = self.position_counts.get(key, 0) + 1
         return move
 
     def move_str(self, move: Move) -> str:
