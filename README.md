@@ -651,3 +651,27 @@ For solo play, `chesslite ai <host> --port 5060 [--depth N]` connects
 as an automated opponent instead of a second human — it speaks the
 same protocol as `join`, reconstructing the board from each broadcast
 FEN and running the same `choose_move` search `play --ai` uses.
+
+## nanosql
+
+A tiny SQL database engine: a hand-written lexer and recursive-descent
+parser for a small SQL subset, a tuple-based table engine, and
+single-JSON-file persistence — no external database dependency.
+
+```
+python3 -m venv .venv && .venv/bin/pip install -e .
+.venv/bin/nanosql exec mydb.json "CREATE TABLE users (id INT, name TEXT, age INT)"
+.venv/bin/nanosql exec mydb.json "INSERT INTO users VALUES (1, 'Ada', 36)"
+.venv/bin/nanosql exec mydb.json "SELECT name FROM users WHERE age > 18 ORDER BY age DESC LIMIT 5"
+.venv/bin/nanosql shell mydb.json   # interactive prompt, statements end with ';'
+```
+
+Supports `CREATE TABLE` (with `INT`/`REAL`/`TEXT` column types),
+`INSERT` (with or without an explicit column list), `SELECT` (column
+list or `*`, `WHERE` with `=`/`!=`/`<`/`<=`/`>`/`>=` combined via
+`AND`/`OR`, `ORDER BY ASC|DESC`, `LIMIT`), `UPDATE ... SET ... WHERE`,
+and `DELETE FROM ... WHERE`. Each `exec` call loads the whole database
+file, applies one statement, and saves it back — good enough for a
+single-user local database, not concurrent access. A syntax error or
+an unknown table/column raises a clean `error: ...` message and a
+non-zero exit rather than a traceback.
