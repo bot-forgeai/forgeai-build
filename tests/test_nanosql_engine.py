@@ -149,6 +149,92 @@ def test_syntax_error_wrapped_in_nanosql_error():
         db.execute("NOT VALID SQL")
 
 
+def make_orders_db():
+    db = Database()
+    db.execute("CREATE TABLE orders (id INT, category TEXT, price REAL)")
+    db.execute("INSERT INTO orders VALUES (1, 'fruit', 3.0)")
+    db.execute("INSERT INTO orders VALUES (2, 'fruit', 5.0)")
+    db.execute("INSERT INTO orders VALUES (3, 'veg', 2.0)")
+    db.execute("INSERT INTO orders VALUES (4, 'veg', 4.0)")
+    db.execute("INSERT INTO orders VALUES (5, 'veg', 6.0)")
+    return db
+
+
+def test_count_star_whole_table():
+    db = make_orders_db()
+    rows = db.execute("SELECT COUNT(*) FROM orders")["rows"]
+    assert rows == [{"COUNT(*)": 5}]
+
+
+def test_count_star_with_where():
+    db = make_orders_db()
+    rows = db.execute("SELECT COUNT(*) FROM orders WHERE category = 'veg'")["rows"]
+    assert rows == [{"COUNT(*)": 3}]
+
+
+def test_count_star_no_matches_returns_zero_not_empty():
+    db = make_orders_db()
+    rows = db.execute("SELECT COUNT(*) FROM orders WHERE id = 99")["rows"]
+    assert rows == [{"COUNT(*)": 0}]
+
+
+def test_sum_avg_min_max_whole_table():
+    db = make_orders_db()
+    rows = db.execute("SELECT SUM(price), AVG(price), MIN(price), MAX(price) FROM orders")["rows"]
+    assert rows == [{"SUM(price)": 20.0, "AVG(price)": 4.0, "MIN(price)": 2.0, "MAX(price)": 6.0}]
+
+
+def test_sum_with_no_matching_rows_is_zero():
+    db = make_orders_db()
+    rows = db.execute("SELECT SUM(price) FROM orders WHERE id = 99")["rows"]
+    assert rows == [{"SUM(price)": 0}]
+
+
+def test_min_max_with_no_matching_rows_is_none():
+    db = make_orders_db()
+    rows = db.execute("SELECT MIN(price), MAX(price) FROM orders WHERE id = 99")["rows"]
+    assert rows == [{"MIN(price)": None, "MAX(price)": None}]
+
+
+def test_group_by_with_count_and_sum():
+    db = make_orders_db()
+    result = db.execute("SELECT category, COUNT(*), SUM(price) FROM orders GROUP BY category ORDER BY category")
+    assert result["columns"] == ["category", "COUNT(*)", "SUM(price)"]
+    assert result["rows"] == [
+        {"category": "fruit", "COUNT(*)": 2, "SUM(price)": 8.0},
+        {"category": "veg", "COUNT(*)": 3, "SUM(price)": 12.0},
+    ]
+
+
+def test_group_by_with_where():
+    db = make_orders_db()
+    rows = db.execute(
+        "SELECT category, COUNT(*) FROM orders WHERE price > 3 GROUP BY category ORDER BY category"
+    )["rows"]
+    assert rows == [
+        {"category": "fruit", "COUNT(*)": 1},
+        {"category": "veg", "COUNT(*)": 2},
+    ]
+
+
+def test_group_by_with_limit():
+    db = make_orders_db()
+    rows = db.execute("SELECT category, COUNT(*) FROM orders GROUP BY category ORDER BY category LIMIT 1")["rows"]
+    assert rows == [{"category": "fruit", "COUNT(*)": 2}]
+
+
+def test_plain_column_not_in_group_by_raises():
+    db = make_orders_db()
+    with pytest.raises(NanosqlError):
+        db.execute("SELECT id, COUNT(*) FROM orders GROUP BY category")
+
+
+def test_aggregate_unknown_column_raises():
+    db = make_orders_db()
+    with pytest.raises(NanosqlError):
+        db.execute("SELECT SUM(nope) FROM orders")
+
+
 def test_to_dict_and_from_dict_round_trip():
     db = make_users_db()
     restored = Database.from_dict(db.to_dict())

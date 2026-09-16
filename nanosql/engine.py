@@ -1,6 +1,6 @@
 """Table storage and statement execution for nanosql."""
 
-from .ast_nodes import BoolOp, Cmp
+from .ast_nodes import AggCall, BoolOp, Cmp
 from .lexer import LexError
 from .parser import ParseError, parse
 
@@ -81,6 +81,23 @@ def _eval_where(expr, row):
     raise NanosqlError(f"unknown WHERE expression {expr!r}")
 
 
+def _compute_aggregate(agg, rows):
+    if agg.func == "COUNT":
+        if agg.column == "*":
+            return len(rows)
+        return sum(1 for row in rows if row[agg.column] is not None)
+    values = [row[agg.column] for row in rows if row[agg.column] is not None]
+    if agg.func == "SUM":
+        return sum(values) if values else 0
+    if agg.func == "AVG":
+        return sum(values) / len(values) if values else None
+    if agg.func == "MIN":
+        return min(values) if values else None
+    if agg.func == "MAX":
+        return max(values) if values else None
+    raise NanosqlError(f"unknown aggregate function {agg.func!r}")
+
+
 class Database:
     def __init__(self):
         self.tables = {}
@@ -121,6 +138,8 @@ class Database:
 
     def _exec_Select(self, stmt):
         table = self._table(stmt.table)
+        if stmt.group_by is not None or any(isinstance(c, AggCall) for c in stmt.columns):
+            return self._exec_select_aggregate(stmt, table)
         columns = table.column_names() if stmt.columns == ["*"] else stmt.columns
         for name in columns:
             table.column_type(name)
@@ -133,6 +152,52 @@ class Database:
             matches = matches[: stmt.limit]
         rows = [{name: row[name] for name in columns} for row in matches]
         return {"kind": "rows", "columns": columns, "rows": rows}
+
+    def _exec_select_aggregate(self, stmt, table):
+        for col in stmt.columns:
+            if isinstance(col, AggCall):
+                if col.column != "*":
+                    table.column_type(col.column)
+            elif col != stmt.group_by:
+                raise NanosqlError(
+                    f"column {col!r} must appear in GROUP BY or be used in an aggregate function"
+                )
+        if stmt.group_by is not None:
+            table.column_type(stmt.group_by)
+        matches = [row for row in table.rows if _eval_where(stmt.where, row)]
+        groups = {}
+        order = []
+        if stmt.group_by is not None:
+            for row in matches:
+                key = row[stmt.group_by]
+                if key not in groups:
+                    groups[key] = []
+                    order.append(key)
+                groups[key].append(row)
+        else:
+            order = [None]
+            groups = {None: matches}
+        columns = [col.label() if isinstance(col, AggCall) else col for col in stmt.columns]
+        result_rows = []
+        for key in order:
+            grouped_rows = groups[key]
+            out = {}
+            for col in stmt.columns:
+                if isinstance(col, AggCall):
+                    out[col.label()] = _compute_aggregate(col, grouped_rows)
+                else:
+                    out[col] = key
+            result_rows.append(out)
+        if stmt.order_by is not None:
+            col, direction = stmt.order_by
+            if col not in columns:
+                raise NanosqlError(f"cannot ORDER BY {col!r}: not in the selected columns")
+            result_rows = sorted(
+                result_rows, key=lambda r: (r[col] is None, r[col]), reverse=(direction == "DESC")
+            )
+        if stmt.limit is not None:
+            result_rows = result_rows[: stmt.limit]
+        return {"kind": "rows", "columns": columns, "rows": result_rows}
 
     def _exec_Update(self, stmt):
         table = self._table(stmt.table)

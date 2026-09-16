@@ -1,6 +1,8 @@
 """Recursive-descent parser for nanosql's SQL subset."""
 
-from .ast_nodes import BoolOp, CreateTable, Cmp, Delete, Insert, Select, Update
+from .ast_nodes import AggCall, BoolOp, CreateTable, Cmp, Delete, Insert, Select, Update
+
+AGGREGATE_FUNCS = {"COUNT", "SUM", "AVG", "MIN", "MAX"}
 from .lexer import tokenize
 
 COMPARISON_OPS = {"=", "!=", "<", "<=", ">", ">="}
@@ -149,22 +151,41 @@ class Parser:
         value = self.parse_literal()
         return Cmp(column, op_tok.value, value)
 
+    def parse_select_column(self):
+        tok = self.peek()
+        if tok.kind == "KEYWORD" and tok.value in AGGREGATE_FUNCS:
+            func = self.advance().value
+            self.expect("PUNCT", "(")
+            if func == "COUNT" and self.peek().kind == "PUNCT" and self.peek().value == "*":
+                self.advance()
+                column = "*"
+            else:
+                column = self.parse_ident()
+            self.expect("PUNCT", ")")
+            return AggCall(func, column)
+        return self.parse_ident()
+
     def parse_select(self):
         self.expect("KEYWORD", "SELECT")
         columns = ["*"]
         if self.peek().kind == "PUNCT" and self.peek().value == "*":
             self.advance()
         else:
-            columns = [self.parse_ident()]
+            columns = [self.parse_select_column()]
             while self.peek().kind == "PUNCT" and self.peek().value == ",":
                 self.advance()
-                columns.append(self.parse_ident())
+                columns.append(self.parse_select_column())
         self.expect("KEYWORD", "FROM")
         table = self.parse_ident()
         where = None
         if self.at_keyword("WHERE"):
             self.advance()
             where = self.parse_where()
+        group_by = None
+        if self.at_keyword("GROUP"):
+            self.advance()
+            self.expect("KEYWORD", "BY")
+            group_by = self.parse_ident()
         order_by = None
         if self.at_keyword("ORDER"):
             self.advance()
@@ -179,7 +200,7 @@ class Parser:
             self.advance()
             tok = self.expect("NUMBER")
             limit = int(tok.value)
-        return Select(table, columns, where, order_by, limit)
+        return Select(table, columns, where, group_by, order_by, limit)
 
     def parse_update(self):
         self.expect("KEYWORD", "UPDATE")

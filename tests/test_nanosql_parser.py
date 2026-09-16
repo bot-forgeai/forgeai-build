@@ -1,6 +1,6 @@
 import pytest
 
-from nanosql.ast_nodes import BoolOp, Cmp, CreateTable, Delete, Insert, Select, Update
+from nanosql.ast_nodes import AggCall, BoolOp, Cmp, CreateTable, Delete, Insert, Select, Update
 from nanosql.parser import ParseError, parse
 
 
@@ -107,3 +107,39 @@ def test_parse_missing_paren_raises():
 def test_parse_trailing_garbage_raises():
     with pytest.raises(ParseError):
         parse("SELECT * FROM t garbage")
+
+
+def test_parse_select_count_star():
+    stmt = parse("SELECT COUNT(*) FROM t")
+    assert len(stmt.columns) == 1
+    agg = stmt.columns[0]
+    assert isinstance(agg, AggCall)
+    assert agg.func == "COUNT"
+    assert agg.column == "*"
+    assert agg.label() == "COUNT(*)"
+
+
+def test_parse_select_aggregate_functions():
+    stmt = parse("SELECT SUM(price), AVG(price), MIN(price), MAX(price) FROM t")
+    funcs = [c.func for c in stmt.columns]
+    assert funcs == ["SUM", "AVG", "MIN", "MAX"]
+    assert all(c.column == "price" for c in stmt.columns)
+
+
+def test_parse_select_group_by():
+    stmt = parse("SELECT category, COUNT(*) FROM items GROUP BY category")
+    assert stmt.group_by == "category"
+    assert stmt.columns[0] == "category"
+    assert isinstance(stmt.columns[1], AggCall)
+
+
+def test_parse_select_group_by_with_order_and_limit():
+    stmt = parse("SELECT category, SUM(price) FROM items GROUP BY category ORDER BY category DESC LIMIT 3")
+    assert stmt.group_by == "category"
+    assert stmt.order_by == ("category", "DESC")
+    assert stmt.limit == 3
+
+
+def test_parse_select_no_group_by_defaults_none():
+    stmt = parse("SELECT * FROM t")
+    assert stmt.group_by is None
