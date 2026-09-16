@@ -669,9 +669,25 @@ python3 -m venv .venv && .venv/bin/pip install -e .
 Supports `CREATE TABLE` (with `INT`/`REAL`/`TEXT` column types),
 `INSERT` (with or without an explicit column list), `SELECT` (column
 list or `*`, `WHERE` with `=`/`!=`/`<`/`<=`/`>`/`>=` combined via
-`AND`/`OR`, `ORDER BY ASC|DESC`, `LIMIT`), `UPDATE ... SET ... WHERE`,
-and `DELETE FROM ... WHERE`. Each `exec` call loads the whole database
-file, applies one statement, and saves it back — good enough for a
-single-user local database, not concurrent access. A syntax error or
-an unknown table/column raises a clean `error: ...` message and a
-non-zero exit rather than a traceback.
+`AND`/`OR`, `GROUP BY`, `ORDER BY ASC|DESC`, `LIMIT`),
+`UPDATE ... SET ... WHERE`, and `DELETE FROM ... WHERE`. Each `exec`
+call loads the whole database file, applies one statement, and saves
+it back — good enough for a single-user local database, not concurrent
+access. A syntax error or an unknown table/column raises a clean
+`error: ...` message and a non-zero exit rather than a traceback.
+
+`SELECT` also supports aggregate functions — `COUNT(*)`, `COUNT(col)`,
+`SUM`, `AVG`, `MIN`, `MAX` — optionally grouped with `GROUP BY`:
+
+```
+.venv/bin/nanosql exec mydb.json "SELECT COUNT(*) FROM users"
+.venv/bin/nanosql exec mydb.json "SELECT department, COUNT(*), AVG(age) FROM users GROUP BY department"
+```
+
+A plain column in the `SELECT` list must either be the `GROUP BY`
+column or be wrapped in an aggregate function — anything else raises a
+clean error, the same way a real SQL engine would reject it. With no
+`GROUP BY`, aggregates run over the whole (optionally `WHERE`-filtered)
+table as a single group, and `COUNT`/`SUM` over zero matching rows
+still return one row (`0`), matching standard SQL rather than
+returning no rows at all.

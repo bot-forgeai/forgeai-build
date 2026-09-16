@@ -15,12 +15,24 @@ class Insert:
 
 
 class Select:
-    def __init__(self, table, columns, where, order_by, limit):
+    def __init__(self, table, columns, where, group_by, order_by, limit):
         self.table = table
-        self.columns = columns  # list of names, or ["*"]
+        self.columns = columns  # list of names/AggCall, or ["*"]
         self.where = where  # Expr or None
+        self.group_by = group_by  # column name or None
         self.order_by = order_by  # (col, "ASC"|"DESC") or None
         self.limit = limit  # int or None
+
+
+class AggCall:
+    """An aggregate function call in a SELECT column list, e.g. COUNT(*), SUM(price)."""
+
+    def __init__(self, func, column):
+        self.func = func  # "COUNT" | "SUM" | "AVG" | "MIN" | "MAX"
+        self.column = column  # column name, or "*" (COUNT only)
+
+    def label(self):
+        return f"{self.func}({self.column})"
 
 
 class Update:
