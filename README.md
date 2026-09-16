@@ -691,3 +691,23 @@ clean error, the same way a real SQL engine would reject it. With no
 table as a single group, and `COUNT`/`SUM` over zero matching rows
 still return one row (`0`), matching standard SQL rather than
 returning no rows at all.
+
+`SELECT` also supports a single inner `JOIN` against another table,
+matched on an equality or comparison condition:
+
+```
+.venv/bin/nanosql exec mydb.json "CREATE TABLE orders (id INT, user_id INT, item TEXT)"
+.venv/bin/nanosql exec mydb.json "INSERT INTO orders VALUES (1, 1, 'Widget')"
+.venv/bin/nanosql exec mydb.json "SELECT orders.item, users.name FROM orders JOIN users ON orders.user_id = users.id"
+```
+
+Columns can be table-qualified (`orders.item`) anywhere a column is
+expected — `SELECT` list, `WHERE`, `GROUP BY`, `ORDER BY` — or left
+unqualified when the name only exists in one of the two tables; an
+unqualified name that exists in both raises a clean "ambiguous"
+error rather than silently picking one. `SELECT *` on a joined query
+returns every column from both tables under qualified names
+(`orders.id`, `users.id`, ...) since two tables can otherwise share a
+column name. Only one `JOIN` per query is supported (no chained
+multi-table joins), and it's always an inner join — a row from either
+side with no match on the other is simply excluded from the result.

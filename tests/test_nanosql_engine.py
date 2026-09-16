@@ -244,3 +244,82 @@ def test_to_dict_and_from_dict_round_trip():
         {"id": 2, "name": "Bea", "age": 24},
         {"id": 3, "name": "Cid", "age": 42},
     ]
+
+
+def make_users_orders_db():
+    db = make_users_db()
+    db.execute("CREATE TABLE orders (id INT, user_id INT, item TEXT)")
+    db.execute("INSERT INTO orders VALUES (1, 1, 'Widget')")
+    db.execute("INSERT INTO orders VALUES (2, 1, 'Gadget')")
+    db.execute("INSERT INTO orders VALUES (3, 2, 'Widget')")
+    db.execute("INSERT INTO orders VALUES (4, 99, 'Orphan')")  # no matching user
+    return db
+
+
+def test_join_basic_inner_join():
+    db = make_users_orders_db()
+    result = db.execute(
+        "SELECT orders.item, users.name FROM orders JOIN users ON orders.user_id = users.id "
+        "ORDER BY orders.id"
+    )
+    assert result["rows"] == [
+        {"orders.item": "Widget", "users.name": "Ada"},
+        {"orders.item": "Gadget", "users.name": "Ada"},
+        {"orders.item": "Widget", "users.name": "Bea"},
+    ]
+
+
+def test_join_excludes_unmatched_rows():
+    db = make_users_orders_db()
+    result = db.execute("SELECT * FROM orders JOIN users ON orders.user_id = users.id")
+    # 4 orders total, but the orphan order (user_id 99) has no matching user
+    assert len(result["rows"]) == 3
+
+
+def test_join_unqualified_column_resolves_when_unambiguous():
+    db = make_users_orders_db()
+    result = db.execute(
+        "SELECT item, name FROM orders JOIN users ON orders.user_id = users.id WHERE name = 'Ada'"
+    )
+    assert result["rows"] == [
+        {"item": "Widget", "name": "Ada"},
+        {"item": "Gadget", "name": "Ada"},
+    ]
+
+
+def test_join_ambiguous_unqualified_column_raises():
+    db = make_users_orders_db()
+    with pytest.raises(NanosqlError):
+        db.execute("SELECT id FROM orders JOIN users ON orders.user_id = users.id")
+
+
+def test_join_star_uses_qualified_column_names():
+    db = make_users_orders_db()
+    result = db.execute("SELECT * FROM orders JOIN users ON orders.user_id = users.id LIMIT 1")
+    assert result["columns"] == ["orders.id", "orders.user_id", "orders.item", "users.id", "users.name", "users.age"]
+
+
+def test_join_with_where_on_joined_table():
+    db = make_users_orders_db()
+    result = db.execute(
+        "SELECT orders.item FROM orders JOIN users ON orders.user_id = users.id WHERE users.age > 30"
+    )
+    assert result["rows"] == [{"orders.item": "Widget"}, {"orders.item": "Gadget"}]
+
+
+def test_join_unknown_qualifier_raises():
+    db = make_users_orders_db()
+    with pytest.raises(NanosqlError):
+        db.execute("SELECT nope.id FROM orders JOIN users ON orders.user_id = users.id")
+
+
+def test_join_with_group_by_aggregate():
+    db = make_users_orders_db()
+    result = db.execute(
+        "SELECT users.name, COUNT(*) FROM orders JOIN users ON orders.user_id = users.id "
+        "GROUP BY users.name ORDER BY users.name"
+    )
+    assert result["rows"] == [
+        {"users.name": "Ada", "COUNT(*)": 2},
+        {"users.name": "Bea", "COUNT(*)": 1},
+    ]

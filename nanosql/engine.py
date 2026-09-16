@@ -49,30 +49,33 @@ class Table:
         return table
 
 
+def _compare(op, actual, value):
+    if actual is None or value is None:
+        if op == "=":
+            return actual == value
+        if op == "!=":
+            return actual != value
+        return False
+    if op == "=":
+        return actual == value
+    if op == "!=":
+        return actual != value
+    if op == "<":
+        return actual < value
+    if op == "<=":
+        return actual <= value
+    if op == ">":
+        return actual > value
+    if op == ">=":
+        return actual >= value
+    raise NanosqlError(f"unknown operator {op!r}")
+
+
 def _eval_where(expr, row):
     if expr is None:
         return True
     if isinstance(expr, Cmp):
-        actual = row.get(expr.column)
-        if actual is None or expr.value is None:
-            if expr.op == "=":
-                return actual == expr.value
-            if expr.op == "!=":
-                return actual != expr.value
-            return False
-        if expr.op == "=":
-            return actual == expr.value
-        if expr.op == "!=":
-            return actual != expr.value
-        if expr.op == "<":
-            return actual < expr.value
-        if expr.op == "<=":
-            return actual <= expr.value
-        if expr.op == ">":
-            return actual > expr.value
-        if expr.op == ">=":
-            return actual >= expr.value
-        raise NanosqlError(f"unknown operator {expr.op!r}")
+        return _compare(expr.op, row.get(expr.column), expr.value)
     if isinstance(expr, BoolOp):
         if expr.op == "AND":
             return _eval_where(expr.left, row) and _eval_where(expr.right, row)
@@ -136,35 +139,85 @@ class Database:
         table.rows.append(row)
         return {"kind": "ok", "message": "1 row inserted"}
 
+    def _join_rows(self, left, right, on):
+        left_cols = left.column_names()
+        right_cols = right.column_names()
+        shared = set(left_cols) & set(right_cols)
+        result = []
+        for lrow in left.rows:
+            for rrow in right.rows:
+                merged = {}
+                for col in left_cols:
+                    merged[f"{left.name}.{col}"] = lrow[col]
+                    if col not in shared:
+                        merged[col] = lrow[col]
+                for col in right_cols:
+                    merged[f"{right.name}.{col}"] = rrow[col]
+                    if col not in shared:
+                        merged[col] = rrow[col]
+                if _compare(on.op, merged.get(on.left), merged.get(on.right)):
+                    result.append(merged)
+        return result
+
+    def _resolve_join_column(self, left, right, name):
+        if "." in name:
+            qualifier, col = name.split(".", 1)
+            if qualifier == left.name:
+                return left.column_type(col)
+            if qualifier == right.name:
+                return right.column_type(col)
+            raise NanosqlError(f"unknown table qualifier {qualifier!r}")
+        left_has = name in left.column_names()
+        right_has = name in right.column_names()
+        if left_has and right_has:
+            raise NanosqlError(f"column {name!r} is ambiguous between {left.name!r} and {right.name!r}")
+        if left_has:
+            return left.column_type(name)
+        if right_has:
+            return right.column_type(name)
+        raise NanosqlError(f"no such column {name!r}")
+
     def _exec_Select(self, stmt):
         table = self._table(stmt.table)
+        if stmt.join is not None:
+            right = self._table(stmt.join.table)
+            rows_universe = self._join_rows(table, right, stmt.join.on)
+            column_universe = [f"{table.name}.{c}" for c in table.column_names()] + [
+                f"{right.name}.{c}" for c in right.column_names()
+            ]
+            validate_col = lambda name: self._resolve_join_column(table, right, name)
+        else:
+            rows_universe = table.rows
+            column_universe = table.column_names()
+            validate_col = table.column_type
+
         if stmt.group_by is not None or any(isinstance(c, AggCall) for c in stmt.columns):
-            return self._exec_select_aggregate(stmt, table)
-        columns = table.column_names() if stmt.columns == ["*"] else stmt.columns
+            return self._exec_select_aggregate(stmt, rows_universe, column_universe, validate_col)
+        columns = column_universe if stmt.columns == ["*"] else stmt.columns
         for name in columns:
-            table.column_type(name)
-        matches = [row for row in table.rows if _eval_where(stmt.where, row)]
+            validate_col(name)
+        matches = [row for row in rows_universe if _eval_where(stmt.where, row)]
         if stmt.order_by is not None:
             col, direction = stmt.order_by
-            table.column_type(col)
+            validate_col(col)
             matches = sorted(matches, key=lambda r: (r[col] is None, r[col]), reverse=(direction == "DESC"))
         if stmt.limit is not None:
             matches = matches[: stmt.limit]
         rows = [{name: row[name] for name in columns} for row in matches]
         return {"kind": "rows", "columns": columns, "rows": rows}
 
-    def _exec_select_aggregate(self, stmt, table):
+    def _exec_select_aggregate(self, stmt, rows_universe, column_universe, validate_col):
         for col in stmt.columns:
             if isinstance(col, AggCall):
                 if col.column != "*":
-                    table.column_type(col.column)
+                    validate_col(col.column)
             elif col != stmt.group_by:
                 raise NanosqlError(
                     f"column {col!r} must appear in GROUP BY or be used in an aggregate function"
                 )
         if stmt.group_by is not None:
-            table.column_type(stmt.group_by)
-        matches = [row for row in table.rows if _eval_where(stmt.where, row)]
+            validate_col(stmt.group_by)
+        matches = [row for row in rows_universe if _eval_where(stmt.where, row)]
         groups = {}
         order = []
         if stmt.group_by is not None:

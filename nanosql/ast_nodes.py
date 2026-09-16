@@ -15,13 +15,31 @@ class Insert:
 
 
 class Select:
-    def __init__(self, table, columns, where, group_by, order_by, limit):
+    def __init__(self, table, columns, where, group_by, order_by, limit, join=None):
         self.table = table
         self.columns = columns  # list of names/AggCall, or ["*"]
         self.where = where  # Expr or None
         self.group_by = group_by  # column name or None
         self.order_by = order_by  # (col, "ASC"|"DESC") or None
         self.limit = limit  # int or None
+        self.join = join  # Join or None
+
+
+class Join:
+    """A single INNER JOIN clause: JOIN <table> ON <left> <op> <right>."""
+
+    def __init__(self, table, on):
+        self.table = table
+        self.on = on  # JoinCond
+
+
+class JoinCond:
+    """A JOIN ON condition comparing two (possibly table-qualified) columns."""
+
+    def __init__(self, left, op, right):
+        self.left = left
+        self.op = op
+        self.right = right
 
 
 class AggCall:
