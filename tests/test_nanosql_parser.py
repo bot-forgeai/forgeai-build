@@ -143,3 +143,33 @@ def test_parse_select_group_by_with_order_and_limit():
 def test_parse_select_no_group_by_defaults_none():
     stmt = parse("SELECT * FROM t")
     assert stmt.group_by is None
+
+
+def test_parse_select_no_join_defaults_none():
+    stmt = parse("SELECT * FROM t")
+    assert stmt.join is None
+
+
+def test_parse_select_join_on():
+    stmt = parse("SELECT * FROM orders JOIN users ON orders.user_id = users.id")
+    assert stmt.join is not None
+    assert stmt.join.table == "users"
+    assert stmt.join.on.left == "orders.user_id"
+    assert stmt.join.on.op == "="
+    assert stmt.join.on.right == "users.id"
+
+
+def test_parse_qualified_column_in_select_list():
+    stmt = parse("SELECT orders.id, users.name FROM orders JOIN users ON orders.user_id = users.id")
+    assert stmt.columns == ["orders.id", "users.name"]
+
+
+def test_parse_qualified_column_in_where():
+    stmt = parse("SELECT * FROM orders JOIN users ON orders.user_id = users.id WHERE users.name = 'Ada'")
+    assert stmt.where.column == "users.name"
+    assert stmt.where.value == "Ada"
+
+
+def test_parse_join_missing_on_raises():
+    with pytest.raises(ParseError):
+        parse("SELECT * FROM orders JOIN users")

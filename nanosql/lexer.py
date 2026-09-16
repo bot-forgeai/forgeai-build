@@ -4,10 +4,10 @@ KEYWORDS = {
     "CREATE", "TABLE", "INSERT", "INTO", "VALUES", "SELECT", "FROM", "WHERE",
     "AND", "OR", "NOT", "ORDER", "BY", "ASC", "DESC", "LIMIT", "UPDATE",
     "SET", "DELETE", "NULL", "TRUE", "FALSE", "INT", "REAL", "TEXT",
-    "COUNT", "SUM", "AVG", "MIN", "MAX", "GROUP",
+    "COUNT", "SUM", "AVG", "MIN", "MAX", "GROUP", "JOIN", "ON",
 }
 
-SYMBOLS = ["<=", ">=", "!=", "<>", "=", "<", ">", ",", "(", ")", ";", "*"]
+SYMBOLS = ["<=", ">=", "!=", "<>", "=", "<", ">", ",", "(", ")", ";", "*", "."]
 
 
 class Token:
@@ -79,7 +79,7 @@ def tokenize(sql):
         matched = False
         for sym in SYMBOLS:
             if sql.startswith(sym, i):
-                kind = "PUNCT" if sym in (",", "(", ")", ";", "*") else "OP"
+                kind = "PUNCT" if sym in (",", "(", ")", ";", "*", ".") else "OP"
                 value = "!=" if sym == "<>" else sym
                 tokens.append(Token(kind, value))
                 i += len(sym)

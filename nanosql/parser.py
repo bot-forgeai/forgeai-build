@@ -1,6 +1,6 @@
 """Recursive-descent parser for nanosql's SQL subset."""
 
-from .ast_nodes import AggCall, BoolOp, CreateTable, Cmp, Delete, Insert, Select, Update
+from .ast_nodes import AggCall, BoolOp, CreateTable, Cmp, Delete, Insert, Join, JoinCond, Select, Update
 
 AGGREGATE_FUNCS = {"COUNT", "SUM", "AVG", "MIN", "MAX"}
 from .lexer import tokenize
@@ -59,6 +59,15 @@ class Parser:
         if tok.kind == "IDENT":
             return self.advance().value
         raise ParseError(f"expected identifier, got {tok.kind} {tok.value!r}")
+
+    def parse_column_ref(self):
+        """A column reference, optionally table-qualified: col, or table.col."""
+        name = self.parse_ident()
+        if self.peek().kind == "PUNCT" and self.peek().value == ".":
+            self.advance()
+            col = self.parse_ident()
+            return f"{name}.{col}"
+        return name
 
     def parse_create_table(self):
         self.expect("KEYWORD", "CREATE")
@@ -143,7 +152,7 @@ class Parser:
         return left
 
     def parse_comparison(self):
-        column = self.parse_ident()
+        column = self.parse_column_ref()
         op_tok = self.peek()
         if op_tok.kind != "OP" or op_tok.value not in COMPARISON_OPS:
             raise ParseError(f"expected a comparison operator, got {op_tok.kind} {op_tok.value!r}")
@@ -160,10 +169,10 @@ class Parser:
                 self.advance()
                 column = "*"
             else:
-                column = self.parse_ident()
+                column = self.parse_column_ref()
             self.expect("PUNCT", ")")
             return AggCall(func, column)
-        return self.parse_ident()
+        return self.parse_column_ref()
 
     def parse_select(self):
         self.expect("KEYWORD", "SELECT")
@@ -177,6 +186,18 @@ class Parser:
                 columns.append(self.parse_select_column())
         self.expect("KEYWORD", "FROM")
         table = self.parse_ident()
+        join = None
+        if self.at_keyword("JOIN"):
+            self.advance()
+            join_table = self.parse_ident()
+            self.expect("KEYWORD", "ON")
+            left = self.parse_column_ref()
+            op_tok = self.peek()
+            if op_tok.kind != "OP" or op_tok.value not in COMPARISON_OPS:
+                raise ParseError(f"expected a comparison operator, got {op_tok.kind} {op_tok.value!r}")
+            self.advance()
+            right = self.parse_column_ref()
+            join = Join(join_table, JoinCond(left, op_tok.value, right))
         where = None
         if self.at_keyword("WHERE"):
             self.advance()
@@ -185,12 +206,12 @@ class Parser:
         if self.at_keyword("GROUP"):
             self.advance()
             self.expect("KEYWORD", "BY")
-            group_by = self.parse_ident()
+            group_by = self.parse_column_ref()
         order_by = None
         if self.at_keyword("ORDER"):
             self.advance()
             self.expect("KEYWORD", "BY")
-            col = self.parse_ident()
+            col = self.parse_column_ref()
             direction = "ASC"
             if self.at_keyword("ASC", "DESC"):
                 direction = self.advance().value
@@ -200,7 +221,7 @@ class Parser:
             self.advance()
             tok = self.expect("NUMBER")
             limit = int(tok.value)
-        return Select(table, columns, where, group_by, order_by, limit)
+        return Select(table, columns, where, group_by, order_by, limit, join=join)
 
     def parse_update(self):
         self.expect("KEYWORD", "UPDATE")
