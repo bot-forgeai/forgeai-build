@@ -1,6 +1,6 @@
 import pytest
 
-from nanosql.ast_nodes import AggCall, BoolOp, Cmp, CreateTable, Delete, Insert, Select, Update
+from nanosql.ast_nodes import AggCall, BoolOp, Cmp, CreateIndex, CreateTable, Delete, Insert, Select, Update
 from nanosql.parser import ParseError, parse
 
 
@@ -9,6 +9,14 @@ def test_parse_create_table():
     assert isinstance(stmt, CreateTable)
     assert stmt.table == "users"
     assert stmt.columns == [("id", "INT"), ("name", "TEXT"), ("score", "REAL")]
+
+
+def test_parse_create_index():
+    stmt = parse("CREATE INDEX idx_email ON users (email)")
+    assert isinstance(stmt, CreateIndex)
+    assert stmt.index_name == "idx_email"
+    assert stmt.table == "users"
+    assert stmt.column == "email"
 
 
 def test_parse_insert_with_explicit_columns():

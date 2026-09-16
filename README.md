@@ -711,3 +711,19 @@ returns every column from both tables under qualified names
 column name. Only one `JOIN` per query is supported (no chained
 multi-table joins), and it's always an inner join — a row from either
 side with no match on the other is simply excluded from the result.
+
+`CREATE INDEX name ON table (column)` builds a hash index (value ->
+matching rows) that a plain `WHERE column = value` on that table uses
+instead of scanning every row:
+
+```
+.venv/bin/nanosql exec mydb.json "CREATE INDEX idx_name ON users (name)"
+.venv/bin/nanosql exec mydb.json "SELECT * FROM users WHERE name = 'Ada'"
+```
+
+An index is kept in sync automatically on `INSERT`/`UPDATE`/`DELETE`
+and persists across `exec` calls (the JSON file records which columns
+are indexed; a `shell`/`exec` reload rebuilds the index from the saved
+rows). It only accelerates a single top-level `column = value`
+comparison — a `!=`/`<`/range condition, an `OR`, or a join still
+falls back to a full scan.

@@ -4,7 +4,7 @@ KEYWORDS = {
     "CREATE", "TABLE", "INSERT", "INTO", "VALUES", "SELECT", "FROM", "WHERE",
     "AND", "OR", "NOT", "ORDER", "BY", "ASC", "DESC", "LIMIT", "UPDATE",
     "SET", "DELETE", "NULL", "TRUE", "FALSE", "INT", "REAL", "TEXT",
-    "COUNT", "SUM", "AVG", "MIN", "MAX", "GROUP", "JOIN", "ON",
+    "COUNT", "SUM", "AVG", "MIN", "MAX", "GROUP", "JOIN", "ON", "INDEX",
 }
 
 SYMBOLS = ["<=", ">=", "!=", "<>", "=", "<", ">", ",", "(", ")", ";", "*", "."]
