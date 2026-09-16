@@ -1,6 +1,6 @@
 """Recursive-descent parser for nanosql's SQL subset."""
 
-from .ast_nodes import AggCall, BoolOp, CreateTable, Cmp, Delete, Insert, Join, JoinCond, Select, Update
+from .ast_nodes import AggCall, BoolOp, CreateIndex, CreateTable, Cmp, Delete, Insert, Join, JoinCond, Select, Update
 
 AGGREGATE_FUNCS = {"COUNT", "SUM", "AVG", "MIN", "MAX"}
 from .lexer import tokenize
@@ -37,7 +37,11 @@ class Parser:
 
     def parse_statement(self):
         if self.at_keyword("CREATE"):
-            stmt = self.parse_create_table()
+            next_tok = self.tokens[self.pos + 1]
+            if next_tok.kind == "KEYWORD" and next_tok.value == "INDEX":
+                stmt = self.parse_create_index()
+            else:
+                stmt = self.parse_create_table()
         elif self.at_keyword("INSERT"):
             stmt = self.parse_insert()
         elif self.at_keyword("SELECT"):
@@ -87,6 +91,17 @@ class Parser:
             break
         self.expect("PUNCT", ")")
         return CreateTable(table, columns)
+
+    def parse_create_index(self):
+        self.expect("KEYWORD", "CREATE")
+        self.expect("KEYWORD", "INDEX")
+        index_name = self.parse_ident()
+        self.expect("KEYWORD", "ON")
+        table = self.parse_ident()
+        self.expect("PUNCT", "(")
+        column = self.parse_ident()
+        self.expect("PUNCT", ")")
+        return CreateIndex(index_name, table, column)
 
     def parse_literal(self):
         tok = self.peek()

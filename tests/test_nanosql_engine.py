@@ -323,3 +323,79 @@ def test_join_with_group_by_aggregate():
         {"users.name": "Ada", "COUNT(*)": 2},
         {"users.name": "Bea", "COUNT(*)": 1},
     ]
+
+
+def test_create_index_on_missing_table_raises():
+    db = Database()
+    with pytest.raises(NanosqlError):
+        db.execute("CREATE INDEX idx_id ON nope (id)")
+
+
+def test_create_index_on_missing_column_raises():
+    db = make_users_db()
+    with pytest.raises(NanosqlError):
+        db.execute("CREATE INDEX idx_nope ON users (nope)")
+
+
+def test_select_equality_uses_index_after_create():
+    db = make_users_db()
+    db.execute("CREATE INDEX idx_name ON users (name)")
+    result = db.execute("SELECT * FROM users WHERE name = 'Bea'")
+    assert result["rows"] == [{"id": 2, "name": "Bea", "age": 24}]
+
+
+def test_create_index_on_existing_rows_finds_them():
+    db = make_users_db()
+    db.execute("CREATE INDEX idx_age ON users (age)")
+    result = db.execute("SELECT name FROM users WHERE age = 42")
+    assert result["rows"] == [{"name": "Cid"}]
+
+
+def test_index_stays_correct_after_insert():
+    db = make_users_db()
+    db.execute("CREATE INDEX idx_name ON users (name)")
+    db.execute("INSERT INTO users VALUES (4, 'Dee', 19)")
+    result = db.execute("SELECT * FROM users WHERE name = 'Dee'")
+    assert result["rows"] == [{"id": 4, "name": "Dee", "age": 19}]
+
+
+def test_index_stays_correct_after_update():
+    db = make_users_db()
+    db.execute("CREATE INDEX idx_name ON users (name)")
+    db.execute("UPDATE users SET name = 'Zed' WHERE id = 2")
+    assert db.execute("SELECT * FROM users WHERE name = 'Bea'")["rows"] == []
+    assert db.execute("SELECT * FROM users WHERE name = 'Zed'")["rows"] == [
+        {"id": 2, "name": "Zed", "age": 24}
+    ]
+
+
+def test_index_stays_correct_after_delete():
+    db = make_users_db()
+    db.execute("CREATE INDEX idx_name ON users (name)")
+    db.execute("DELETE FROM users WHERE id = 2")
+    assert db.execute("SELECT * FROM users WHERE name = 'Bea'")["rows"] == []
+
+
+def test_index_lookup_with_no_match_returns_empty():
+    db = make_users_db()
+    db.execute("CREATE INDEX idx_name ON users (name)")
+    result = db.execute("SELECT * FROM users WHERE name = 'Nope'")
+    assert result["rows"] == []
+
+
+def test_indexed_equality_with_group_by_aggregate():
+    db = make_users_db()
+    db.execute("INSERT INTO users VALUES (4, 'Ada', 50)")
+    db.execute("CREATE INDEX idx_name ON users (name)")
+    result = db.execute("SELECT name, COUNT(*) FROM users WHERE name = 'Ada' GROUP BY name")
+    assert result["rows"] == [{"name": "Ada", "COUNT(*)": 2}]
+
+
+def test_to_dict_and_from_dict_round_trip_preserves_index():
+    db = make_users_db()
+    db.execute("CREATE INDEX idx_name ON users (name)")
+    data = db.to_dict()
+    restored = Database.from_dict(data)
+    result = restored.execute("SELECT * FROM users WHERE name = 'Cid'")
+    assert result["rows"] == [{"id": 3, "name": "Cid", "age": 42}]
+    assert "name" in restored.tables["users"].indexed_columns

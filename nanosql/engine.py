@@ -29,6 +29,8 @@ class Table:
         self.name = name
         self.columns = columns  # list of (name, type)
         self.rows = []
+        self.indexed_columns = set()
+        self.indexes = {}  # column name -> {value: [row dict, ...]}
 
     def column_names(self):
         return [name for name, _ in self.columns]
@@ -39,13 +41,38 @@ class Table:
                 return col_type
         raise NanosqlError(f"no such column {name!r} in table {self.name!r}")
 
+    def create_index(self, column):
+        self.column_type(column)  # validates the column exists
+        self.indexed_columns.add(column)
+        self.rebuild_index(column)
+
+    def rebuild_index(self, column):
+        index = {}
+        for row in self.rows:
+            index.setdefault(row[column], []).append(row)
+        self.indexes[column] = index
+
+    def rebuild_all_indexes(self):
+        for column in self.indexed_columns:
+            self.rebuild_index(column)
+
+    def index_insert(self, row):
+        for column in self.indexed_columns:
+            self.indexes[column].setdefault(row[column], []).append(row)
+
     def to_dict(self):
-        return {"columns": [[n, t] for n, t in self.columns], "rows": self.rows}
+        return {
+            "columns": [[n, t] for n, t in self.columns],
+            "rows": self.rows,
+            "indexed_columns": sorted(self.indexed_columns),
+        }
 
     @classmethod
     def from_dict(cls, name, data):
         table = cls(name, [(n, t) for n, t in data["columns"]])
         table.rows = data["rows"]
+        for column in data.get("indexed_columns", []):
+            table.create_index(column)
         return table
 
 
@@ -124,6 +151,11 @@ class Database:
         self.tables[stmt.table] = Table(stmt.table, stmt.columns)
         return {"kind": "ok", "message": f"table {stmt.table!r} created"}
 
+    def _exec_CreateIndex(self, stmt):
+        table = self._table(stmt.table)
+        table.create_index(stmt.column)
+        return {"kind": "ok", "message": f"index {stmt.index_name!r} created on {stmt.table}.{stmt.column}"}
+
     def _exec_Insert(self, stmt):
         table = self._table(stmt.table)
         columns = stmt.columns if stmt.columns is not None else table.column_names()
@@ -137,6 +169,7 @@ class Database:
         for name, value in zip(columns, stmt.values):
             row[name] = _cast(value, table.column_type(name))
         table.rows.append(row)
+        table.index_insert(row)
         return {"kind": "ok", "message": "1 row inserted"}
 
     def _join_rows(self, left, right, on):
@@ -190,6 +223,12 @@ class Database:
             rows_universe = table.rows
             column_universe = table.column_names()
             validate_col = table.column_type
+            if (
+                isinstance(stmt.where, Cmp)
+                and stmt.where.op == "="
+                and stmt.where.column in table.indexed_columns
+            ):
+                rows_universe = table.indexes[stmt.where.column].get(stmt.where.value, [])
 
         if stmt.group_by is not None or any(isinstance(c, AggCall) for c in stmt.columns):
             return self._exec_select_aggregate(stmt, rows_universe, column_universe, validate_col)
@@ -262,6 +301,8 @@ class Database:
                 for col, value in stmt.assignments:
                     row[col] = _cast(value, table.column_type(col))
                 count += 1
+        if count and table.indexed_columns:
+            table.rebuild_all_indexes()
         return {"kind": "ok", "message": f"{count} row(s) updated"}
 
     def _exec_Delete(self, stmt):
@@ -269,6 +310,8 @@ class Database:
         before = len(table.rows)
         table.rows = [row for row in table.rows if not _eval_where(stmt.where, row)]
         count = before - len(table.rows)
+        if count and table.indexed_columns:
+            table.rebuild_all_indexes()
         return {"kind": "ok", "message": f"{count} row(s) deleted"}
 
     def to_dict(self):

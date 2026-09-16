@@ -7,6 +7,13 @@ class CreateTable:
         self.columns = columns  # list of (name, type)
 
 
+class CreateIndex:
+    def __init__(self, index_name, table, column):
+        self.index_name = index_name
+        self.table = table
+        self.column = column
+
+
 class Insert:
     def __init__(self, table, columns, values):
         self.table = table
