@@ -5,6 +5,7 @@ KEYWORDS = {
     "AND", "OR", "NOT", "ORDER", "BY", "ASC", "DESC", "LIMIT", "UPDATE",
     "SET", "DELETE", "NULL", "TRUE", "FALSE", "INT", "REAL", "TEXT",
     "COUNT", "SUM", "AVG", "MIN", "MAX", "GROUP", "JOIN", "ON", "INDEX",
+    "BEGIN", "COMMIT", "ROLLBACK",
 }
 
 SYMBOLS = ["<=", ">=", "!=", "<>", "=", "<", ">", ",", "(", ")", ";", "*", "."]

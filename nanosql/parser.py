@@ -1,6 +1,21 @@
 """Recursive-descent parser for nanosql's SQL subset."""
 
-from .ast_nodes import AggCall, BoolOp, CreateIndex, CreateTable, Cmp, Delete, Insert, Join, JoinCond, Select, Update
+from .ast_nodes import (
+    AggCall,
+    Begin,
+    BoolOp,
+    Commit,
+    CreateIndex,
+    CreateTable,
+    Cmp,
+    Delete,
+    Insert,
+    Join,
+    JoinCond,
+    Rollback,
+    Select,
+    Update,
+)
 
 AGGREGATE_FUNCS = {"COUNT", "SUM", "AVG", "MIN", "MAX"}
 from .lexer import tokenize
@@ -35,28 +50,49 @@ class Parser:
         tok = self.peek()
         return tok.kind == "KEYWORD" and tok.value in words
 
-    def parse_statement(self):
+    def parse_one_statement(self):
         if self.at_keyword("CREATE"):
             next_tok = self.tokens[self.pos + 1]
             if next_tok.kind == "KEYWORD" and next_tok.value == "INDEX":
-                stmt = self.parse_create_index()
-            else:
-                stmt = self.parse_create_table()
-        elif self.at_keyword("INSERT"):
-            stmt = self.parse_insert()
-        elif self.at_keyword("SELECT"):
-            stmt = self.parse_select()
-        elif self.at_keyword("UPDATE"):
-            stmt = self.parse_update()
-        elif self.at_keyword("DELETE"):
-            stmt = self.parse_delete()
-        else:
-            tok = self.peek()
-            raise ParseError(f"unrecognized statement starting at {tok.kind} {tok.value!r}")
+                return self.parse_create_index()
+            return self.parse_create_table()
+        if self.at_keyword("INSERT"):
+            return self.parse_insert()
+        if self.at_keyword("SELECT"):
+            return self.parse_select()
+        if self.at_keyword("UPDATE"):
+            return self.parse_update()
+        if self.at_keyword("DELETE"):
+            return self.parse_delete()
+        if self.at_keyword("BEGIN"):
+            self.advance()
+            return Begin()
+        if self.at_keyword("COMMIT"):
+            self.advance()
+            return Commit()
+        if self.at_keyword("ROLLBACK"):
+            self.advance()
+            return Rollback()
+        tok = self.peek()
+        raise ParseError(f"unrecognized statement starting at {tok.kind} {tok.value!r}")
+
+    def parse_statement(self):
+        stmt = self.parse_one_statement()
         if self.peek().kind == "PUNCT" and self.peek().value == ";":
             self.advance()
         self.expect("EOF")
         return stmt
+
+    def parse_program(self):
+        statements = []
+        while self.peek().kind != "EOF":
+            statements.append(self.parse_one_statement())
+            if self.peek().kind == "PUNCT" and self.peek().value == ";":
+                self.advance()
+            else:
+                break
+        self.expect("EOF")
+        return statements
 
     def parse_ident(self):
         tok = self.peek()
@@ -271,3 +307,8 @@ class Parser:
 
 def parse(sql):
     return Parser(tokenize(sql)).parse_statement()
+
+
+def parse_script(sql):
+    """Parse a ';'-separated sequence of statements into a list of AST nodes."""
+    return Parser(tokenize(sql)).parse_program()

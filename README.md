@@ -727,3 +727,29 @@ are indexed; a `shell`/`exec` reload rebuilds the index from the saved
 rows). It only accelerates a single top-level `column = value`
 comparison — a `!=`/`<`/range condition, an `OR`, or a join still
 falls back to a full scan.
+
+`BEGIN`/`COMMIT`/`ROLLBACK` give multiple statements atomicity: nothing
+run after `BEGIN` is saved to disk (or visible to a fresh `exec`/`shell`
+process) until `COMMIT`, and `ROLLBACK` discards every change made
+since `BEGIN`, restoring the exact state as of that point:
+
+```
+.venv/bin/nanosql exec mydb.json "BEGIN; UPDATE accounts SET balance = balance - 20 WHERE id = 1; UPDATE accounts SET balance = balance + 20 WHERE id = 2; COMMIT;"
+```
+
+A single `exec` call already accepts a `;`-separated script of several
+statements, not just one — and a script is atomic even *without* an
+explicit `BEGIN`/`COMMIT`: if any statement in it fails, nothing from
+that call is saved (the file on disk is untouched), and a script that
+ends with a transaction still open is treated as an error (nothing
+saves — commit or roll it back explicitly before the call ends,
+since there's no way to resume an open transaction across separate
+`exec` invocations). In `shell`, an open transaction spans multiple
+interactive commands as you'd expect, and exiting the shell with one
+still open prints a warning and discards it rather than saving.
+
+Database files are also written crash-safely: `save()` writes the
+full JSON to a temp file in the same directory, `fsync`s it, then
+`os.replace()`s it into place — so a process killed mid-save can never
+leave `mydb.json` half-written or corrupt; you always get either the
+old file or the fully-written new one.

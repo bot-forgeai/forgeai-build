@@ -1,8 +1,10 @@
 """Table storage and statement execution for nanosql."""
 
+import copy
+
 from .ast_nodes import AggCall, BoolOp, Cmp
 from .lexer import LexError
-from .parser import ParseError, parse
+from .parser import ParseError, parse, parse_script
 
 TYPE_CASTS = {
     "INT": int,
@@ -131,19 +133,63 @@ def _compute_aggregate(agg, rows):
 class Database:
     def __init__(self):
         self.tables = {}
+        self._tx_snapshot = None
 
     def _table(self, name):
         if name not in self.tables:
             raise NanosqlError(f"no such table {name!r}")
         return self.tables[name]
 
+    def in_transaction(self):
+        return self._tx_snapshot is not None
+
     def execute(self, sql):
         try:
             stmt = parse(sql)
         except (LexError, ParseError) as exc:
             raise NanosqlError(f"syntax error: {exc}")
+        return self._dispatch(stmt)
+
+    def execute_script(self, sql):
+        """Parse and run a ';'-separated sequence of statements in order.
+
+        Statements share one in-memory transaction/table state, so a script
+        like "BEGIN; INSERT ...; INSERT ...; COMMIT;" is atomic: nothing
+        after BEGIN is visible to a caller inspecting `to_dict()` unless
+        COMMIT is reached.
+        """
+        try:
+            stmts = parse_script(sql)
+        except (LexError, ParseError) as exc:
+            raise NanosqlError(f"syntax error: {exc}")
+        return [self._dispatch(stmt) for stmt in stmts]
+
+    def _dispatch(self, stmt):
         kind = type(stmt).__name__
         return getattr(self, f"_exec_{kind}")(stmt)
+
+    def _exec_Begin(self, stmt):
+        if self.in_transaction():
+            raise NanosqlError("a transaction is already in progress")
+        # to_dict() embeds the live row dicts by reference (not copies), so an
+        # in-place UPDATE after BEGIN would silently corrupt the "snapshot"
+        # too unless it's deep-copied here.
+        self._tx_snapshot = copy.deepcopy(self.to_dict())
+        return {"kind": "ok", "message": "transaction started"}
+
+    def _exec_Commit(self, stmt):
+        if not self.in_transaction():
+            raise NanosqlError("no transaction is in progress")
+        self._tx_snapshot = None
+        return {"kind": "ok", "message": "transaction committed"}
+
+    def _exec_Rollback(self, stmt):
+        if not self.in_transaction():
+            raise NanosqlError("no transaction is in progress")
+        restored = Database.from_dict(self._tx_snapshot)
+        self.tables = restored.tables
+        self._tx_snapshot = None
+        return {"kind": "ok", "message": "transaction rolled back"}
 
     def _exec_CreateTable(self, stmt):
         if stmt.table in self.tables:
