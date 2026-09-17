@@ -89,3 +89,15 @@ class BoolOp:
         self.op = op
         self.left = left
         self.right = right
+
+
+class Begin:
+    """BEGIN — starts an explicit transaction."""
+
+
+class Commit:
+    """COMMIT — ends the current transaction, persisting its changes."""
+
+
+class Rollback:
+    """ROLLBACK — ends the current transaction, discarding its changes."""

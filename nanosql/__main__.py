@@ -20,11 +20,18 @@ def _print_result(result):
 def cmd_exec(args):
     db = load(args.db)
     try:
-        result = db.execute(args.sql)
+        results = db.execute_script(args.sql)
     except NanosqlError as exc:
         print(f"error: {exc}", file=sys.stderr)
         sys.exit(1)
-    _print_result(result)
+    for result in results:
+        _print_result(result)
+    if db.in_transaction():
+        print(
+            "error: script left a transaction open — add COMMIT or ROLLBACK",
+            file=sys.stderr,
+        )
+        sys.exit(1)
     save(db, args.db)
 
 
@@ -54,7 +61,10 @@ def cmd_shell(args):
             print(f"error: {exc}")
             continue
         _print_result(result)
-        save(db, args.db)
+        if not db.in_transaction():
+            save(db, args.db)
+    if db.in_transaction():
+        print("note: exiting with an open transaction — its changes were not saved")
 
 
 def build_parser():

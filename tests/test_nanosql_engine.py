@@ -399,3 +399,99 @@ def test_to_dict_and_from_dict_round_trip_preserves_index():
     result = restored.execute("SELECT * FROM users WHERE name = 'Cid'")
     assert result["rows"] == [{"id": 3, "name": "Cid", "age": 42}]
     assert "name" in restored.tables["users"].indexed_columns
+
+
+def test_commit_persists_changes_visible_after():
+    db = make_users_db()
+    db.execute("BEGIN")
+    db.execute("INSERT INTO users VALUES (4, 'Dee', 30)")
+    db.execute("COMMIT")
+    assert not db.in_transaction()
+    rows = db.execute("SELECT * FROM users")["rows"]
+    assert len(rows) == 4
+
+
+def test_rollback_discards_changes_made_since_begin():
+    db = make_users_db()
+    db.execute("BEGIN")
+    db.execute("INSERT INTO users VALUES (4, 'Dee', 30)")
+    db.execute("DELETE FROM users WHERE name = 'Ada'")
+    db.execute("ROLLBACK")
+    assert not db.in_transaction()
+    rows = db.execute("SELECT * FROM users")["rows"]
+    assert len(rows) == 3
+    assert any(r["name"] == "Ada" for r in rows)
+
+
+def test_rollback_restores_index_state_too():
+    db = make_users_db()
+    db.execute("CREATE INDEX idx_name ON users (name)")
+    db.execute("BEGIN")
+    db.execute("INSERT INTO users VALUES (4, 'Dee', 30)")
+    db.execute("ROLLBACK")
+    result = db.execute("SELECT * FROM users WHERE name = 'Dee'")
+    assert result["rows"] == []
+    result = db.execute("SELECT * FROM users WHERE name = 'Ada'")
+    assert len(result["rows"]) == 1
+
+
+def test_nested_begin_raises():
+    db = make_users_db()
+    db.execute("BEGIN")
+    with pytest.raises(NanosqlError):
+        db.execute("BEGIN")
+
+
+def test_commit_without_begin_raises():
+    db = make_users_db()
+    with pytest.raises(NanosqlError):
+        db.execute("COMMIT")
+
+
+def test_rollback_without_begin_raises():
+    db = make_users_db()
+    with pytest.raises(NanosqlError):
+        db.execute("ROLLBACK")
+
+
+def test_in_transaction_reflects_state():
+    db = make_users_db()
+    assert not db.in_transaction()
+    db.execute("BEGIN")
+    assert db.in_transaction()
+    db.execute("COMMIT")
+    assert not db.in_transaction()
+
+
+def test_execute_script_runs_statements_in_order():
+    db = Database()
+    results = db.execute_script(
+        "CREATE TABLE t (id INT); INSERT INTO t VALUES (1); INSERT INTO t VALUES (2);"
+    )
+    assert len(results) == 3
+    rows = db.execute("SELECT * FROM t")["rows"]
+    assert len(rows) == 2
+
+
+def test_execute_script_transaction_atomic_via_begin_commit():
+    db = Database()
+    db.execute("CREATE TABLE t (id INT)")
+    db.execute_script("BEGIN; INSERT INTO t VALUES (1); INSERT INTO t VALUES (2); COMMIT;")
+    assert not db.in_transaction()
+    assert len(db.execute("SELECT * FROM t")["rows"]) == 2
+
+
+def test_execute_script_rollback_leaves_no_trace():
+    db = Database()
+    db.execute("CREATE TABLE t (id INT)")
+    db.execute_script("BEGIN; INSERT INTO t VALUES (1); ROLLBACK;")
+    assert len(db.execute("SELECT * FROM t")["rows"]) == 0
+
+
+def test_execute_script_stops_at_first_error_without_running_rest():
+    db = Database()
+    db.execute("CREATE TABLE t (id INT)")
+    with pytest.raises(NanosqlError):
+        db.execute_script("INSERT INTO t VALUES (1); SELECT * FROM nope; INSERT INTO t VALUES (2);")
+    # first statement's effect is still in memory even though the script failed
+    assert len(db.execute("SELECT * FROM t")["rows"]) == 1

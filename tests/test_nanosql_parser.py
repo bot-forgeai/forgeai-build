@@ -1,7 +1,20 @@
 import pytest
 
-from nanosql.ast_nodes import AggCall, BoolOp, Cmp, CreateIndex, CreateTable, Delete, Insert, Select, Update
-from nanosql.parser import ParseError, parse
+from nanosql.ast_nodes import (
+    AggCall,
+    Begin,
+    BoolOp,
+    Cmp,
+    Commit,
+    CreateIndex,
+    CreateTable,
+    Delete,
+    Insert,
+    Rollback,
+    Select,
+    Update,
+)
+from nanosql.parser import ParseError, parse, parse_script
 
 
 def test_parse_create_table():
@@ -181,3 +194,33 @@ def test_parse_qualified_column_in_where():
 def test_parse_join_missing_on_raises():
     with pytest.raises(ParseError):
         parse("SELECT * FROM orders JOIN users")
+
+
+def test_parse_begin_commit_rollback():
+    assert isinstance(parse("BEGIN"), Begin)
+    assert isinstance(parse("COMMIT"), Commit)
+    assert isinstance(parse("ROLLBACK"), Rollback)
+
+
+def test_parse_script_splits_multiple_statements():
+    stmts = parse_script("CREATE TABLE t (id INT); INSERT INTO t VALUES (1); SELECT * FROM t;")
+    assert len(stmts) == 3
+    assert isinstance(stmts[0], CreateTable)
+    assert isinstance(stmts[1], Insert)
+    assert isinstance(stmts[2], Select)
+
+
+def test_parse_script_trailing_semicolon_optional():
+    stmts = parse_script("BEGIN; COMMIT")
+    assert len(stmts) == 2
+    assert isinstance(stmts[0], Begin)
+    assert isinstance(stmts[1], Commit)
+
+
+def test_parse_script_empty_string_returns_empty_list():
+    assert parse_script("") == []
+
+
+def test_parse_script_raises_on_trailing_garbage_after_last_statement():
+    with pytest.raises(ParseError):
+        parse_script("SELECT * FROM t not_a_semicolon SELECT * FROM t")
