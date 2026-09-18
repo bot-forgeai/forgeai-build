@@ -799,3 +799,42 @@ dropping a column removes it from every row and, if it was indexed,
 drops the index too. Adding a column that already exists, dropping one
 that doesn't, or referencing a dropped column afterward all raise a
 clean error rather than corrupting the table.
+
+## procman
+
+A small process supervisor: describe a set of services in a JSON
+config file, then have procman start, monitor, and (optionally)
+auto-restart them on crash, with per-service logs and a live JSON
+status file another process (or a person) can poll.
+
+```
+python3 -m venv .venv && .venv/bin/pip install -e .
+.venv/bin/procman validate services.json
+.venv/bin/procman run services.json --log-dir logs --status status.json
+.venv/bin/procman status status.json
+```
+
+A config file looks like:
+
+```json
+{
+  "services": [
+    {"name": "web", "command": ["python3", "server.py"], "autorestart": true, "max_restarts": 5},
+    {"name": "worker", "command": ["python3", "worker.py"], "cwd": "/opt/app", "env": {"QUEUE": "jobs"}}
+  ]
+}
+```
+
+`procman run` spawns every service, then polls once per second (tune
+with `--interval`) checking whether each one is still alive. A crashed
+service with `autorestart` (the default) is respawned automatically,
+up to `max_restarts` (default 5) times, after which it's left stopped
+rather than restart-looping forever; `autorestart: false` leaves a
+crashed service stopped immediately. Each service's stdout/stderr are
+captured to `<log-dir>/<name>.log`. `Ctrl+C`/`SIGTERM` triggers a
+graceful shutdown: every child is sent `SIGTERM`, then `SIGKILL` after
+a timeout if it hasn't exited. `--status` writes a JSON snapshot
+(name, running, pid, restart count, last exit code) after every poll
+tick and on shutdown, so `procman status <file>` — or any other
+process — can check on things without talking to the supervisor
+directly.
