@@ -7,6 +7,19 @@ class CreateTable:
         self.columns = columns  # list of (name, type)
 
 
+class AlterTableAddColumn:
+    def __init__(self, table, column, col_type):
+        self.table = table
+        self.column = column
+        self.col_type = col_type
+
+
+class AlterTableDropColumn:
+    def __init__(self, table, column):
+        self.table = table
+        self.column = column
+
+
 class CreateIndex:
     def __init__(self, index_name, table, column):
         self.index_name = index_name

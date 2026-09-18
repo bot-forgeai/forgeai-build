@@ -764,3 +764,18 @@ full JSON to a temp file in the same directory, `fsync`s it, then
 `os.replace()`s it into place — so a process killed mid-save can never
 leave `mydb.json` half-written or corrupt; you always get either the
 old file or the fully-written new one.
+
+`ALTER TABLE table ADD COLUMN name TYPE` and
+`ALTER TABLE table DROP COLUMN name` (the `COLUMN` keyword is
+optional in both) change a table's schema after creation:
+
+```
+.venv/bin/nanosql exec mydb.json "ALTER TABLE users ADD COLUMN email TEXT"
+.venv/bin/nanosql exec mydb.json "ALTER TABLE users DROP COLUMN email"
+```
+
+Adding a column backfills every existing row with `NULL` for it;
+dropping a column removes it from every row and, if it was indexed,
+drops the index too. Adding a column that already exists, dropping one
+that doesn't, or referencing a dropped column afterward all raise a
+clean error rather than corrupting the table.

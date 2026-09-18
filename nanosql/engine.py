@@ -218,6 +218,26 @@ class Database:
         table.create_index(stmt.column)
         return {"kind": "ok", "message": f"index {stmt.index_name!r} created on {stmt.table}.{stmt.column}"}
 
+    def _exec_AlterTableAddColumn(self, stmt):
+        table = self._table(stmt.table)
+        if stmt.column in table.column_names():
+            raise NanosqlError(f"column {stmt.column!r} already exists in table {stmt.table!r}")
+        table.columns.append((stmt.column, stmt.col_type))
+        for row in table.rows:
+            row[stmt.column] = None
+        return {"kind": "ok", "message": f"column {stmt.column!r} added to {stmt.table!r}"}
+
+    def _exec_AlterTableDropColumn(self, stmt):
+        table = self._table(stmt.table)
+        table.column_type(stmt.column)  # validates the column exists
+        table.columns = [(n, t) for n, t in table.columns if n != stmt.column]
+        for row in table.rows:
+            del row[stmt.column]
+        if stmt.column in table.indexed_columns:
+            table.indexed_columns.discard(stmt.column)
+            table.indexes.pop(stmt.column, None)
+        return {"kind": "ok", "message": f"column {stmt.column!r} dropped from {stmt.table!r}"}
+
     def _exec_Insert(self, stmt):
         table = self._table(stmt.table)
         columns = stmt.columns if stmt.columns is not None else table.column_names()
