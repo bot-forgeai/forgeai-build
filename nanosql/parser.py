@@ -204,7 +204,14 @@ class Parser:
 
     def parse_comparison(self):
         column = self.parse_column_ref()
-        op_tok = self.peek()
+        tok = self.peek()
+        if tok.kind == "KEYWORD" and tok.value == "LIKE":
+            self.advance()
+            pattern = self.parse_literal()
+            if not isinstance(pattern, str):
+                raise ParseError("LIKE pattern must be a string literal")
+            return Cmp(column, "LIKE", pattern)
+        op_tok = tok
         if op_tok.kind != "OP" or op_tok.value not in COMPARISON_OPS:
             raise ParseError(f"expected a comparison operator, got {op_tok.kind} {op_tok.value!r}")
         self.advance()

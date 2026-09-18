@@ -668,13 +668,24 @@ python3 -m venv .venv && .venv/bin/pip install -e .
 
 Supports `CREATE TABLE` (with `INT`/`REAL`/`TEXT` column types),
 `INSERT` (with or without an explicit column list), `SELECT` (column
-list or `*`, `WHERE` with `=`/`!=`/`<`/`<=`/`>`/`>=` combined via
-`AND`/`OR`, `GROUP BY`, `ORDER BY ASC|DESC`, `LIMIT`),
+list or `*`, `WHERE` with `=`/`!=`/`<`/`<=`/`>`/`>=`/`LIKE` combined
+via `AND`/`OR`, `GROUP BY`, `ORDER BY ASC|DESC`, `LIMIT`),
 `UPDATE ... SET ... WHERE`, and `DELETE FROM ... WHERE`. Each `exec`
 call loads the whole database file, applies one statement, and saves
 it back — good enough for a single-user local database, not concurrent
 access. A syntax error or an unknown table/column raises a clean
 `error: ...` message and a non-zero exit rather than a traceback.
+
+`WHERE column LIKE 'pattern'` does simple SQL-style pattern matching
+against a string column: `%` matches any run of characters (including
+none), `_` matches exactly one character, and everything else must
+match literally — the whole value has to match the pattern, not just a
+substring:
+
+```
+.venv/bin/nanosql exec mydb.json "SELECT name FROM users WHERE name LIKE 'A%'"
+.venv/bin/nanosql exec mydb.json "SELECT name FROM users WHERE name LIKE '_da'"
+```
 
 `SELECT` also supports aggregate functions — `COUNT(*)`, `COUNT(col)`,
 `SUM`, `AVG`, `MIN`, `MAX` — optionally grouped with `GROUP BY`:

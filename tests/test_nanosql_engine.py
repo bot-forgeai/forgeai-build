@@ -82,6 +82,44 @@ def test_select_where_or():
     assert {r["name"] for r in rows} == {"Bea", "Cid"}
 
 
+def test_select_where_like_prefix():
+    db = make_users_db()
+    rows = db.execute("SELECT name FROM users WHERE name LIKE 'A%'")["rows"]
+    assert rows == [{"name": "Ada"}]
+
+
+def test_select_where_like_underscore_wildcard():
+    db = make_users_db()
+    rows = db.execute("SELECT name FROM users WHERE name LIKE '_da'")["rows"]
+    assert rows == [{"name": "Ada"}]
+
+
+def test_select_where_like_suffix():
+    db = make_users_db()
+    rows = db.execute("SELECT name FROM users WHERE name LIKE '%a'")["rows"]
+    assert {r["name"] for r in rows} == {"Ada", "Bea"}
+
+
+def test_select_where_like_no_match():
+    db = make_users_db()
+    rows = db.execute("SELECT name FROM users WHERE name LIKE 'Z%'")["rows"]
+    assert rows == []
+
+
+def test_select_where_like_full_match_not_substring():
+    db = make_users_db()
+    rows = db.execute("SELECT name FROM users WHERE name LIKE 'd'")["rows"]
+    assert rows == []
+
+
+def test_select_where_like_against_null_is_false():
+    db = Database()
+    db.execute("CREATE TABLE t (a TEXT)")
+    db.execute("INSERT INTO t VALUES (NULL)")
+    rows = db.execute("SELECT * FROM t WHERE a LIKE '%x%'")["rows"]
+    assert rows == []
+
+
 def test_select_order_by_asc_and_desc():
     db = make_users_db()
     asc = db.execute("SELECT name FROM users ORDER BY age")["rows"]
