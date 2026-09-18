@@ -127,6 +127,104 @@ def test_run_forever_with_max_iterations(tmp_path):
     assert data["a"]["restarts"] >= 1
 
 
+class FakeClock:
+    def __init__(self, start=0.0):
+        self.now = start
+
+    def __call__(self):
+        return self.now
+
+    def advance(self, seconds):
+        self.now += seconds
+
+
+def test_restart_delay_waits_before_respawning(tmp_path):
+    clock = FakeClock()
+    services = [Service(name="a", command=crash_cmd(1), autorestart=True, max_restarts=3, restart_delay=10.0)]
+    sup = Supervisor(services, log_dir=str(tmp_path / "logs"), time_fn=clock)
+    sup.start_all()
+    try:
+        assert wait_until(lambda: sup.states["a"].proc.poll() is not None)
+        restarted = sup.poll_once()
+        # crashed process is not respawned immediately when a delay applies
+        assert restarted == []
+        assert sup.states["a"].restarts == 1
+        assert sup.states["a"].proc is None
+        assert sup.states["a"].restart_at == 10.0
+        status = sup.status()
+        assert status["a"]["running"] is False
+        assert status["a"]["restart_pending"] is True
+
+        # not enough time has passed yet
+        clock.advance(5)
+        assert sup.poll_once() == []
+        assert sup.states["a"].proc is None
+
+        # now the delay has elapsed
+        clock.advance(5)
+        restarted = sup.poll_once()
+        assert restarted == ["a"]
+        assert sup.states["a"].proc is not None
+    finally:
+        sup.stop_all()
+
+
+def test_restart_delay_doubles_and_caps(tmp_path):
+    clock = FakeClock()
+    services = [Service(name="a", command=crash_cmd(1), autorestart=True, max_restarts=5, restart_delay=10.0)]
+    sup = Supervisor(services, log_dir=str(tmp_path / "logs"), time_fn=clock)
+    sup.start_all()
+    try:
+        # first crash: delay = 10 * 2**0 = 10
+        assert wait_until(lambda: sup.states["a"].proc.poll() is not None)
+        sup.poll_once()
+        assert sup.states["a"].restart_at == 10.0
+        clock.advance(10)
+        sup.poll_once()  # respawns
+
+        # second crash: delay = 10 * 2**1 = 20
+        assert wait_until(lambda: sup.states["a"].proc.poll() is not None)
+        sup.poll_once()
+        assert sup.states["a"].restart_at == 30.0  # 10 (now) + 20
+        clock.advance(20)
+        sup.poll_once()  # respawns
+
+        # third crash: delay would be 10 * 2**2 = 40, still under the 60s cap
+        assert wait_until(lambda: sup.states["a"].proc.poll() is not None)
+        sup.poll_once()
+        assert sup.states["a"].restart_at == 30.0 + 40.0
+    finally:
+        sup.stop_all()
+
+
+def test_zero_restart_delay_respawns_immediately(tmp_path):
+    services = [Service(name="a", command=crash_cmd(1), autorestart=True, max_restarts=3, restart_delay=0.0)]
+    sup = Supervisor(services, log_dir=str(tmp_path / "logs"))
+    sup.start_all()
+    try:
+        assert wait_until(lambda: sup.states["a"].proc.poll() is not None)
+        restarted = sup.poll_once()
+        assert restarted == ["a"]
+        assert sup.states["a"].proc is not None
+    finally:
+        sup.stop_all()
+
+
+def test_stop_all_cancels_pending_restart(tmp_path):
+    clock = FakeClock()
+    services = [Service(name="a", command=crash_cmd(1), autorestart=True, max_restarts=3, restart_delay=100.0)]
+    sup = Supervisor(services, log_dir=str(tmp_path / "logs"), time_fn=clock)
+    sup.start_all()
+    assert wait_until(lambda: sup.states["a"].proc.poll() is not None)
+    sup.poll_once()
+    assert sup.states["a"].restart_at is not None
+    sup.stop_all()
+    clock.advance(1000)
+    # a stopped service must never respawn, even once its delay has elapsed
+    assert sup.poll_once() == []
+    assert sup.states["a"].proc is None
+
+
 def test_log_output_captured(tmp_path):
     log_dir = tmp_path / "logs"
     services = [Service(name="a", command=[sys.executable, "-c", "print('hello from a')"])]
