@@ -71,6 +71,19 @@ def test_parse_select_where_comparison():
     assert stmt.where.value == 18
 
 
+def test_parse_select_where_like():
+    stmt = parse("SELECT * FROM users WHERE name LIKE 'A%'")
+    assert isinstance(stmt.where, Cmp)
+    assert stmt.where.column == "name"
+    assert stmt.where.op == "LIKE"
+    assert stmt.where.value == "A%"
+
+
+def test_parse_where_like_requires_string_literal():
+    with pytest.raises(ParseError):
+        parse("SELECT * FROM users WHERE age LIKE 18")
+
+
 def test_parse_select_where_and_or_precedence():
     stmt = parse("SELECT * FROM t WHERE a = 1 AND b = 2 OR c = 3")
     where = stmt.where

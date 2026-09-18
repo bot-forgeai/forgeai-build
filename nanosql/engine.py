@@ -1,6 +1,7 @@
 """Table storage and statement execution for nanosql."""
 
 import copy
+import re
 
 from .ast_nodes import AggCall, BoolOp, Cmp
 from .lexer import LexError
@@ -97,7 +98,22 @@ def _compare(op, actual, value):
         return actual > value
     if op == ">=":
         return actual >= value
+    if op == "LIKE":
+        return re.match(_like_to_regex(value), str(actual)) is not None
     raise NanosqlError(f"unknown operator {op!r}")
+
+
+def _like_to_regex(pattern):
+    """Translate a SQL LIKE pattern (% = any run, _ = one char) to a regex."""
+    parts = []
+    for ch in pattern:
+        if ch == "%":
+            parts.append(".*")
+        elif ch == "_":
+            parts.append(".")
+        else:
+            parts.append(re.escape(ch))
+    return "^" + "".join(parts) + "$"
 
 
 def _eval_where(expr, row):
