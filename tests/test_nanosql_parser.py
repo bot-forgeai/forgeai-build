@@ -2,6 +2,8 @@ import pytest
 
 from nanosql.ast_nodes import (
     AggCall,
+    AlterTableAddColumn,
+    AlterTableDropColumn,
     Begin,
     BoolOp,
     Cmp,
@@ -237,3 +239,41 @@ def test_parse_script_empty_string_returns_empty_list():
 def test_parse_script_raises_on_trailing_garbage_after_last_statement():
     with pytest.raises(ParseError):
         parse_script("SELECT * FROM t not_a_semicolon SELECT * FROM t")
+
+
+def test_parse_alter_table_add_column():
+    stmt = parse("ALTER TABLE users ADD COLUMN email TEXT")
+    assert isinstance(stmt, AlterTableAddColumn)
+    assert stmt.table == "users"
+    assert stmt.column == "email"
+    assert stmt.col_type == "TEXT"
+
+
+def test_parse_alter_table_add_column_without_column_keyword():
+    stmt = parse("ALTER TABLE users ADD age INT")
+    assert isinstance(stmt, AlterTableAddColumn)
+    assert stmt.column == "age"
+    assert stmt.col_type == "INT"
+
+
+def test_parse_alter_table_add_column_unknown_type_raises():
+    with pytest.raises(ParseError):
+        parse("ALTER TABLE users ADD COLUMN email VARCHAR")
+
+
+def test_parse_alter_table_drop_column():
+    stmt = parse("ALTER TABLE users DROP COLUMN email")
+    assert isinstance(stmt, AlterTableDropColumn)
+    assert stmt.table == "users"
+    assert stmt.column == "email"
+
+
+def test_parse_alter_table_drop_column_without_column_keyword():
+    stmt = parse("ALTER TABLE users DROP email")
+    assert isinstance(stmt, AlterTableDropColumn)
+    assert stmt.column == "email"
+
+
+def test_parse_alter_table_missing_add_or_drop_raises():
+    with pytest.raises(ParseError):
+        parse("ALTER TABLE users RENAME email")

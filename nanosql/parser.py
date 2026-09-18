@@ -2,6 +2,8 @@
 
 from .ast_nodes import (
     AggCall,
+    AlterTableAddColumn,
+    AlterTableDropColumn,
     Begin,
     BoolOp,
     Commit,
@@ -56,6 +58,8 @@ class Parser:
             if next_tok.kind == "KEYWORD" and next_tok.value == "INDEX":
                 return self.parse_create_index()
             return self.parse_create_table()
+        if self.at_keyword("ALTER"):
+            return self.parse_alter_table()
         if self.at_keyword("INSERT"):
             return self.parse_insert()
         if self.at_keyword("SELECT"):
@@ -127,6 +131,28 @@ class Parser:
             break
         self.expect("PUNCT", ")")
         return CreateTable(table, columns)
+
+    def parse_alter_table(self):
+        self.expect("KEYWORD", "ALTER")
+        self.expect("KEYWORD", "TABLE")
+        table = self.parse_ident()
+        if self.at_keyword("ADD"):
+            self.advance()
+            if self.at_keyword("COLUMN"):
+                self.advance()
+            name = self.parse_ident()
+            type_tok = self.expect("KEYWORD")
+            if type_tok.value not in ("INT", "REAL", "TEXT"):
+                raise ParseError(f"unknown column type {type_tok.value!r}")
+            return AlterTableAddColumn(table, name, type_tok.value)
+        if self.at_keyword("DROP"):
+            self.advance()
+            if self.at_keyword("COLUMN"):
+                self.advance()
+            name = self.parse_ident()
+            return AlterTableDropColumn(table, name)
+        tok = self.peek()
+        raise ParseError(f"expected ADD or DROP after ALTER TABLE, got {tok.kind} {tok.value!r}")
 
     def parse_create_index(self):
         self.expect("KEYWORD", "CREATE")

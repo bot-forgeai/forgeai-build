@@ -533,3 +533,76 @@ def test_execute_script_stops_at_first_error_without_running_rest():
         db.execute_script("INSERT INTO t VALUES (1); SELECT * FROM nope; INSERT INTO t VALUES (2);")
     # first statement's effect is still in memory even though the script failed
     assert len(db.execute("SELECT * FROM t")["rows"]) == 1
+
+
+def test_alter_table_add_column_defaults_existing_rows_to_null():
+    db = make_users_db()
+    db.execute("ALTER TABLE users ADD COLUMN email TEXT")
+    rows = db.execute("SELECT * FROM users")["rows"]
+    assert rows[0]["email"] is None
+    assert rows == [
+        {"id": 1, "name": "Ada", "age": 36, "email": None},
+        {"id": 2, "name": "Bea", "age": 24, "email": None},
+        {"id": 3, "name": "Cid", "age": 42, "email": None},
+    ]
+
+
+def test_alter_table_add_column_usable_afterward():
+    db = make_users_db()
+    db.execute("ALTER TABLE users ADD COLUMN email TEXT")
+    db.execute("UPDATE users SET email = 'ada@example.com' WHERE id = 1")
+    row = db.execute("SELECT email FROM users WHERE id = 1")["rows"][0]
+    assert row["email"] == "ada@example.com"
+    db.execute("INSERT INTO users (id, name, age, email) VALUES (4, 'Dee', 30, 'dee@example.com')")
+    assert len(db.execute("SELECT * FROM users")["rows"]) == 4
+
+
+def test_alter_table_add_duplicate_column_raises():
+    db = make_users_db()
+    with pytest.raises(NanosqlError):
+        db.execute("ALTER TABLE users ADD COLUMN name TEXT")
+
+
+def test_alter_table_add_column_unknown_table_raises():
+    db = make_users_db()
+    with pytest.raises(NanosqlError):
+        db.execute("ALTER TABLE nope ADD COLUMN x INT")
+
+
+def test_alter_table_drop_column_removes_from_rows():
+    db = make_users_db()
+    db.execute("ALTER TABLE users DROP COLUMN age")
+    rows = db.execute("SELECT * FROM users")["rows"]
+    assert rows[0] == {"id": 1, "name": "Ada"}
+    assert "age" not in rows[0]
+
+
+def test_alter_table_drop_unknown_column_raises():
+    db = make_users_db()
+    with pytest.raises(NanosqlError):
+        db.execute("ALTER TABLE users DROP COLUMN nope")
+
+
+def test_alter_table_drop_column_referencing_it_afterward_raises():
+    db = make_users_db()
+    db.execute("ALTER TABLE users DROP COLUMN age")
+    with pytest.raises(NanosqlError):
+        db.execute("SELECT age FROM users")
+
+
+def test_alter_table_drop_indexed_column_removes_index():
+    db = make_users_db()
+    db.execute("CREATE INDEX idx_age ON users (age)")
+    db.execute("ALTER TABLE users DROP COLUMN age")
+    table = db.tables["users"]
+    assert "age" not in table.indexed_columns
+    assert "age" not in table.indexes
+
+
+def test_alter_table_add_column_persists_through_to_dict_round_trip():
+    db = make_users_db()
+    db.execute("ALTER TABLE users ADD COLUMN email TEXT")
+    db.execute("UPDATE users SET email = 'ada@example.com' WHERE id = 1")
+    restored = Database.from_dict(db.to_dict())
+    rows = restored.execute("SELECT * FROM users WHERE id = 1")["rows"]
+    assert rows[0]["email"] == "ada@example.com"
