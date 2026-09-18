@@ -7,25 +7,11 @@ import sys
 from . import commit as commit_mod
 from . import merge as merge_mod
 from . import objects as objects_mod
+from . import remote as remote_mod
 from . import repo as repo_mod
 from . import tree as tree_mod
 from . import worktree as worktree_mod
 from .index import read_index, write_index
-
-
-def _write_tree_to_worktree(root, rdir, target_tree):
-    """Make the working tree match `target_tree` exactly: write every
-    blob in it, and remove any tracked-eligible file not in it.
-    """
-    current_files = set(worktree_mod.list_working_files(root))
-    for path in current_files - set(target_tree.keys()):
-        os.remove(os.path.join(root, path))
-    for path, blob_sha in target_tree.items():
-        _, data = objects_mod.read_object(rdir, blob_sha)
-        abs_path = os.path.join(root, path)
-        os.makedirs(os.path.dirname(abs_path) or ".", exist_ok=True)
-        with open(abs_path, "wb") as f:
-            f.write(data)
 
 
 def cmd_init(args):
@@ -242,7 +228,7 @@ def cmd_checkout(args):
         return 1
 
     target_tree = tree_mod.read_tree(rdir, c["tree"])
-    _write_tree_to_worktree(root, rdir, target_tree)
+    worktree_mod.write_tree_to_worktree(root, rdir, target_tree)
     write_index(root, dict(target_tree))
 
     if branch_name is not None:
@@ -277,6 +263,29 @@ def cmd_diff(args):
     return 0
 
 
+def _print_merge_result(result: dict, label: str, current_branch: str | None = None) -> int:
+    status = result["status"]
+    if status == "up_to_date":
+        print("already up to date")
+        return 0
+    if status == "fast_forward":
+        target = current_branch or "HEAD"
+        print(f"fast-forwarded {target} to {result['sha'][:8]}")
+        return 0
+    if status == "conflict":
+        print(f"conflict: {len(result['conflicts'])} file(s) need manual resolution:")
+        for p in result["conflicts"]:
+            print(f"  {p}")
+        print("resolve, then `vcslite add` and `vcslite commit`")
+        return 1
+    if status == "merged":
+        into = f" into {current_branch}" if current_branch else ""
+        print(f"merged {label}{into} at {result['sha'][:8]}")
+        return 0
+    print(f"error: {result['message']}", file=sys.stderr)
+    return 1
+
+
 def cmd_merge(args):
     root = repo_mod.find_repo_root(".")
     rdir = repo_mod.repo_dir(root)
@@ -288,7 +297,7 @@ def cmd_merge(args):
         head_sha = repo_mod.current_commit(root)
         c = commit_mod.read_commit(rdir, head_sha)
         target_tree = tree_mod.read_tree(rdir, c["tree"])
-        _write_tree_to_worktree(root, rdir, target_tree)
+        worktree_mod.write_tree_to_worktree(root, rdir, target_tree)
         write_index(root, dict(target_tree))
         repo_mod.clear_merge_head(root)
         repo_mod.clear_merge_conflicts(root)
@@ -304,16 +313,6 @@ def cmd_merge(args):
               file=sys.stderr)
         return 1
 
-    current_branch = repo_mod.current_branch(root)
-    if current_branch is None:
-        print("error: cannot merge while HEAD is detached", file=sys.stderr)
-        return 1
-
-    ours_sha = repo_mod.current_commit(root)
-    if ours_sha is None:
-        print("error: cannot merge before the first commit", file=sys.stderr)
-        return 1
-
     if repo_mod.branch_exists(root, args.branch):
         theirs_sha = repo_mod.read_ref(root, f"refs/heads/{args.branch}")
         if theirs_sha is None:
@@ -326,65 +325,72 @@ def cmd_merge(args):
             print(f"error: {e}", file=sys.stderr)
             return 1
 
-    if theirs_sha == ours_sha:
-        print("already up to date")
-        return 0
+    current_branch = repo_mod.current_branch(root)
+    result = merge_mod.execute_merge(root, theirs_sha, args.branch)
+    return _print_merge_result(result, args.branch, current_branch)
 
-    base_sha = merge_mod.merge_base(rdir, ours_sha, theirs_sha)
 
-    if base_sha == theirs_sha:
-        print("already up to date")
-        return 0
-
-    if base_sha == ours_sha:
-        c = commit_mod.read_commit(rdir, theirs_sha)
-        target_tree = tree_mod.read_tree(rdir, c["tree"])
-        _write_tree_to_worktree(root, rdir, target_tree)
-        write_index(root, dict(target_tree))
-        repo_mod.write_ref(root, f"refs/heads/{current_branch}", theirs_sha)
-        print(f"fast-forwarded {current_branch} to {theirs_sha[:8]}")
-        return 0
-
-    base_tree = (tree_mod.read_tree(rdir, commit_mod.read_commit(rdir, base_sha)["tree"])
-                 if base_sha else {})
-    ours_tree = tree_mod.read_tree(rdir, commit_mod.read_commit(rdir, ours_sha)["tree"])
-    theirs_tree = tree_mod.read_tree(rdir, commit_mod.read_commit(rdir, theirs_sha)["tree"])
-
-    merged, conflicts = merge_mod.merge_trees(base_tree, ours_tree, theirs_tree)
-
-    worktree_content = {path: objects_mod.read_object(rdir, sha)[1]
-                         for path, sha in merged.items()}
-    for path in conflicts:
-        worktree_content[path] = merge_mod.conflict_markers(
-            rdir, ours_tree.get(path), theirs_tree.get(path), args.branch
-        )
-
-    current_files = set(worktree_mod.list_working_files(root))
-    for path in current_files - set(worktree_content.keys()):
-        os.remove(os.path.join(root, path))
-    for path, data in worktree_content.items():
-        abs_path = os.path.join(root, path)
-        os.makedirs(os.path.dirname(abs_path) or ".", exist_ok=True)
-        with open(abs_path, "wb") as f:
-            f.write(data)
-
-    write_index(root, dict(merged))
-
-    if conflicts:
-        repo_mod.set_merge_head(root, theirs_sha)
-        repo_mod.set_merge_conflicts(root, conflicts)
-        print(f"conflict: {len(conflicts)} file(s) need manual resolution:")
-        for p in conflicts:
-            print(f"  {p}")
-        print("resolve, then `vcslite add` and `vcslite commit`")
+def cmd_clone(args):
+    try:
+        dest_root = remote_mod.clone(args.src, args.dest)
+    except (FileNotFoundError, FileExistsError) as e:
+        print(f"error: {e}", file=sys.stderr)
         return 1
-
-    sha = commit_mod.write_commit(rdir, tree_mod.write_tree(rdir, merged),
-                                   [ours_sha, theirs_sha],
-                                   f"merge {args.branch} into {current_branch}")
-    repo_mod.write_ref(root, f"refs/heads/{current_branch}", sha)
-    print(f"merged {args.branch} into {current_branch} at {sha[:8]}")
+    print(f"cloned into {dest_root}")
     return 0
+
+
+def cmd_remote(args):
+    root = repo_mod.find_repo_root(".")
+    if args.remote_command == "add":
+        remote_mod.add_remote(root, args.name, args.path)
+        print(f"added remote '{args.name}' -> {os.path.abspath(args.path)}")
+        return 0
+    remotes = remote_mod.read_remotes(root)
+    for name, path in sorted(remotes.items()):
+        print(f"{name}\t{path}")
+    return 0
+
+
+def cmd_push(args):
+    root = repo_mod.find_repo_root(".")
+    branch = args.branch or repo_mod.current_branch(root)
+    if branch is None:
+        print("error: cannot push from a detached HEAD without naming a branch",
+              file=sys.stderr)
+        return 1
+    try:
+        result = remote_mod.push(root, args.remote, branch)
+    except (KeyError, ValueError, FileNotFoundError) as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    print(f"pushed {branch} to {args.remote} "
+          f"({result['objects_sent']} object(s) sent), now at {result['sha'][:8]}")
+    return 0
+
+
+def cmd_fetch(args):
+    root = repo_mod.find_repo_root(".")
+    try:
+        result = remote_mod.fetch(root, args.remote)
+    except (KeyError, FileNotFoundError) as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    for branch, sha in sorted(result["branches"].items()):
+        print(f"  {args.remote}/{branch} -> {sha[:8]}")
+    print(f"fetched {result['objects_received']} object(s)")
+    return 0
+
+
+def cmd_pull(args):
+    root = repo_mod.find_repo_root(".")
+    current_branch = repo_mod.current_branch(root)
+    try:
+        result = remote_mod.pull(root, args.remote, args.branch)
+    except (KeyError, ValueError, FileNotFoundError) as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    return _print_merge_result(result, f"{args.remote}/{args.branch}", current_branch)
 
 
 def build_parser():
@@ -432,6 +438,33 @@ def build_parser():
     p_merge.add_argument("--abort", action="store_true",
                           help="abandon an in-progress conflicted merge")
     p_merge.set_defaults(func=cmd_merge)
+
+    p_clone = sub.add_parser("clone", help="clone a repository into a new directory")
+    p_clone.add_argument("src")
+    p_clone.add_argument("dest")
+    p_clone.set_defaults(func=cmd_clone)
+
+    p_remote = sub.add_parser("remote", help="list or add remotes (paths to other vcslite repos)")
+    remote_sub = p_remote.add_subparsers(dest="remote_command")
+    p_remote_add = remote_sub.add_parser("add", help="register a remote")
+    p_remote_add.add_argument("name")
+    p_remote_add.add_argument("path")
+    p_remote.set_defaults(func=cmd_remote)
+
+    p_push = sub.add_parser("push", help="push a branch's commits to a remote")
+    p_push.add_argument("remote")
+    p_push.add_argument("branch", nargs="?", default=None,
+                         help="defaults to the current branch")
+    p_push.set_defaults(func=cmd_push)
+
+    p_fetch = sub.add_parser("fetch", help="fetch a remote's branches without merging")
+    p_fetch.add_argument("remote")
+    p_fetch.set_defaults(func=cmd_fetch)
+
+    p_pull = sub.add_parser("pull", help="fetch a remote branch and merge it into the current one")
+    p_pull.add_argument("remote")
+    p_pull.add_argument("branch")
+    p_pull.set_defaults(func=cmd_pull)
 
     return parser
 
