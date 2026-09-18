@@ -16,6 +16,7 @@ class Service:
     autorestart: bool = True
     max_restarts: int = 5
     env: dict = field(default_factory=dict)
+    restart_delay: float = 0.0
 
 
 def load_config(path: str) -> List[Service]:
@@ -48,6 +49,9 @@ def load_config(path: str) -> List[Service]:
         seen.add(name)
         if not command or not isinstance(command, list) or not all(isinstance(c, str) for c in command):
             raise ConfigError(f"service '{name}' missing a non-empty 'command' list of strings")
+        restart_delay = entry.get("restart_delay", 0.0)
+        if not isinstance(restart_delay, (int, float)) or restart_delay < 0:
+            raise ConfigError(f"service '{name}' has invalid 'restart_delay' (must be a non-negative number)")
         result.append(Service(
             name=name,
             command=command,
@@ -55,5 +59,6 @@ def load_config(path: str) -> List[Service]:
             autorestart=entry.get("autorestart", True),
             max_restarts=entry.get("max_restarts", 5),
             env=entry.get("env", {}),
+            restart_delay=restart_delay,
         ))
     return result

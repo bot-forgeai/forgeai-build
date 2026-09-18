@@ -834,7 +834,22 @@ crashed service stopped immediately. Each service's stdout/stderr are
 captured to `<log-dir>/<name>.log`. `Ctrl+C`/`SIGTERM` triggers a
 graceful shutdown: every child is sent `SIGTERM`, then `SIGKILL` after
 a timeout if it hasn't exited. `--status` writes a JSON snapshot
-(name, running, pid, restart count, last exit code) after every poll
-tick and on shutdown, so `procman status <file>` — or any other
-process — can check on things without talking to the supervisor
-directly.
+(name, running, pid, restart count, last exit code, whether a restart
+is pending) after every poll tick and on shutdown, so `procman status
+<file>` — or any other process — can check on things without talking
+to the supervisor directly.
+
+A service that crashes immediately on every start (a bad command, a
+missing dependency) would otherwise be respawned every poll tick,
+burning CPU on a tight crash loop. Set `restart_delay` (seconds,
+default `0` — respawn immediately, the old behavior) on a service to
+wait that long before the first restart, doubling on each further
+consecutive crash and capped at 60 seconds:
+
+```json
+{"name": "flaky", "command": ["python3", "flaky.py"], "restart_delay": 2.0}
+```
+
+A service waiting out its backoff shows `"running": false,
+"restart_pending": true` in the status file until the delay elapses
+and it respawns.

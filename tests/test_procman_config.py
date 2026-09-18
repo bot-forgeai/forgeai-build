@@ -27,6 +27,38 @@ def test_load_valid_config(tmp_path):
     assert services[1].max_restarts == 2
 
 
+def test_restart_delay_defaults_to_zero(tmp_path):
+    path = write_config(tmp_path, {
+        "services": [{"name": "a", "command": ["sleep", "1"]}]
+    })
+    services = load_config(path)
+    assert services[0].restart_delay == 0.0
+
+
+def test_restart_delay_loaded(tmp_path):
+    path = write_config(tmp_path, {
+        "services": [{"name": "a", "command": ["sleep", "1"], "restart_delay": 2.5}]
+    })
+    services = load_config(path)
+    assert services[0].restart_delay == 2.5
+
+
+def test_negative_restart_delay_rejected(tmp_path):
+    path = write_config(tmp_path, {
+        "services": [{"name": "a", "command": ["sleep", "1"], "restart_delay": -1}]
+    })
+    with pytest.raises(ConfigError):
+        load_config(path)
+
+
+def test_non_numeric_restart_delay_rejected(tmp_path):
+    path = write_config(tmp_path, {
+        "services": [{"name": "a", "command": ["sleep", "1"], "restart_delay": "soon"}]
+    })
+    with pytest.raises(ConfigError):
+        load_config(path)
+
+
 def test_missing_file():
     with pytest.raises(ConfigError, match="not found"):
         load_config("/nonexistent/procman.json")
