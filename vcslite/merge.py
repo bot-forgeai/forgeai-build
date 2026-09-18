@@ -5,10 +5,15 @@ target; otherwise merges the two trees path-by-path against their
 common ancestor, and falls back to git-style conflict markers in the
 working tree for any path both sides changed differently.
 """
+import os
 from collections import deque
 
 from . import commit as commit_mod
 from . import objects as objects_mod
+from . import repo as repo_mod
+from . import tree as tree_mod
+from . import worktree as worktree_mod
+from .index import write_index
 
 
 def ancestors(repo_dir: str, sha: str | None) -> set[str]:
@@ -89,3 +94,78 @@ def conflict_markers(repo_dir: str, ours_sha: str | None, theirs_sha: str | None
 
     body = f"<<<<<<< HEAD\n{text(ours_sha)}=======\n{text(theirs_sha)}>>>>>>> {branch_label}\n"
     return body.encode()
+
+
+def execute_merge(root: str, theirs_sha: str, label: str) -> dict:
+    """Merge `theirs_sha` into the current branch's HEAD, mutating repo
+    state (refs, working tree, index, MERGE_HEAD) as a side effect.
+
+    Shared by the `merge` CLI command and `pull` (fetch + merge), so
+    both go through one implementation. Returns a dict describing the
+    outcome:
+      {"status": "up_to_date"}
+      {"status": "fast_forward", "sha": sha}
+      {"status": "conflict", "conflicts": [...]}
+      {"status": "merged", "sha": sha}
+      {"status": "error", "message": ...}
+    """
+    rdir = repo_mod.repo_dir(root)
+    current_branch = repo_mod.current_branch(root)
+    if current_branch is None:
+        return {"status": "error", "message": "cannot merge while HEAD is detached"}
+
+    ours_sha = repo_mod.current_commit(root)
+    if ours_sha is None:
+        return {"status": "error", "message": "cannot merge before the first commit"}
+
+    if theirs_sha == ours_sha:
+        return {"status": "up_to_date"}
+
+    base_sha = merge_base(rdir, ours_sha, theirs_sha)
+
+    if base_sha == theirs_sha:
+        return {"status": "up_to_date"}
+
+    if base_sha == ours_sha:
+        c = commit_mod.read_commit(rdir, theirs_sha)
+        target_tree = tree_mod.read_tree(rdir, c["tree"])
+        worktree_mod.write_tree_to_worktree(root, rdir, target_tree)
+        write_index(root, dict(target_tree))
+        repo_mod.write_ref(root, f"refs/heads/{current_branch}", theirs_sha)
+        return {"status": "fast_forward", "sha": theirs_sha}
+
+    base_tree = (tree_mod.read_tree(rdir, commit_mod.read_commit(rdir, base_sha)["tree"])
+                 if base_sha else {})
+    ours_tree = tree_mod.read_tree(rdir, commit_mod.read_commit(rdir, ours_sha)["tree"])
+    theirs_tree = tree_mod.read_tree(rdir, commit_mod.read_commit(rdir, theirs_sha)["tree"])
+
+    merged, conflicts = merge_trees(base_tree, ours_tree, theirs_tree)
+
+    worktree_content = {path: objects_mod.read_object(rdir, sha)[1]
+                         for path, sha in merged.items()}
+    for path in conflicts:
+        worktree_content[path] = conflict_markers(
+            rdir, ours_tree.get(path), theirs_tree.get(path), label
+        )
+
+    current_files = set(worktree_mod.list_working_files(root))
+    for path in current_files - set(worktree_content.keys()):
+        os.remove(os.path.join(root, path))
+    for path, data in worktree_content.items():
+        abs_path = os.path.join(root, path)
+        os.makedirs(os.path.dirname(abs_path) or ".", exist_ok=True)
+        with open(abs_path, "wb") as f:
+            f.write(data)
+
+    write_index(root, dict(merged))
+
+    if conflicts:
+        repo_mod.set_merge_head(root, theirs_sha)
+        repo_mod.set_merge_conflicts(root, conflicts)
+        return {"status": "conflict", "conflicts": conflicts}
+
+    sha = commit_mod.write_commit(rdir, tree_mod.write_tree(rdir, merged),
+                                   [ours_sha, theirs_sha],
+                                   f"merge {label} into {current_branch}")
+    repo_mod.write_ref(root, f"refs/heads/{current_branch}", sha)
+    return {"status": "merged", "sha": sha}

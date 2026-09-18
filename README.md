@@ -589,6 +589,26 @@ two parents (`log` marks these `(merge: ..., ...)`). `merge --abort`
 throws away an unresolved merge and restores the working tree to
 where it was before `merge` ran.
 
+`clone SRC DEST` copies every branch's objects from the repo at `SRC`
+into a brand-new repo at `DEST`, checks out `SRC`'s current branch
+there, and registers `SRC` as a remote named `origin` — no networking
+involved, a "remote" is just another vcslite repo's path on the local
+filesystem (or anywhere reachable through it). `remote add NAME PATH`
+registers additional remotes; a bare `remote` lists them. `push REMOTE
+[BRANCH]` (defaults to the current branch) copies missing objects over
+to the remote and moves its ref there, but is fast-forward-only —
+rejected if the remote's current tip for that branch isn't an ancestor
+of the local one, the same guard rail git's own non-force push uses.
+Like pushing into a non-bare git repo, push never touches the remote's
+own working tree or index — its next `checkout`/`status` there will
+see the moved ref immediately, but its files only catch up once it
+checks out again. `fetch REMOTE` copies every branch's missing objects
+in the other direction and records them under `refs/remotes/<name>/
+<branch>` without touching the current branch or working tree; `pull
+REMOTE BRANCH` is `fetch` followed by `merge`-ing that remote-tracking
+ref into the current branch (fast-forwarding when possible, doing a
+real 3-way merge — conflict markers and all — otherwise).
+
 ## chesslite
 
 A small chess engine — full legal move generation (castling, en

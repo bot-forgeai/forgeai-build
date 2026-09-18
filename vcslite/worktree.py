@@ -8,6 +8,21 @@ from . import repo as repo_mod
 from . import tree as tree_mod
 from .index import read_index
 
+
+def write_tree_to_worktree(root: str, rdir: str, target_tree: dict) -> None:
+    """Make the working tree match `target_tree` exactly: write every
+    blob in it, and remove any tracked-eligible file not in it.
+    """
+    current_files = set(list_working_files(root))
+    for path in current_files - set(target_tree.keys()):
+        os.remove(os.path.join(root, path))
+    for path, blob_sha in target_tree.items():
+        _, data = objects_mod.read_object(rdir, blob_sha)
+        abs_path = os.path.join(root, path)
+        os.makedirs(os.path.dirname(abs_path) or ".", exist_ok=True)
+        with open(abs_path, "wb") as f:
+            f.write(data)
+
 IGNORED_DIRS = {repo_mod.REPO_DIR_NAME, ".git", "__pycache__"}
 IGNORE_FILE_NAME = ".vcsliteignore"
 
