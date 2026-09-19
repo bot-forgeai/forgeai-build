@@ -61,7 +61,8 @@ def cmd_validate(args):
         return 1
     print(f"ok: {len(services)} service(s) defined")
     for s in services:
-        print(f"  - {s.name}: {' '.join(s.command)}")
+        deps = f" (depends_on: {', '.join(s.depends_on)})" if s.depends_on else ""
+        print(f"  - {s.name}: {' '.join(s.command)}{deps}")
     return 0
 
 

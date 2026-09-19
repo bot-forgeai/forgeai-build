@@ -853,3 +853,34 @@ consecutive crash and capped at 60 seconds:
 A service waiting out its backoff shows `"running": false,
 "restart_pending": true` in the status file until the delay elapses
 and it respawns.
+
+Services can declare startup dependencies via `depends_on` (a list of
+other service names in the same config):
+
+```json
+{
+  "services": [
+    {"name": "db", "command": ["python3", "db.py"]},
+    {"name": "cache", "command": ["python3", "cache.py"], "depends_on": ["db"]},
+    {"name": "web", "command": ["python3", "server.py"], "depends_on": ["db", "cache"]}
+  ]
+}
+```
+
+`procman` resolves a dependency-respecting start order (a topological
+sort) regardless of the order services are listed in the config, and
+spawns every service in that order — a service is never spawned before
+everything it `depends_on`. Shutdown reverses that order, so a
+dependency isn't torn down while something depending on it is still
+running. `depends_on` entries can reference services defined later in
+the file (forward references are fine); an unknown service name or a
+circular dependency (`a` depends on `b` depends on `a`) is rejected at
+load time with a clean error from both `procman run` and `procman
+validate`, before anything is spawned. `procman validate` also prints
+each service's `depends_on` list, if any.
+
+Note that `procman` has no readiness/health-check protocol — a
+dependency is only guaranteed to be *spawned* before its dependents,
+not confirmed up and accepting connections. A service that needs to
+wait for a dependency to actually be ready should still retry its own
+connection on startup.

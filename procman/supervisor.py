@@ -8,7 +8,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
-from procman.config import Service
+from procman.config import Service, topological_order
 
 MAX_RESTART_DELAY = 60.0
 
@@ -42,6 +42,9 @@ class Supervisor:
         self.status_path = status_path
         self._time_fn = time_fn
         self.states: Dict[str, ProcState] = {s.name: ProcState(service=s) for s in services}
+        # Raises here too (redundant with load_config, but Supervisor can
+        # be built directly from a hand-constructed service list in tests).
+        self.start_order: List[Service] = topological_order(services)
         os.makedirs(log_dir, exist_ok=True)
 
     def _backoff_delay(self, state: ProcState) -> float:
@@ -72,8 +75,11 @@ class Supervisor:
         state.stopped = False
 
     def start_all(self):
-        for state in self.states.values():
-            self._spawn(state)
+        """Spawn every service in dependency order, so a service whose
+        command assumes a dependency is already up (e.g. a client
+        connecting to a local server it depends on) doesn't race it."""
+        for svc in self.start_order:
+            self._spawn(self.states[svc.name])
 
     def poll_once(self):
         """Check every process once; restart any that crashed and are
@@ -110,12 +116,18 @@ class Supervisor:
         return restarted
 
     def stop_all(self, timeout: float = 5.0):
-        for state in self.states.values():
+        """Stop every service in reverse dependency order, so a
+        dependency isn't torn down while something depending on it is
+        still running (e.g. a client losing its server mid-shutdown)."""
+        reverse_order = list(reversed(self.start_order))
+        for svc in reverse_order:
+            state = self.states[svc.name]
             state.stopped = True
             if state.proc is not None and state.proc.poll() is None:
                 state.proc.terminate()
         deadline = time.time() + timeout
-        for state in self.states.values():
+        for svc in reverse_order:
+            state = self.states[svc.name]
             if state.proc is None:
                 continue
             remaining = max(0.0, deadline - time.time())
