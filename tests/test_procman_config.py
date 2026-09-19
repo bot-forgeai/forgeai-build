@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from procman.config import ConfigError, load_config
+from procman.config import ConfigError, Service, load_config, topological_order
 
 
 def write_config(tmp_path, data):
@@ -115,3 +115,90 @@ def test_env_and_cwd(tmp_path):
     services = load_config(path)
     assert services[0].cwd == "/tmp"
     assert services[0].env == {"X": "1"}
+
+
+def test_depends_on_defaults_to_empty(tmp_path):
+    path = write_config(tmp_path, {
+        "services": [{"name": "a", "command": ["sleep", "1"]}]
+    })
+    services = load_config(path)
+    assert services[0].depends_on == []
+
+
+def test_depends_on_loaded_and_forward_reference_allowed(tmp_path):
+    path = write_config(tmp_path, {
+        "services": [
+            {"name": "web", "command": ["sleep", "1"], "depends_on": ["db"]},
+            {"name": "db", "command": ["sleep", "1"]},
+        ]
+    })
+    services = load_config(path)
+    web = next(s for s in services if s.name == "web")
+    assert web.depends_on == ["db"]
+
+
+def test_depends_on_invalid_type(tmp_path):
+    path = write_config(tmp_path, {
+        "services": [{"name": "a", "command": ["sleep", "1"], "depends_on": "db"}]
+    })
+    with pytest.raises(ConfigError, match="depends_on"):
+        load_config(path)
+
+
+def test_depends_on_unknown_service(tmp_path):
+    path = write_config(tmp_path, {
+        "services": [{"name": "a", "command": ["sleep", "1"], "depends_on": ["ghost"]}]
+    })
+    with pytest.raises(ConfigError, match="unknown service"):
+        load_config(path)
+
+
+def test_depends_on_self(tmp_path):
+    path = write_config(tmp_path, {
+        "services": [{"name": "a", "command": ["sleep", "1"], "depends_on": ["a"]}]
+    })
+    with pytest.raises(ConfigError, match="cannot depend on itself"):
+        load_config(path)
+
+
+def test_depends_on_direct_cycle(tmp_path):
+    path = write_config(tmp_path, {
+        "services": [
+            {"name": "a", "command": ["sleep", "1"], "depends_on": ["b"]},
+            {"name": "b", "command": ["sleep", "1"], "depends_on": ["a"]},
+        ]
+    })
+    with pytest.raises(ConfigError, match="circular dependency"):
+        load_config(path)
+
+
+def test_depends_on_longer_cycle(tmp_path):
+    path = write_config(tmp_path, {
+        "services": [
+            {"name": "a", "command": ["sleep", "1"], "depends_on": ["b"]},
+            {"name": "b", "command": ["sleep", "1"], "depends_on": ["c"]},
+            {"name": "c", "command": ["sleep", "1"], "depends_on": ["a"]},
+        ]
+    })
+    with pytest.raises(ConfigError, match="circular dependency"):
+        load_config(path)
+
+
+def test_topological_order_diamond():
+    a = Service(name="a", command=["x"])
+    b = Service(name="b", command=["x"], depends_on=["a"])
+    c = Service(name="c", command=["x"], depends_on=["a"])
+    d = Service(name="d", command=["x"], depends_on=["b", "c"])
+    order = topological_order([d, c, b, a])
+    names = [s.name for s in order]
+    assert names.index("a") < names.index("b")
+    assert names.index("a") < names.index("c")
+    assert names.index("b") < names.index("d")
+    assert names.index("c") < names.index("d")
+
+
+def test_topological_order_no_deps_preserves_list():
+    a = Service(name="a", command=["x"])
+    b = Service(name="b", command=["x"])
+    order = topological_order([a, b])
+    assert [s.name for s in order] == ["a", "b"]

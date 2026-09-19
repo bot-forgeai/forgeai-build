@@ -236,3 +236,63 @@ def test_log_output_captured(tmp_path):
         sup.stop_all()
     log_content = (log_dir / "a.log").read_text()
     assert "hello from a" in log_content
+
+
+def test_start_order_follows_dependencies(tmp_path):
+    # Declared out of dependency order on purpose: d depends on b/c,
+    # b/c depend on a. start_all must still spawn a first.
+    services = [
+        Service(name="d", command=sleep_cmd(5), depends_on=["b", "c"]),
+        Service(name="b", command=sleep_cmd(5), depends_on=["a"]),
+        Service(name="c", command=sleep_cmd(5), depends_on=["a"]),
+        Service(name="a", command=sleep_cmd(5)),
+    ]
+    sup = Supervisor(services, log_dir=str(tmp_path / "logs"))
+    spawn_order = []
+    orig_spawn = sup._spawn
+
+    def tracking_spawn(state):
+        spawn_order.append(state.service.name)
+        orig_spawn(state)
+
+    sup._spawn = tracking_spawn
+    sup.start_all()
+    try:
+        assert spawn_order.index("a") < spawn_order.index("b")
+        assert spawn_order.index("a") < spawn_order.index("c")
+        assert spawn_order.index("b") < spawn_order.index("d")
+        assert spawn_order.index("c") < spawn_order.index("d")
+    finally:
+        sup.stop_all()
+
+
+def test_stop_order_is_reverse_of_start_order(tmp_path):
+    services = [
+        Service(name="a", command=sleep_cmd(5)),
+        Service(name="b", command=sleep_cmd(5), depends_on=["a"]),
+    ]
+    sup = Supervisor(services, log_dir=str(tmp_path / "logs"))
+    sup.start_all()
+    terminate_order = []
+    for name in ("a", "b"):
+        state = sup.states[name]
+        orig_terminate = state.proc.terminate
+
+        def make_tracker(n, orig):
+            def tracker():
+                terminate_order.append(n)
+                orig()
+            return tracker
+
+        state.proc.terminate = make_tracker(name, orig_terminate)
+    sup.stop_all()
+    assert terminate_order == ["b", "a"]
+
+
+def test_start_order_attribute_matches_topological_order(tmp_path):
+    services = [
+        Service(name="b", command=sleep_cmd(1), depends_on=["a"]),
+        Service(name="a", command=sleep_cmd(1)),
+    ]
+    sup = Supervisor(services, log_dir=str(tmp_path / "logs"))
+    assert [s.name for s in sup.start_order] == ["a", "b"]
