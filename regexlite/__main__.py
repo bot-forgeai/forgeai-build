@@ -1,8 +1,16 @@
 import argparse
 import sys
+from importlib.metadata import version as _get_version, PackageNotFoundError
 
 from .matcher import Pattern
 from .parser import RegexSyntaxError
+
+
+def _get_package_version():
+    try:
+        return _get_version("eulerlib")
+    except PackageNotFoundError:
+        return "0.1.0"
 
 
 def cmd_match(args):
@@ -54,6 +62,7 @@ def cmd_grep(args):
 
 def build_parser():
     parser = argparse.ArgumentParser(prog="regexlite")
+    parser.add_argument("--version", action="version", version=_get_package_version())
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_match = sub.add_parser("match", help="match pattern against string, anchored at the start")
