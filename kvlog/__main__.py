@@ -4,6 +4,7 @@ import os
 import sys
 
 from .client import RemoteError, call
+from .replica import run_replica
 from .server import serve
 from .store import KVStore
 
@@ -116,6 +117,15 @@ def cmd_serve(args):
     serve(args.host, args.port, args.db, fsync=args.fsync)
 
 
+def cmd_replicate(args):
+    host, port = _parse_remote(args.leader)
+    print(f"kvlog replicating {args.db} from {args.leader} (poll every {args.poll_interval}s)")
+    try:
+        run_replica(args.db, host, port, poll_interval=args.poll_interval, fsync=args.fsync)
+    except KeyboardInterrupt:
+        pass
+
+
 def _log_size(path):
     return os.path.getsize(path) if os.path.exists(path) else 0
 
@@ -173,6 +183,15 @@ def build_parser():
     p_serve.add_argument("--host", default="127.0.0.1", help="bind address (default: 127.0.0.1; use 0.0.0.0 for LAN)")
     p_serve.add_argument("--port", type=int, default=9999, help="bind port (default: 9999)")
     p_serve.set_defaults(func=cmd_serve)
+
+    p_replicate = sub.add_parser(
+        "replicate", help="continuously pull writes from a leader 'kvlog serve' into --db"
+    )
+    p_replicate.add_argument("--leader", required=True, help="HOST:PORT of the leader to replicate from")
+    p_replicate.add_argument(
+        "--poll-interval", type=float, default=1.0, help="seconds between sync requests (default: 1.0)"
+    )
+    p_replicate.set_defaults(func=cmd_replicate)
 
     return parser
 

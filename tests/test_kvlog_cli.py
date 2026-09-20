@@ -1,6 +1,7 @@
 import subprocess
 import sys
 import threading
+import time
 
 from kvlog.server import KVServer
 
@@ -137,6 +138,54 @@ def test_remote_get_missing_key_errors_cleanly(tmp_path):
         assert result.returncode == 1
         assert "no such key" in result.stderr
     finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_replicate_picks_up_leader_writes(tmp_path):
+    leader_db = str(tmp_path / "leader.db")
+    replica_db = str(tmp_path / "replica.db")
+    server = KVServer(("127.0.0.1", 0), leader_db)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    host, port = server.server_address
+    proc = None
+    try:
+        server.store.put("a", "1")
+        proc = subprocess.Popen(
+            [
+                sys.executable, "-m", "kvlog", "--db", replica_db,
+                "replicate", "--leader", f"{host}:{port}", "--poll-interval", "0.1",
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        deadline = time.time() + 10
+        result = None
+        while time.time() < deadline:
+            result = run_cli(replica_db, "get", "a")
+            if result.returncode == 0:
+                break
+            time.sleep(0.1)
+        assert result is not None and result.returncode == 0
+        assert result.stdout.strip() == "1"
+
+        # A write after the replica started should also show up.
+        server.store.put("b", "2")
+        deadline = time.time() + 10
+        while time.time() < deadline:
+            result = run_cli(replica_db, "get", "b")
+            if result.returncode == 0:
+                break
+            time.sleep(0.1)
+        assert result.returncode == 0
+        assert result.stdout.strip() == "2"
+    finally:
+        if proc is not None:
+            proc.terminate()
+            proc.wait(timeout=5)
         server.shutdown()
         server.server_close()
         thread.join(timeout=5)

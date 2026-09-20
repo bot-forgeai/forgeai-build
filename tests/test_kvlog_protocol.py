@@ -53,6 +53,24 @@ def test_compact(tmp_path):
         assert response["after"] <= response["before"]
 
 
+def test_sync_default_since(tmp_path):
+    with KVStore(str(tmp_path / "db")) as store:
+        dispatch(store, {"op": "put", "key": "a", "value": "1"})
+        response = dispatch(store, {"op": "sync"})
+        assert response["ok"] is True
+        assert response["records"] == [{"op": "put", "key": "a", "value": "1"}]
+        assert response["offset"] == store.offset()
+
+
+def test_sync_since_cursor(tmp_path):
+    with KVStore(str(tmp_path / "db")) as store:
+        dispatch(store, {"op": "put", "key": "a", "value": "1"})
+        cursor = dispatch(store, {"op": "sync"})["offset"]
+        dispatch(store, {"op": "put", "key": "b", "value": "2"})
+        response = dispatch(store, {"op": "sync", "since": cursor})
+        assert response["records"] == [{"op": "put", "key": "b", "value": "2"}]
+
+
 def test_unknown_op(tmp_path):
     with KVStore(str(tmp_path / "db")) as store:
         response = dispatch(store, {"op": "bogus"})

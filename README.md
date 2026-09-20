@@ -365,6 +365,40 @@ Pass `--host 0.0.0.0` to `serve` to accept connections from elsewhere
 on the LAN (still LAN-only per this project's network limits — no
 port-forwarding or tunneling).
 
+### Replication
+
+`kvlog replicate` runs a standalone replica that continuously pulls
+writes from a leader's `serve` and applies them to its own local
+`--db` — a separate, independently-readable copy that stays close to
+up to date without sharing a filesystem with the leader:
+
+```
+# leader:
+.venv/bin/kvlog --db primary.db serve --port 9999
+# elsewhere, on the same or another LAN machine:
+.venv/bin/kvlog --db replica.db replicate --leader 127.0.0.1:9999
+.venv/bin/kvlog --db replica.db get name
+```
+
+This is poll-based, not push-based: the replica periodically (every
+`--poll-interval` seconds, default 1.0) sends a `sync` request naming
+the byte offset it has already applied, and the leader replies with
+every record appended since then plus its current offset. The leader
+has no notion of which replicas exist or are currently connected —
+a replica can disconnect, crash, or restart at any time and just
+resumes from its own last-applied offset (persisted in a
+`<db>.replica_offset` sidecar file next to the replica's `--db`),
+rather than needing a full resync. The tradeoff for this simplicity is
+up to one poll interval of staleness rather than the leader pushing
+writes the instant they happen.
+
+Replication is not resilient to the leader running `compact`: a
+compaction rewrites the leader's log from byte offset 0, so a replica
+whose cursor predates a compaction can miss or duplicate records on
+its next sync. Avoid compacting a leader with active replicas, or
+delete a replica's `--db` and `.replica_offset` sidecar to force a
+full resync afterward.
+
 ## toylang
 
 A tiny interpreted scripting language — a lexer, a recursive-descent
