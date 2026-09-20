@@ -72,6 +72,32 @@ class KVStore:
     def __contains__(self, key):
         return key in self._data
 
+    def offset(self):
+        """Current size of the log file in bytes — a cursor a replica can
+        later pass back to records_since() to resume from exactly here."""
+        self._file.flush()
+        return os.path.getsize(self.path) if os.path.exists(self.path) else 0
+
+    def records_since(self, offset):
+        """Return (records, new_offset): every record appended after byte
+        position `offset` in the log file, as a list of
+        {"op", "key", "value"} dicts, plus the file's current size.
+
+        Used for replication — a replica passes back its own cursor as
+        `offset` to fetch only what it hasn't already applied. A cursor
+        from before a compact() is not valid (the byte layout changes);
+        callers replicating across a compaction need a fresh full sync
+        from offset 0.
+        """
+        new_offset = self.offset()
+        records = []
+        if offset < new_offset:
+            with open(self.path, "rb") as f:
+                f.seek(offset)
+                for op, key, value in iter_records(f):
+                    records.append({"op": op, "key": key, "value": value})
+        return records, new_offset
+
     def compact(self):
         """Rewrite the log with exactly one put per live key, dropping all
         deleted/overwritten history. Written to a temp file and swapped in

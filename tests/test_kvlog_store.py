@@ -159,3 +159,46 @@ def test_range(db_path):
         assert store.range(start="c") == [("c", "C"), ("d", "D"), ("e", "E")]
         assert store.range(end="b") == [("a", "A"), ("b", "B")]
         assert store.range() == store.items()
+
+
+def test_offset_grows_with_writes(db_path):
+    with KVStore(db_path) as store:
+        zero = store.offset()
+        assert zero == 0
+        store.put("a", "1")
+        after_one = store.offset()
+        assert after_one > zero
+        store.put("b", "2")
+        assert store.offset() > after_one
+
+
+def test_records_since_returns_only_new_records(db_path):
+    with KVStore(db_path) as store:
+        store.put("a", "1")
+        cursor = store.offset()
+        store.put("b", "2")
+        store.delete("a")
+        records, new_offset = store.records_since(cursor)
+        assert records == [
+            {"op": "put", "key": "b", "value": "2"},
+            {"op": "delete", "key": "a", "value": None},
+        ]
+        assert new_offset == store.offset()
+
+
+def test_records_since_zero_returns_everything(db_path):
+    with KVStore(db_path) as store:
+        store.put("a", "1")
+        store.put("b", "2")
+        records, offset = store.records_since(0)
+        assert [r["key"] for r in records] == ["a", "b"]
+        assert offset == store.offset()
+
+
+def test_records_since_current_offset_is_empty(db_path):
+    with KVStore(db_path) as store:
+        store.put("a", "1")
+        cursor = store.offset()
+        records, offset = store.records_since(cursor)
+        assert records == []
+        assert offset == cursor
