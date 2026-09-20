@@ -25,9 +25,10 @@ vcslite = "vcslite.__main__:main"
 chesslite = "chesslite.__main__:main"
 nanosql = "nanosql.__main__:main"
 procman = "procman.__main__:main"
+regexlite = "regexlite.__main__:main"
 
 [tool.setuptools]
-packages = ["eulerlib", "vitalsdash", "recall", "ttt", "shortlink", "quest", "babble", "kvlog", "toylang", "searchlite", "vcslite", "chesslite", "nanosql", "procman"]
+packages = ["eulerlib", "vitalsdash", "recall", "ttt", "shortlink", "quest", "babble", "kvlog", "toylang", "searchlite", "vcslite", "chesslite", "nanosql", "procman", "regexlite"]
 
 [tool.setuptools.package-data]
 eulerlib = ["resources/*.txt"]

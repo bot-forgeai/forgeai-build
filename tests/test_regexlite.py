@@ -1,0 +1,251 @@
+import subprocess
+import sys
+
+import pytest
+
+from regexlite.matcher import Pattern, findall, fullmatch, match, search
+from regexlite.parser import RegexSyntaxError, parse
+
+
+# ---- parser -----------------------------------------------------------
+
+def test_parse_literal():
+    ast = parse("abc")
+    assert repr(ast) == "Concat([Char('a'), Char('b'), Char('c')])"
+
+
+def test_parse_alt():
+    ast = parse("a|b")
+    assert repr(ast) == "Alt([Char('a'), Char('b')])"
+
+
+def test_parse_repeat_ops():
+    assert repr(parse("a*")) == "Star(Char('a'))"
+    assert repr(parse("a+")) == "Plus(Char('a'))"
+    assert repr(parse("a?")) == "Quest(Char('a'))"
+
+
+def test_parse_group():
+    ast = parse("(ab)+")
+    assert repr(ast) == "Plus(Concat([Char('a'), Char('b')]))"
+
+
+def test_parse_charclass_range():
+    ast = parse("[a-c]")
+    assert ast.ranges == [(ord("a"), ord("c"))]
+    assert not ast.negate
+
+
+def test_parse_charclass_negated():
+    ast = parse("[^a-c]")
+    assert ast.negate
+
+
+def test_parse_shorthand_digit():
+    ast = parse(r"\d")
+    assert ast.ranges == [(ord("0"), ord("9"))]
+
+
+def test_parse_shorthand_negated_digit():
+    ast = parse(r"\D")
+    assert ast.negate
+
+
+def test_parse_unbalanced_paren_raises():
+    with pytest.raises(RegexSyntaxError):
+        parse("(ab")
+
+
+def test_parse_dangling_escape_raises():
+    with pytest.raises(RegexSyntaxError):
+        parse("a\\")
+
+
+def test_parse_empty_charclass_raises():
+    with pytest.raises(RegexSyntaxError):
+        parse("[]")
+
+
+def test_parse_unterminated_charclass_raises():
+    with pytest.raises(RegexSyntaxError):
+        parse("[abc")
+
+
+def test_parse_stray_metachar_raises():
+    with pytest.raises(RegexSyntaxError):
+        parse("*abc")
+
+
+# ---- matcher: match/fullmatch ------------------------------------------
+
+def test_match_literal():
+    m = match("abc", "abcdef")
+    assert m is not None
+    assert m.group() == "abc"
+    assert m.span() == (0, 3)
+
+
+def test_match_requires_start_anchor_but_not_full():
+    assert match("abc", "abXYZ") is None
+    assert match("ab", "abXYZ").group() == "ab"
+
+
+def test_fullmatch_requires_whole_string():
+    assert fullmatch("ab", "abXYZ") is None
+    assert fullmatch("ab", "ab").group() == "ab"
+
+
+def test_star_matches_zero_or_more():
+    assert fullmatch("a*", "").group() == ""
+    assert fullmatch("a*", "aaaa").group() == "aaaa"
+
+
+def test_plus_requires_at_least_one():
+    assert fullmatch("a+", "") is None
+    assert fullmatch("a+", "aaa").group() == "aaa"
+
+
+def test_quest_optional():
+    assert fullmatch("ab?c", "ac").group() == "ac"
+    assert fullmatch("ab?c", "abc").group() == "abc"
+
+
+def test_alternation():
+    assert fullmatch("cat|dog", "cat") is not None
+    assert fullmatch("cat|dog", "dog") is not None
+    assert fullmatch("cat|dog", "bird") is None
+
+
+def test_dot_matches_any_char():
+    assert fullmatch("a.c", "abc") is not None
+    assert fullmatch("a.c", "axc") is not None
+    assert fullmatch("a.c", "ac") is None
+
+
+def test_grouping_with_repetition():
+    assert fullmatch("(ab)+", "ababab") is not None
+    assert fullmatch("(ab)+", "aba") is None
+
+
+def test_charclass_matching():
+    assert fullmatch("[a-c]+", "abcabc") is not None
+    assert fullmatch("[a-c]+", "abcd") is None
+
+
+def test_negated_charclass():
+    assert fullmatch("[^0-9]+", "abc") is not None
+    assert fullmatch("[^0-9]+", "ab1") is None
+
+
+def test_digit_shorthand():
+    assert fullmatch(r"\d+", "12345") is not None
+    assert fullmatch(r"\d+", "12a45") is None
+
+
+def test_word_shorthand():
+    assert fullmatch(r"\w+", "abc_123") is not None
+    assert fullmatch(r"\w+", "abc-123") is None
+
+
+def test_anchors_start_end():
+    assert search("^abc$", "abc") is not None
+    assert search("^abc$", "xabc") is None
+    assert search("^abc$", "abcx") is None
+
+
+def test_greedy_star_matches_longest():
+    m = match("a*", "aaabbb")
+    assert m.group() == "aaa"
+
+
+# ---- matcher: search/findall -------------------------------------------
+
+def test_search_finds_leftmost():
+    m = search("bc", "abcabc")
+    assert m.span() == (1, 3)
+
+
+def test_search_no_match_returns_none():
+    assert search("xyz", "abc") is None
+
+
+def test_findall_multiple_matches():
+    assert findall(r"\d+", "a12b345c6") == ["12", "345", "6"]
+
+
+def test_findall_no_matches_returns_empty_list():
+    assert findall("z+", "abc") == []
+
+
+def test_findall_zero_width_pattern_does_not_hang():
+    # a* can match the empty string; findall must still terminate.
+    results = findall("a*", "bab")
+    assert results == ["", "a", "", ""]
+
+
+# ---- catastrophic-backtracking pattern stays fast ----------------------
+
+def test_nested_star_pattern_is_linear_not_exponential():
+    # A classic backtracking-engine killer: (a*)*b against a long run of
+    # 'a's with no trailing 'b'. Thompson NFA simulation must reject this
+    # quickly instead of exploring exponentially many paths.
+    pat = Pattern("(a*)*b")
+    text = "a" * 200
+    assert pat.search(text) is None
+
+
+# ---- CLI ----------------------------------------------------------------
+
+def _run_cli(*args):
+    return subprocess.run(
+        [sys.executable, "-m", "regexlite", *args],
+        capture_output=True, text=True,
+    )
+
+
+def test_cli_match_success():
+    result = _run_cli("match", "abc", "abcdef")
+    assert result.returncode == 0
+    assert "abc" in result.stdout
+
+
+def test_cli_match_failure_exits_nonzero():
+    result = _run_cli("match", "xyz", "abcdef")
+    assert result.returncode == 1
+    assert "no match" in result.stdout
+
+
+def test_cli_findall():
+    result = _run_cli("findall", r"\d+", "a12b345")
+    assert result.returncode == 0
+    assert "12" in result.stdout
+    assert "345" in result.stdout
+
+
+def test_cli_bad_pattern_exits_cleanly():
+    result = _run_cli("match", "(abc", "abc")
+    assert result.returncode == 1
+    assert "error:" in result.stderr
+
+
+def test_cli_grep(tmp_path):
+    f = tmp_path / "sample.txt"
+    f.write_text("hello world\nfoo bar\nhello again\n")
+    result = _run_cli("grep", "hello", str(f))
+    assert result.returncode == 0
+    assert "1:hello world" in result.stdout
+    assert "3:hello again" in result.stdout
+    assert "foo bar" not in result.stdout
+
+
+def test_cli_grep_no_match_exits_nonzero(tmp_path):
+    f = tmp_path / "sample.txt"
+    f.write_text("nothing here\n")
+    result = _run_cli("grep", "zzz", str(f))
+    assert result.returncode == 1
+
+
+def test_cli_grep_missing_file_exits_cleanly():
+    result = _run_cli("grep", "abc", "/no/such/file.txt")
+    assert result.returncode == 1
+    assert "error:" in result.stderr

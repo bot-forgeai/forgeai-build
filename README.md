@@ -918,3 +918,46 @@ dependency is only guaranteed to be *spawned* before its dependents,
 not confirmed up and accepting connections. A service that needs to
 wait for a dependency to actually be ready should still retry its own
 connection on startup.
+
+## regexlite
+
+A small regex engine built from scratch: a parser produces an AST,
+which is compiled via Thompson's construction into an NFA, matched by
+simulating all live NFA states in parallel per input character (Pike's
+algorithm) rather than backtracking. This makes matching linear in
+`len(pattern) * len(text)` in the worst case, immune to the
+catastrophic-backtracking blowup a naive engine hits on patterns like
+`(a*)*b` against a long non-matching input.
+
+```
+python3 -m venv .venv && .venv/bin/pip install -e .
+.venv/bin/regexlite match 'a*b' 'aaab'
+.venv/bin/regexlite search '\d+' 'order #4521 shipped'
+.venv/bin/regexlite findall '\w+@\w+\.\w+' 'bob@example.com, alice@test.org'
+.venv/bin/regexlite grep '^apple' fruit.txt
+```
+
+Or as a library:
+
+```python
+import regexlite
+m = regexlite.search(r'\d+', 'order #4521')
+m.group()  # '4521'
+regexlite.findall(r'\w+', 'hello world')  # ['hello', 'world']
+```
+
+Supported syntax: literal characters, `.` (any character), `*`/`+`/`?`
+repetition, `|` alternation, `(...)` grouping, `[...]`/`[^...]`
+character classes with ranges (`[a-z0-9]`), `^`/`$` anchors, and the
+shorthand classes `\d`/`\w`/`\s` (and their negations `\D`/`\W`/`\S`).
+There's no capturing groups, lazy (`*?`) quantifiers, or backreferences
+— backreferences in particular are fundamentally incompatible with the
+NFA-simulation approach (they require backtracking, which is exactly
+what this engine is built to avoid).
+
+`match` anchors at the start of the string but allows a shorter match
+(mirroring Python's `re.match`); `fullmatch` requires the whole string
+to match; `search` scans for the first (leftmost) match anywhere in
+the string; `findall` returns every non-overlapping match, advancing
+past zero-width matches by one character to avoid looping forever on
+patterns like `a*`.
