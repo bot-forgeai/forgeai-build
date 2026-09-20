@@ -54,7 +54,14 @@ class Parser:
 
     def parse_repeat(self):
         atom = self.parse_atom()
-        while self.peek() in ("*", "+", "?"):
+        while self.peek() in ("*", "+", "?", "{"):
+            if self.peek() == "{":
+                bound = self._try_parse_bound()
+                if bound is None:
+                    break
+                lo, hi = bound
+                atom = self._expand_bound(atom, lo, hi)
+                continue
             op = self.advance()
             if op == "*":
                 atom = Star(atom)
@@ -63,6 +70,53 @@ class Parser:
             else:
                 atom = Quest(atom)
         return atom
+
+    def _try_parse_bound(self):
+        """Try to parse a {m}/{m,}/{m,n} bound starting at the current
+        '{'. Returns (lo, hi) with hi=None meaning unbounded, or None if
+        what follows isn't a valid bound (so '{' is left to be matched
+        as a literal character instead)."""
+        text = self.pattern
+        n = len(text)
+        p = self.pos + 1
+        lo_start = p
+        while p < n and text[p].isdigit():
+            p += 1
+        lo_str = text[lo_start:p]
+        if lo_str == "":
+            return None
+        hi_str = lo_str
+        if p < n and text[p] == ",":
+            p += 1
+            hi_start = p
+            while p < n and text[p].isdigit():
+                p += 1
+            hi_str = text[hi_start:p]
+        if p >= n or text[p] != "}":
+            return None
+        p += 1
+        lo = int(lo_str)
+        hi = None if hi_str == "" else int(hi_str)
+        if lo > 1000 or (hi is not None and hi > 1000):
+            raise RegexSyntaxError("repetition count too large")
+        if hi is not None and hi < lo:
+            raise RegexSyntaxError(f"invalid repetition bound {{{lo_str},{hi_str}}}: max < min")
+        self.pos = p
+        return (lo, hi)
+
+    def _expand_bound(self, atom, lo, hi):
+        if hi == 0:
+            return Concat([])
+        parts = [atom] * lo
+        if hi is None:
+            parts.append(Star(atom))
+        else:
+            parts.extend([Quest(atom)] * (hi - lo))
+        if not parts:
+            return Concat([])
+        if len(parts) == 1:
+            return parts[0]
+        return Concat(parts)
 
     def parse_atom(self):
         ch = self.peek()

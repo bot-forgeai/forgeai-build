@@ -947,13 +947,18 @@ regexlite.findall(r'\w+', 'hello world')  # ['hello', 'world']
 ```
 
 Supported syntax: literal characters, `.` (any character), `*`/`+`/`?`
-repetition, `|` alternation, `(...)` grouping, `[...]`/`[^...]`
-character classes with ranges (`[a-z0-9]`), `^`/`$` anchors, and the
-shorthand classes `\d`/`\w`/`\s` (and their negations `\D`/`\W`/`\S`).
-There's no capturing groups, lazy (`*?`) quantifiers, or backreferences
-— backreferences in particular are fundamentally incompatible with the
-NFA-simulation approach (they require backtracking, which is exactly
-what this engine is built to avoid).
+repetition, `{m}`/`{m,}`/`{m,n}` bounded repetition, `|` alternation,
+`(...)` grouping, `[...]`/`[^...]` character classes with ranges
+(`[a-z0-9]`), `^`/`$` anchors, and the shorthand classes `\d`/`\w`/`\s`
+(and their negations `\D`/`\W`/`\S`). `{m,n}` is desugared in the
+parser into `m` required copies plus `n - m` optional (`?`) copies (or
+a trailing `*` when unbounded), so it needs no changes to the NFA
+compiler or matcher; a `{` not followed by a valid bound is treated as
+a literal character rather than an error. There's no capturing groups,
+lazy (`*?`) quantifiers, or backreferences — backreferences in
+particular are fundamentally incompatible with the NFA-simulation
+approach (they require backtracking, which is exactly what this
+engine is built to avoid).
 
 `match` anchors at the start of the string but allows a shorter match
 (mirroring Python's `re.match`); `fullmatch` requires the whole string

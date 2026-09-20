@@ -76,6 +76,42 @@ def test_parse_stray_metachar_raises():
         parse("*abc")
 
 
+def test_parse_bound_exact():
+    assert repr(parse("a{3}")) == "Concat([Char('a'), Char('a'), Char('a')])"
+
+
+def test_parse_bound_range():
+    ast = parse("a{2,4}")
+    assert repr(ast) == (
+        "Concat([Char('a'), Char('a'), Quest(Char('a')), Quest(Char('a'))])"
+    )
+
+
+def test_parse_bound_unbounded():
+    ast = parse("a{2,}")
+    assert repr(ast) == "Concat([Char('a'), Char('a'), Star(Char('a'))])"
+
+
+def test_parse_bound_zero_exact_matches_empty():
+    assert repr(parse("a{0}")) == "Concat([])"
+
+
+def test_parse_bound_invalid_range_raises():
+    with pytest.raises(RegexSyntaxError):
+        parse("a{4,2}")
+
+
+def test_parse_bound_too_large_raises():
+    with pytest.raises(RegexSyntaxError):
+        parse("a{5000}")
+
+
+def test_parse_unmatched_brace_is_literal():
+    # '{' not followed by a valid bound falls back to a literal char,
+    # same tolerant style as the rest of the parser.
+    assert repr(parse("a{")) == "Concat([Char('a'), Char('{')])"
+
+
 # ---- matcher: match/fullmatch ------------------------------------------
 
 def test_match_literal():
@@ -125,6 +161,37 @@ def test_dot_matches_any_char():
 def test_grouping_with_repetition():
     assert fullmatch("(ab)+", "ababab") is not None
     assert fullmatch("(ab)+", "aba") is None
+
+
+def test_bound_exact_count():
+    assert fullmatch("a{3}", "aaa") is not None
+    assert fullmatch("a{3}", "aa") is None
+    assert fullmatch("a{3}", "aaaa") is None
+
+
+def test_bound_range():
+    assert fullmatch("a{2,4}", "a") is None
+    assert fullmatch("a{2,4}", "aa") is not None
+    assert fullmatch("a{2,4}", "aaaa") is not None
+    assert fullmatch("a{2,4}", "aaaaa") is None
+
+
+def test_bound_unbounded_minimum():
+    assert fullmatch("a{2,}", "a") is None
+    assert fullmatch("a{2,}", "aa") is not None
+    assert fullmatch("a{2,}", "aaaaaaaa") is not None
+
+
+def test_bound_zero_exact_matches_empty_only():
+    assert fullmatch("a{0}", "") is not None
+    assert fullmatch("a{0}", "a") is None
+
+
+def test_bound_on_group():
+    assert fullmatch("(ab){2,3}", "abab") is not None
+    assert fullmatch("(ab){2,3}", "ababab") is not None
+    assert fullmatch("(ab){2,3}", "ab") is None
+    assert fullmatch("(ab){2,3}", "abababab") is None
 
 
 def test_charclass_matching():
