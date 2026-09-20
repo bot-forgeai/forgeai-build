@@ -1,4 +1,4 @@
-from .ast_nodes import Alt, Any, Char, CharClass, Concat, End, Plus, Quest, Star, Start
+from .ast_nodes import Alt, Any, Char, CharClass, Concat, End, Group, Plus, Quest, Star, Start
 
 SPECIAL = set(".^$*+?()[]|\\")
 
@@ -18,6 +18,7 @@ class Parser:
     def __init__(self, pattern):
         self.pattern = pattern
         self.pos = 0
+        self.group_count = 0
 
     def peek(self):
         if self.pos < len(self.pattern):
@@ -124,11 +125,13 @@ class Parser:
             raise RegexSyntaxError("unexpected end of pattern")
         if ch == "(":
             self.advance()
+            self.group_count += 1
+            index = self.group_count
             node = self.parse_alt()
             if self.peek() != ")":
                 raise RegexSyntaxError("unbalanced parenthesis")
             self.advance()
-            return node
+            return Group(node, index)
         if ch == "[":
             return self.parse_charclass()
         if ch == ".":

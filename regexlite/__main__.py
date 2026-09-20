@@ -13,6 +13,11 @@ def _get_package_version():
         return "0.1.0"
 
 
+def _print_groups(m):
+    for i, g in enumerate(m.groups(), start=1):
+        print(f"  group {i}: {g!r} span={m.span(i)}")
+
+
 def cmd_match(args):
     pat = Pattern(args.pattern)
     m = pat.fullmatch(args.string) if args.full else pat.match(args.string)
@@ -20,6 +25,7 @@ def cmd_match(args):
         print("no match")
         return 1
     print(f"match: {m.group()!r} span={m.span()}")
+    _print_groups(m)
     return 0
 
 
@@ -30,6 +36,7 @@ def cmd_search(args):
         print("no match")
         return 1
     print(f"match: {m.group()!r} span={m.span()}")
+    _print_groups(m)
     return 0
 
 

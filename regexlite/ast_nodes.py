@@ -74,3 +74,16 @@ class Quest:
 
     def __repr__(self):
         return f"Quest({self.node!r})"
+
+
+class Group:
+    """A capturing group: `(...)`. `index` is its 1-based capture-group
+    number, assigned left-to-right by opening paren, matching the
+    convention of Python's own `re` module."""
+
+    def __init__(self, node, index):
+        self.node = node
+        self.index = index
+
+    def __repr__(self):
+        return f"Group({self.node!r}, index={self.index})"

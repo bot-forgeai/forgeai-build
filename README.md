@@ -949,16 +949,31 @@ regexlite.findall(r'\w+', 'hello world')  # ['hello', 'world']
 Supported syntax: literal characters, `.` (any character), `*`/`+`/`?`
 repetition, `{m}`/`{m,}`/`{m,n}` bounded repetition, `|` alternation,
 `(...)` grouping, `[...]`/`[^...]` character classes with ranges
-(`[a-z0-9]`), `^`/`$` anchors, and the shorthand classes `\d`/`\w`/`\s`
-(and their negations `\D`/`\W`/`\S`). `{m,n}` is desugared in the
-parser into `m` required copies plus `n - m` optional (`?`) copies (or
-a trailing `*` when unbounded), so it needs no changes to the NFA
-compiler or matcher; a `{` not followed by a valid bound is treated as
-a literal character rather than an error. There's no capturing groups,
-lazy (`*?`) quantifiers, or backreferences — backreferences in
-particular are fundamentally incompatible with the NFA-simulation
-approach (they require backtracking, which is exactly what this
-engine is built to avoid).
+(`[a-z0-9]`), `^`/`$` anchors, the shorthand classes `\d`/`\w`/`\s`
+(and their negations `\D`/`\W`/`\S`), and capturing groups via `(...)`.
+`{m,n}` is desugared in the parser into `m` required copies plus
+`n - m` optional (`?`) copies (or a trailing `*` when unbounded), so
+it needs no changes to the NFA compiler or matcher; a `{` not followed
+by a valid bound is treated as a literal character rather than an
+error. There's no lazy (`*?`) quantifiers or backreferences —
+backreferences in particular are fundamentally incompatible with the
+NFA-simulation approach (they require backtracking, which is exactly
+what this engine is built to avoid).
+
+Every `(...)` is a capturing group, numbered 1-up left-to-right by
+opening paren (there's no `(?:...)` non-capturing syntax yet). Each
+group's span is tracked per-NFA-thread as a pair of `save` pseudo-
+instructions bracketing the group's compiled fragment — a natural
+extension of Pike's algorithm (the same technique RE2 uses): each
+live thread carries its own capture-offsets tuple, cloned at each
+branch point and updated in place at a `save` instruction, so
+submatch tracking stays linear-time along with everything else this
+engine does. `Match.group(n)`/`.span(n)`/`.start(n)`/`.end(n)` (n=0 is
+the whole match, the default) expose a group's text/offsets, and
+`Match.groups()` returns every group's text as a tuple; an
+unmatched group (e.g. the untaken side of `(a)|(b)`, or a `(b)?` that
+didn't participate) reports `None`. A group inside a repetition (`(a)+`)
+only remembers its last iteration's span, matching Python's own `re`.
 
 `match` anchors at the start of the string but allows a shorter match
 (mirroring Python's `re.match`); `fullmatch` requires the whole string
