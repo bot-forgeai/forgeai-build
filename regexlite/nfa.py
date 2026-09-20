@@ -1,7 +1,7 @@
 """Thompson's construction: compile a regex AST into an NFA of States
 linked by epsilon/consuming transitions, simulated by matcher.py."""
 
-from .ast_nodes import Alt, Any, Char, CharClass, Concat, End, Plus, Quest, Star, Start
+from .ast_nodes import Alt, Any, Char, CharClass, Concat, End, Group, Plus, Quest, Star, Start
 
 
 class State:
@@ -14,16 +14,20 @@ class State:
       input consumed.
     - 'split': epsilon-branches to both `out` and `out2` (used for
       alternation and repetition).
+    - 'save': zero-width, records the current position into capture
+      slot `slot` before passing through to `out` (used for capturing
+      group boundaries).
     - 'match': accepting state, no outgoing edges.
     """
 
-    __slots__ = ("kind", "test", "out", "out2")
+    __slots__ = ("kind", "test", "out", "out2", "slot")
 
-    def __init__(self, kind, test=None, out=None, out2=None):
+    def __init__(self, kind, test=None, out=None, out2=None, slot=None):
         self.kind = kind
         self.test = test
         self.out = out
         self.out2 = out2
+        self.slot = slot
 
 
 class Frag:
@@ -102,6 +106,13 @@ def _compile_node(node):
         split = State("split", out=inner.start)
         dangling = list(inner.dangling) + [(split, "out2")]
         return Frag(split, dangling)
+    if isinstance(node, Group):
+        inner = _compile_node(node.node)
+        open_save = State("save", slot=2 * (node.index - 1))
+        close_save = State("save", slot=2 * (node.index - 1) + 1)
+        open_save.out = inner.start
+        _patch(inner.dangling, close_save)
+        return Frag(open_save, [(close_save, "out")])
     raise TypeError(f"unknown AST node: {node!r}")
 
 

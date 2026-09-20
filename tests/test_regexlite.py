@@ -27,7 +27,7 @@ def test_parse_repeat_ops():
 
 def test_parse_group():
     ast = parse("(ab)+")
-    assert repr(ast) == "Plus(Concat([Char('a'), Char('b')]))"
+    assert repr(ast) == "Plus(Group(Concat([Char('a'), Char('b')]), index=1))"
 
 
 def test_parse_charclass_range():
@@ -225,6 +225,71 @@ def test_greedy_star_matches_longest():
     assert m.group() == "aaa"
 
 
+# ---- matcher: capturing groups ------------------------------------------
+
+def test_group_basic_capture():
+    m = fullmatch(r"(\w+)@(\w+)", "alice@example")
+    assert m.group(1) == "alice"
+    assert m.group(2) == "example"
+    assert m.group(0) == "alice@example"
+    assert m.groups() == ("alice", "example")
+
+
+def test_group_span():
+    m = fullmatch(r"a(bc)d", "abcd")
+    assert m.span(1) == (1, 3)
+    assert m.start(1) == 1
+    assert m.end(1) == 3
+
+
+def test_group_no_captures_when_pattern_has_none():
+    m = fullmatch("abc", "abc")
+    assert m.groups() == ()
+
+
+def test_group_unmatched_alternative_branch_is_none():
+    m = fullmatch(r"(a)|(b)", "b")
+    assert m.group(1) is None
+    assert m.group(2) == "b"
+
+
+def test_group_inside_quest_not_taken_is_none():
+    m = fullmatch(r"a(b)?", "a")
+    assert m.group(1) is None
+
+
+def test_group_nested():
+    m = fullmatch(r"((a)(b))", "ab")
+    assert m.group(1) == "ab"
+    assert m.group(2) == "a"
+    assert m.group(3) == "b"
+
+
+def test_group_repeated_in_star_keeps_last_iteration():
+    # Python's re has the same behavior: a capturing group inside a
+    # repetition only remembers its last iteration's span.
+    m = fullmatch(r"(a)+", "aaa")
+    assert m.group(1) == "a"
+    assert m.span(1) == (2, 3)
+
+
+def test_group_with_bound_repetition():
+    m = fullmatch(r"(ab){2,3}", "abab")
+    assert m.group(1) == "ab"
+    assert m.span(1) == (2, 4)
+
+
+def test_group_index_out_of_range_raises():
+    m = fullmatch(r"(a)", "a")
+    with pytest.raises(IndexError):
+        m.group(2)
+
+
+def test_group_search_captures():
+    m = search(r"(\d+)-(\d+)", "id 42-7 done")
+    assert m.groups() == ("42", "7")
+
+
 # ---- matcher: search/findall -------------------------------------------
 
 def test_search_finds_leftmost():
@@ -274,6 +339,13 @@ def test_cli_match_success():
     result = _run_cli("match", "abc", "abcdef")
     assert result.returncode == 0
     assert "abc" in result.stdout
+
+
+def test_cli_match_prints_groups():
+    result = _run_cli("match", r"(\w+)@(\w+)", "alice@example", "--full")
+    assert result.returncode == 0
+    assert "group 1: 'alice'" in result.stdout
+    assert "group 2: 'example'" in result.stdout
 
 
 def test_cli_match_failure_exits_nonzero():
