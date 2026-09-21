@@ -947,7 +947,8 @@ regexlite.findall(r'\w+', 'hello world')  # ['hello', 'world']
 ```
 
 Supported syntax: literal characters, `.` (any character), `*`/`+`/`?`
-repetition, `{m}`/`{m,}`/`{m,n}` bounded repetition, `|` alternation,
+repetition (and their lazy forms `*?`/`+?`/`??`), `{m}`/`{m,}`/`{m,n}`
+bounded repetition (and lazy `{m,n}?`/`{m,}?`), `|` alternation,
 `(...)` grouping, `[...]`/`[^...]` character classes with ranges
 (`[a-z0-9]`), `^`/`$` anchors, the shorthand classes `\d`/`\w`/`\s`
 (and their negations `\D`/`\W`/`\S`), and capturing groups via `(...)`.
@@ -955,10 +956,22 @@ repetition, `{m}`/`{m,}`/`{m,n}` bounded repetition, `|` alternation,
 `n - m` optional (`?`) copies (or a trailing `*` when unbounded), so
 it needs no changes to the NFA compiler or matcher; a `{` not followed
 by a valid bound is treated as a literal character rather than an
-error. There's no lazy (`*?`) quantifiers or backreferences —
-backreferences in particular are fundamentally incompatible with the
-NFA-simulation approach (they require backtracking, which is exactly
-what this engine is built to avoid).
+error. There are no backreferences — fundamentally incompatible with
+the NFA-simulation approach (they require backtracking, which is
+exactly what this engine is built to avoid).
+
+A lazy quantifier (`a*?`, `a+?`, `a??`) prefers the fewest repetitions
+that still let the rest of the pattern match, instead of the greedy
+default's most; `<.+?>` against `<a><b>` matches just `<a>`, where
+greedy `<.+>` would swallow through to the final `>`. This is
+implemented at both the compiler and matcher layers: the NFA compiler
+swaps which branch of a repetition's `split` state is higher priority
+(exit-first for lazy vs. loop-first for greedy), and the matcher keeps
+its per-position thread list in that priority order, dropping every
+lower-priority thread the moment a higher-priority one reaches
+`match` — the standard technique for giving a Thompson-NFA simulation
+Perl-style leftmost-priority semantics instead of simply reporting
+whichever thread happens to reach `match` at the largest position.
 
 Every `(...)` is a capturing group, numbered 1-up left-to-right by
 opening paren (there's no `(?:...)` non-capturing syntax yet). Each
