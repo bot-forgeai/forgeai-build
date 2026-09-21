@@ -18,6 +18,7 @@ class Service:
     env: dict = field(default_factory=dict)
     restart_delay: float = 0.0
     depends_on: List[str] = field(default_factory=list)
+    ready_check: Optional[dict] = None
 
 
 def load_config(path: str) -> List[Service]:
@@ -56,6 +57,7 @@ def load_config(path: str) -> List[Service]:
         depends_on = entry.get("depends_on", [])
         if not isinstance(depends_on, list) or not all(isinstance(d, str) for d in depends_on):
             raise ConfigError(f"service '{name}' has invalid 'depends_on' (must be a list of strings)")
+        ready_check = _validate_ready_check(name, entry.get("ready_check"))
         result.append(Service(
             name=name,
             command=command,
@@ -65,6 +67,7 @@ def load_config(path: str) -> List[Service]:
             env=entry.get("env", {}),
             restart_delay=restart_delay,
             depends_on=depends_on,
+            ready_check=ready_check,
         ))
 
     names = {s.name for s in result}
@@ -77,6 +80,34 @@ def load_config(path: str) -> List[Service]:
 
     topological_order(result)  # raises ConfigError on a circular dependency
     return result
+
+
+def _validate_ready_check(name: str, rc) -> Optional[dict]:
+    if rc is None:
+        return None
+    if not isinstance(rc, dict):
+        raise ConfigError(f"service '{name}' has invalid 'ready_check' (must be an object)")
+    rc_type = rc.get("type")
+    if rc_type == "tcp":
+        port = rc.get("port")
+        if not isinstance(port, int) or isinstance(port, bool) or not (0 < port < 65536):
+            raise ConfigError(f"service '{name}' ready_check of type 'tcp' needs an integer 'port'")
+        host = rc.get("host", "127.0.0.1")
+        if not isinstance(host, str):
+            raise ConfigError(f"service '{name}' ready_check 'host' must be a string")
+    elif rc_type == "command":
+        command = rc.get("command")
+        if not isinstance(command, list) or not command or not all(isinstance(c, str) for c in command):
+            raise ConfigError(f"service '{name}' ready_check of type 'command' needs a non-empty 'command' list of strings")
+    else:
+        raise ConfigError(f"service '{name}' has invalid ready_check 'type' (must be 'tcp' or 'command')")
+    timeout = rc.get("timeout", 10.0)
+    if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or timeout <= 0:
+        raise ConfigError(f"service '{name}' ready_check 'timeout' must be a positive number")
+    interval = rc.get("interval", 0.2)
+    if not isinstance(interval, (int, float)) or isinstance(interval, bool) or interval <= 0:
+        raise ConfigError(f"service '{name}' ready_check 'interval' must be a positive number")
+    return rc
 
 
 def topological_order(services: List[Service]) -> List[Service]:

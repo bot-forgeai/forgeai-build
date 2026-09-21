@@ -1,9 +1,12 @@
 import json
+import socket
 import sys
 import time
 
+import pytest
+
 from procman.config import Service
-from procman.supervisor import Supervisor
+from procman.supervisor import StartupError, Supervisor
 
 
 def sleep_cmd(seconds):
@@ -296,3 +299,105 @@ def test_start_order_attribute_matches_topological_order(tmp_path):
     ]
     sup = Supervisor(services, log_dir=str(tmp_path / "logs"))
     assert [s.name for s in sup.start_order] == ["a", "b"]
+
+
+def free_port():
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.bind(("127.0.0.1", 0))
+    port = s.getsockname()[1]
+    s.close()
+    return port
+
+
+def listen_cmd(port, delay=0.0):
+    return [sys.executable, "-c",
+            f"import socket, time; time.sleep({delay}); "
+            f"s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); "
+            f"s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1); "
+            f"s.bind(('127.0.0.1', {port})); s.listen(1); time.sleep(30)"]
+
+
+def test_ready_check_tcp_waits_for_listening_port(tmp_path):
+    port = free_port()
+    services = [Service(
+        name="a", command=listen_cmd(port, delay=0.3),
+        ready_check={"type": "tcp", "port": port, "timeout": 5.0, "interval": 0.05},
+    )]
+    sup = Supervisor(services, log_dir=str(tmp_path / "logs"))
+    sup.start_all()  # blocks until the ready_check passes
+    try:
+        assert sup.states["a"].proc.poll() is None
+    finally:
+        sup.stop_all()
+
+
+def test_ready_check_command_type_passes(tmp_path):
+    services = [Service(
+        name="a", command=sleep_cmd(5),
+        ready_check={"type": "command", "command": [sys.executable, "-c", "pass"]},
+    )]
+    sup = Supervisor(services, log_dir=str(tmp_path / "logs"))
+    sup.start_all()
+    try:
+        assert sup.states["a"].proc.poll() is None
+    finally:
+        sup.stop_all()
+
+
+def test_ready_check_timeout_raises_startup_error(tmp_path):
+    clock = FakeClock()
+    port = free_port()  # nothing ever listens here
+
+    def fake_sleep(seconds):
+        clock.advance(seconds)
+
+    services = [Service(
+        name="a", command=sleep_cmd(5),
+        ready_check={"type": "tcp", "port": port, "timeout": 1.0, "interval": 0.2},
+    )]
+    sup = Supervisor(services, log_dir=str(tmp_path / "logs"), time_fn=clock, sleep_fn=fake_sleep)
+    try:
+        with pytest.raises(StartupError, match="did not become ready"):
+            sup.start_all()
+    finally:
+        sup.stop_all()
+
+
+def test_ready_check_proc_exit_raises_startup_error(tmp_path):
+    services = [Service(
+        name="a", command=crash_cmd(1),
+        ready_check={
+            "type": "command",
+            "command": [sys.executable, "-c", "import sys; sys.exit(1)"],
+            "interval": 0.05, "timeout": 5.0,
+        },
+    )]
+    sup = Supervisor(services, log_dir=str(tmp_path / "logs"))
+    try:
+        with pytest.raises(StartupError, match="exited before"):
+            sup.start_all()
+    finally:
+        sup.stop_all()
+
+
+def test_run_forever_stops_earlier_services_on_startup_failure(tmp_path):
+    clock = FakeClock()
+    port = free_port()  # nothing ever listens here
+
+    def fake_sleep(seconds):
+        clock.advance(seconds)
+
+    services = [
+        Service(name="a", command=sleep_cmd(30)),
+        Service(
+            name="b", command=sleep_cmd(30), depends_on=["a"],
+            ready_check={"type": "tcp", "port": port, "timeout": 0.5, "interval": 0.1},
+        ),
+    ]
+    sup = Supervisor(services, log_dir=str(tmp_path / "logs"), time_fn=clock, sleep_fn=fake_sleep)
+    with pytest.raises(StartupError):
+        sup.run_forever(poll_interval=0.1)
+    # both services (the healthy "a" and the never-ready "b") must be
+    # torn down, not left running, when startup fails partway through.
+    assert sup.states["a"].proc.poll() is not None
+    assert sup.states["b"].proc.poll() is not None
