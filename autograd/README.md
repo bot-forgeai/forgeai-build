@@ -62,6 +62,23 @@ autograd-nn train [--dataset xor|blobs|circles] [--hidden N [N ...]]
 - `--n` controls how many points `blobs`/`circles` generate (ignored
   for `xor`, which is always its fixed 4 points).
 - `--verbose` prints the loss roughly every 10% of training.
+- `--save PATH` saves the trained model (architecture + weights, as
+  JSON) after training finishes.
+
+```
+autograd-nn predict MODEL_PATH X [X ...]
+```
+
+Loads a model saved via `train --save` and runs one forward pass on
+the given input values, printing the raw output. Errors cleanly (exit
+1) on a missing/malformed file or an input count that doesn't match
+the model's expected number of inputs.
+
+```
+autograd-nn train --dataset xor --epochs 300 --lr 0.5 --save xor.json
+autograd-nn predict xor.json 1 0
+# 0.8724
+```
 
 ## Library
 
@@ -76,6 +93,9 @@ c.backward()
 print(a.grad, b.grad)  # dc/da, dc/db
 
 model = MLP([2, 4, 1], activation="tanh", out_activation="sigmoid", seed=0)
+
+model.save("model.json")
+loaded = MLP.load("model.json")  # architecture + weights, ready to use
 ```
 
 ## Known limits

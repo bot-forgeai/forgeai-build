@@ -4,7 +4,7 @@ import sys
 from .datasets import DATASETS
 from .nn import MLP
 from .optim import OPTIMIZERS
-from .train import accuracy, train
+from .train import accuracy, predict, train
 
 
 def cmd_train(args):
@@ -22,6 +22,26 @@ def cmd_train(args):
     acc = accuracy(model, xs, ys)
     print(f"final loss: {history[-1]:.4f}")
     print(f"accuracy:   {acc * 100:.1f}%")
+
+    if args.save:
+        model.save(args.save)
+        print(f"saved model to {args.save}")
+    return 0
+
+
+def cmd_predict(args):
+    try:
+        model = MLP.load(args.model)
+    except (OSError, ValueError, KeyError) as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+
+    if len(args.x) != model.sizes[0]:
+        print(f"error: model expects {model.sizes[0]} input(s), got {len(args.x)}", file=sys.stderr)
+        return 1
+
+    out = predict(model, args.x)
+    print(f"{out.data:.4f}")
     return 0
 
 
@@ -39,7 +59,13 @@ def build_parser():
     p_train.add_argument("--n", type=int, default=60, help="number of points for blobs/circles")
     p_train.add_argument("--seed", type=int, default=42)
     p_train.add_argument("--verbose", action="store_true", help="print loss every ~10% of epochs")
+    p_train.add_argument("--save", metavar="PATH", help="save the trained model (architecture + weights) as JSON")
     p_train.set_defaults(func=cmd_train)
+
+    p_predict = sub.add_parser("predict", help="load a saved model and run it on one input")
+    p_predict.add_argument("model", help="path to a model JSON file saved via `train --save`")
+    p_predict.add_argument("x", type=float, nargs="+", help="input feature values")
+    p_predict.set_defaults(func=cmd_predict)
 
     return parser
 

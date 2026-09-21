@@ -1,3 +1,4 @@
+import json
 import random
 
 from autograd.datasets import make_blobs, make_circles, make_xor
@@ -92,3 +93,47 @@ def test_datasets_differ_across_seeds():
     xs1, _ = make_blobs(n=10, seed=1)
     xs2, _ = make_blobs(n=10, seed=2)
     assert xs1 != xs2
+
+
+def test_save_load_round_trip_preserves_predictions(tmp_path):
+    model = MLP([2, 4, 1], activation="tanh", out_activation="sigmoid", seed=7)
+    xs = [[0.1, -0.2], [1.0, 1.0], [-0.5, 0.3]]
+    before = [predict(model, x).data for x in xs]
+
+    path = tmp_path / "model.json"
+    model.save(path)
+    loaded = MLP.load(path)
+
+    after = [predict(loaded, x).data for x in xs]
+    assert before == after
+    assert loaded.sizes == model.sizes
+    assert loaded.activation == model.activation
+    assert loaded.out_activation == model.out_activation
+
+
+def test_save_load_reflects_trained_weights_not_just_architecture(tmp_path):
+    xs, ys = make_xor()
+    model = MLP([2, 4, 1], activation="tanh", out_activation="sigmoid", seed=42)
+    train(model, xs, ys, epochs=300, lr=0.5)
+
+    path = tmp_path / "trained.json"
+    model.save(path)
+    loaded = MLP.load(path)
+
+    assert accuracy(loaded, xs, ys) == accuracy(model, xs, ys) == 1.0
+
+
+def test_load_rejects_parameter_count_mismatch(tmp_path):
+    model = MLP([2, 4, 1], seed=1)
+    path = tmp_path / "model.json"
+    model.save(path)
+
+    d = json.loads(path.read_text())
+    d["sizes"] = [2, 3, 1]  # different architecture -> different param count
+    path.write_text(json.dumps(d))
+
+    try:
+        MLP.load(path)
+        assert False, "expected ValueError"
+    except ValueError:
+        pass

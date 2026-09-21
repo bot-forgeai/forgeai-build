@@ -32,3 +32,40 @@ def test_cli_blobs_dataset_runs(capsys):
     out = capsys.readouterr().out
     assert code == 0
     assert "final loss" in out
+
+
+def test_cli_train_save_then_predict_round_trips(tmp_path, capsys):
+    model_path = str(tmp_path / "model.json")
+    code = run(["train", "--dataset", "xor", "--epochs", "300", "--lr", "0.5", "--seed", "42",
+                "--save", model_path])
+    out = capsys.readouterr().out
+    assert code == 0
+    assert f"saved model to {model_path}" in out
+
+    code = run(["predict", model_path, "0.0", "0.0"])
+    out = capsys.readouterr().out
+    assert code == 0
+    assert float(out.strip()) < 0.5  # xor(0,0) == 0
+
+    code = run(["predict", model_path, "1.0", "0.0"])
+    out = capsys.readouterr().out
+    assert code == 0
+    assert float(out.strip()) > 0.5  # xor(1,0) == 1
+
+
+def test_cli_predict_missing_file_errors_cleanly(capsys):
+    code = run(["predict", "/tmp/does-not-exist-autograd-model.json", "1.0", "1.0"])
+    err = capsys.readouterr().err
+    assert code == 1
+    assert "error:" in err
+
+
+def test_cli_predict_wrong_input_count_errors_cleanly(tmp_path, capsys):
+    model_path = str(tmp_path / "model.json")
+    run(["train", "--dataset", "xor", "--epochs", "10", "--save", model_path])
+    capsys.readouterr()
+
+    code = run(["predict", model_path, "1.0", "2.0", "3.0"])
+    err = capsys.readouterr().err
+    assert code == 1
+    assert "expects 2 input" in err

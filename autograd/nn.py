@@ -1,4 +1,5 @@
 """A small multi-layer perceptron built entirely on autograd.Value scalars."""
+import json
 import random
 
 from .engine import Value
@@ -59,6 +60,9 @@ class MLP(Module):
     def __init__(self, sizes, activation="tanh", out_activation="linear", seed=None):
         if len(sizes) < 2:
             raise ValueError("need at least an input and output size")
+        self.sizes = list(sizes)
+        self.activation = activation
+        self.out_activation = out_activation
         rng = random.Random(seed) if seed is not None else random
         self.layers = []
         for i in range(len(sizes) - 1):
@@ -73,3 +77,32 @@ class MLP(Module):
 
     def parameters(self):
         return [p for layer in self.layers for p in layer.parameters()]
+
+    def to_dict(self):
+        """Serializes architecture + current parameter values (not gradients)."""
+        return {
+            "sizes": self.sizes,
+            "activation": self.activation,
+            "out_activation": self.out_activation,
+            "params": [p.data for p in self.parameters()],
+        }
+
+    @classmethod
+    def from_dict(cls, d):
+        model = cls(d["sizes"], activation=d["activation"], out_activation=d["out_activation"])
+        params = model.parameters()
+        saved = d["params"]
+        if len(saved) != len(params):
+            raise ValueError(f"parameter count mismatch: model expects {len(params)}, file has {len(saved)}")
+        for p, v in zip(params, saved):
+            p.data = v
+        return model
+
+    def save(self, path):
+        with open(path, "w") as f:
+            json.dump(self.to_dict(), f)
+
+    @classmethod
+    def load(cls, path):
+        with open(path) as f:
+            return cls.from_dict(json.load(f))
