@@ -1020,3 +1020,27 @@ to match; `search` scans for the first (leftmost) match anywhere in
 the string; `findall` returns every non-overlapping match, advancing
 past zero-width matches by one character to avoid looping forever on
 patterns like `a*`.
+
+## autograd
+
+A tiny scalar reverse-mode automatic differentiation engine plus a
+small multi-layer perceptron built on top of it — no numpy, no
+tensors, no third-party dependency. See `autograd/README.md` for full
+details; quick start:
+
+```
+pip install -e .
+autograd-nn train --dataset xor --epochs 300 --lr 0.5 --verbose
+```
+
+Each number in the network is its own `Value` node
+(`autograd/engine.py`) that remembers how it was computed; calling
+`.backward()` on a loss walks the resulting graph in reverse and
+accumulates gradients into every parameter — the same core technique
+real frameworks use, just scalar-by-scalar instead of vectorized, so
+you can print any intermediate `Value` and see exactly what produced
+it. `autograd/nn.py`'s `MLP` composes `Value`-based neurons into
+layers; `autograd/train.py` runs full-batch gradient descent;
+`autograd/datasets.py` generates three small synthetic datasets (XOR,
+two Gaussian blobs, and a ring-around-a-disk) offline via seeded
+`random`, so training is fully reproducible with no downloaded data.
