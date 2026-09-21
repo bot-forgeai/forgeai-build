@@ -1,5 +1,6 @@
-"""Full-batch gradient descent training loop for an MLP classifier."""
+"""Full-batch training loop for an MLP classifier."""
 from .engine import Value
+from .optim import OPTIMIZERS
 
 
 def predict(model, x):
@@ -17,12 +18,20 @@ def accuracy(model, xs, ys, threshold=0.5):
     return correct / len(xs)
 
 
-def train(model, xs, ys, epochs=100, lr=0.1, log_every=None):
-    """Trains model in place via full-batch MSE gradient descent.
+def train(model, xs, ys, epochs=100, lr=0.1, log_every=None, optimizer="sgd"):
+    """Trains model in place via full-batch MSE loss and gradient descent.
+
+    `optimizer` selects the update rule ("sgd" or "adam", see optim.py);
+    both share the same per-epoch loss/backward computation below and
+    differ only in how a parameter's .grad is turned into a .data update.
 
     Returns a list of the mean-squared-error loss at each epoch, so a
     caller can inspect convergence (or plot it) without re-running.
     """
+    if optimizer not in OPTIMIZERS:
+        raise ValueError(f"unknown optimizer: {optimizer!r} (choices: {', '.join(OPTIMIZERS)})")
+    opt = OPTIMIZERS[optimizer](model.parameters(), lr=lr)
+
     history = []
     for epoch in range(epochs):
         preds = [predict(model, x) for x in xs]
@@ -31,8 +40,7 @@ def train(model, xs, ys, epochs=100, lr=0.1, log_every=None):
 
         model.zero_grad()
         loss.backward()
-        for p in model.parameters():
-            p.data -= lr * p.grad
+        opt.step()
 
         history.append(loss.data)
         if log_every and (epoch % log_every == 0 or epoch == epochs - 1):
