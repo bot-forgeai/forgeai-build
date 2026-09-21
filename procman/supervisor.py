@@ -3,6 +3,7 @@ for a set of child processes described by procman.config.Service."""
 import json
 import os
 import signal
+import socket
 import subprocess
 import time
 from dataclasses import dataclass, field
@@ -11,6 +12,11 @@ from typing import Dict, List, Optional
 from procman.config import Service, topological_order
 
 MAX_RESTART_DELAY = 60.0
+
+
+class StartupError(Exception):
+    """Raised when a service fails to become ready during start_all()."""
+    pass
 
 
 @dataclass
@@ -36,11 +42,13 @@ class ProcState:
 
 
 class Supervisor:
-    def __init__(self, services: List[Service], log_dir: str, status_path: Optional[str] = None, time_fn=time.time):
+    def __init__(self, services: List[Service], log_dir: str, status_path: Optional[str] = None,
+                 time_fn=time.time, sleep_fn=time.sleep):
         self.services = services
         self.log_dir = log_dir
         self.status_path = status_path
         self._time_fn = time_fn
+        self._sleep_fn = sleep_fn
         self.states: Dict[str, ProcState] = {s.name: ProcState(service=s) for s in services}
         # Raises here too (redundant with load_config, but Supervisor can
         # be built directly from a hand-constructed service list in tests).
@@ -77,9 +85,52 @@ class Supervisor:
     def start_all(self):
         """Spawn every service in dependency order, so a service whose
         command assumes a dependency is already up (e.g. a client
-        connecting to a local server it depends on) doesn't race it."""
+        connecting to a local server it depends on) doesn't race it.
+
+        A service with a ready_check blocks here until it reports ready
+        (or its timeout elapses) before the next service in the order is
+        spawned -- depends_on alone only orders *spawning*, it says
+        nothing about whether a dependency is actually usable yet."""
         for svc in self.start_order:
-            self._spawn(self.states[svc.name])
+            state = self.states[svc.name]
+            self._spawn(state)
+            if svc.ready_check:
+                self._wait_ready(state)
+
+    def _check_ready(self, ready_check: dict) -> bool:
+        if ready_check["type"] == "tcp":
+            host = ready_check.get("host", "127.0.0.1")
+            try:
+                with socket.create_connection((host, ready_check["port"]), timeout=0.5):
+                    return True
+            except OSError:
+                return False
+        elif ready_check["type"] == "command":
+            result = subprocess.run(
+                ready_check["command"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            return result.returncode == 0
+        return True
+
+    def _wait_ready(self, state: "ProcState"):
+        rc = state.service.ready_check
+        timeout = rc.get("timeout", 10.0)
+        interval = rc.get("interval", 0.2)
+        deadline = self._time_fn() + timeout
+        while True:
+            if state.proc.poll() is not None:
+                raise StartupError(
+                    f"service '{state.service.name}' exited before its ready_check passed"
+                )
+            if self._check_ready(rc):
+                return
+            if self._time_fn() >= deadline:
+                raise StartupError(
+                    f"service '{state.service.name}' did not become ready within {timeout}s"
+                )
+            self._sleep_fn(interval)
 
     def poll_once(self):
         """Check every process once; restart any that crashed and are
@@ -152,7 +203,11 @@ class Supervisor:
         returning True when the loop should exit (used by signal handlers
         and tests); `max_iterations` bounds the loop for deterministic
         tests instead of relying on wall-clock signals."""
-        self.start_all()
+        try:
+            self.start_all()
+        except StartupError:
+            self.stop_all()
+            raise
         if self.status_path:
             self.write_status()
         iterations = 0

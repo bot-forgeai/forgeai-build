@@ -4,7 +4,7 @@ import signal
 import sys
 
 from procman.config import ConfigError, load_config
-from procman.supervisor import Supervisor
+from procman.supervisor import StartupError, Supervisor
 
 
 def cmd_run(args):
@@ -24,11 +24,15 @@ def cmd_run(args):
     signal.signal(signal.SIGINT, handle_signal)
     signal.signal(signal.SIGTERM, handle_signal)
 
-    sup.run_forever(
-        poll_interval=args.interval,
-        stop_flag=lambda: stopped["flag"],
-        max_iterations=args.max_iterations,
-    )
+    try:
+        sup.run_forever(
+            poll_interval=args.interval,
+            stop_flag=lambda: stopped["flag"],
+            max_iterations=args.max_iterations,
+        )
+    except StartupError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
     return 0
 
 
@@ -62,7 +66,8 @@ def cmd_validate(args):
     print(f"ok: {len(services)} service(s) defined")
     for s in services:
         deps = f" (depends_on: {', '.join(s.depends_on)})" if s.depends_on else ""
-        print(f"  - {s.name}: {' '.join(s.command)}{deps}")
+        ready = f" (ready_check: {s.ready_check['type']})" if s.ready_check else ""
+        print(f"  - {s.name}: {' '.join(s.command)}{deps}{ready}")
     return 0
 
 

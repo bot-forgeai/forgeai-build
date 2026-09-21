@@ -913,11 +913,37 @@ load time with a clean error from both `procman run` and `procman
 validate`, before anything is spawned. `procman validate` also prints
 each service's `depends_on` list, if any.
 
-Note that `procman` has no readiness/health-check protocol — a
-dependency is only guaranteed to be *spawned* before its dependents,
-not confirmed up and accepting connections. A service that needs to
-wait for a dependency to actually be ready should still retry its own
-connection on startup.
+A dependency can also declare a `ready_check`, so its dependents wait
+for it to actually be usable, not just spawned:
+
+```json
+{
+  "services": [
+    {
+      "name": "db", "command": ["python3", "db.py"],
+      "ready_check": {"type": "tcp", "port": 5432, "timeout": 10.0, "interval": 0.2}
+    },
+    {
+      "name": "web", "command": ["python3", "server.py"], "depends_on": ["db"],
+      "ready_check": {"type": "command", "command": ["curl", "-fs", "http://localhost:8000/health"]}
+    }
+  ]
+}
+```
+
+Two check types: `tcp` (connects to `host`/`port`, default host
+`127.0.0.1`) and `command` (runs a command, ready when it exits 0 —
+handy for an HTTP health endpoint via `curl`, or any custom check).
+`timeout` (default 10s) and `interval` (default 0.2s) control how
+long and how often `procman run` polls before giving up. After
+spawning a service with a `ready_check`, `start_all` blocks — polling
+at `interval` — until the check passes, the service exits on its own
+first (a startup crash), or `timeout` elapses; either failure aborts
+the whole `run` with a clean error, tearing down every service already
+started, since a dependent can't safely start atop a dependency that
+never came up. A service with no `ready_check` still only gets the
+old ordering guarantee: spawned before its dependents, not confirmed
+ready.
 
 ## regexlite
 

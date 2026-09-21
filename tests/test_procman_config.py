@@ -202,3 +202,91 @@ def test_topological_order_no_deps_preserves_list():
     b = Service(name="b", command=["x"])
     order = topological_order([a, b])
     assert [s.name for s in order] == ["a", "b"]
+
+
+def test_ready_check_defaults_to_none(tmp_path):
+    path = write_config(tmp_path, {
+        "services": [{"name": "a", "command": ["sleep", "1"]}]
+    })
+    services = load_config(path)
+    assert services[0].ready_check is None
+
+
+def test_ready_check_tcp_loaded(tmp_path):
+    path = write_config(tmp_path, {
+        "services": [{
+            "name": "a", "command": ["sleep", "1"],
+            "ready_check": {"type": "tcp", "port": 8080},
+        }]
+    })
+    services = load_config(path)
+    rc = services[0].ready_check
+    assert rc["type"] == "tcp"
+    assert rc["port"] == 8080
+
+
+def test_ready_check_command_loaded(tmp_path):
+    path = write_config(tmp_path, {
+        "services": [{
+            "name": "a", "command": ["sleep", "1"],
+            "ready_check": {"type": "command", "command": ["true"]},
+        }]
+    })
+    services = load_config(path)
+    assert services[0].ready_check["command"] == ["true"]
+
+
+def test_ready_check_not_an_object_rejected(tmp_path):
+    path = write_config(tmp_path, {
+        "services": [{"name": "a", "command": ["sleep", "1"], "ready_check": "soon"}]
+    })
+    with pytest.raises(ConfigError, match="ready_check"):
+        load_config(path)
+
+
+def test_ready_check_invalid_type_rejected(tmp_path):
+    path = write_config(tmp_path, {
+        "services": [{"name": "a", "command": ["sleep", "1"],
+                      "ready_check": {"type": "http", "port": 80}}]
+    })
+    with pytest.raises(ConfigError, match="type"):
+        load_config(path)
+
+
+def test_ready_check_tcp_missing_port_rejected(tmp_path):
+    path = write_config(tmp_path, {
+        "services": [{"name": "a", "command": ["sleep", "1"],
+                      "ready_check": {"type": "tcp"}}]
+    })
+    with pytest.raises(ConfigError, match="port"):
+        load_config(path)
+
+
+def test_ready_check_command_missing_command_rejected(tmp_path):
+    path = write_config(tmp_path, {
+        "services": [{"name": "a", "command": ["sleep", "1"],
+                      "ready_check": {"type": "command"}}]
+    })
+    with pytest.raises(ConfigError, match="command"):
+        load_config(path)
+
+
+def test_ready_check_non_positive_timeout_rejected(tmp_path):
+    path = write_config(tmp_path, {
+        "services": [{"name": "a", "command": ["sleep", "1"],
+                      "ready_check": {"type": "tcp", "port": 80, "timeout": 0}}]
+    })
+    with pytest.raises(ConfigError, match="timeout"):
+        load_config(path)
+
+
+def test_ready_check_accepted_without_explicit_timeout_or_interval(tmp_path):
+    # timeout/interval are optional; the supervisor applies its own
+    # defaults (10.0s / 0.2s) when they're absent from the dict.
+    path = write_config(tmp_path, {
+        "services": [{"name": "a", "command": ["sleep", "1"],
+                      "ready_check": {"type": "tcp", "port": 80}}]
+    })
+    services = load_config(path)
+    assert "timeout" not in services[0].ready_check
+    assert "interval" not in services[0].ready_check
