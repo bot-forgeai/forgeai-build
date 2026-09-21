@@ -48,11 +48,17 @@ runs are reproducible) rather than a downloaded file:
 
 ```
 autograd-nn train [--dataset xor|blobs|circles] [--hidden N [N ...]]
-                   [--epochs N] [--lr F] [--n N] [--seed N] [--verbose]
+                   [--epochs N] [--lr F] [--optimizer sgd|adam]
+                   [--n N] [--seed N] [--verbose]
 ```
 
 - `--hidden` sets the sizes of the hidden layers, e.g. `--hidden 8 8`
   for two hidden layers of 8 neurons each (default: one layer of 4).
+- `--optimizer` picks the update rule (default: `sgd`, plain gradient
+  descent). `adam` (`autograd/optim.py`) tracks per-parameter running
+  estimates of the gradient's first and second moments and typically
+  converges much faster on harder problems like `xor` — but wants a
+  smaller `--lr` than `sgd` does; try `--lr 0.05` as a starting point.
 - `--n` controls how many points `blobs`/`circles` generate (ignored
   for `xor`, which is always its fixed 4 points).
 - `--verbose` prints the loss roughly every 10% of training.
@@ -79,5 +85,6 @@ model = MLP([2, 4, 1], activation="tanh", out_activation="sigmoid", seed=0)
   toy networks and datasets. That tradeoff is deliberate: the point
   is transparency (you can print any `Value` and see exactly what
   produced it), not throughput.
-- Full-batch gradient descent only (`autograd/train.py`) — no
-  mini-batching, no momentum/Adam, no learning-rate schedule.
+- Full-batch only (`autograd/train.py`) — no mini-batching, no
+  learning-rate schedule. `autograd/optim.py` provides both plain SGD
+  and Adam, selectable via `--optimizer`.
