@@ -96,6 +96,25 @@ def test_parse_bound_zero_exact_matches_empty():
     assert repr(parse("a{0}")) == "Concat([])"
 
 
+def test_parse_lazy_repeat_ops():
+    assert repr(parse("a*?")) == "Star(Char('a'), lazy=True)"
+    assert repr(parse("a+?")) == "Plus(Char('a'), lazy=True)"
+    assert repr(parse("a??")) == "Quest(Char('a'), lazy=True)"
+
+
+def test_parse_lazy_bound():
+    ast = parse("a{2,4}?")
+    assert repr(ast) == (
+        "Concat([Char('a'), Char('a'), "
+        "Quest(Char('a'), lazy=True), Quest(Char('a'), lazy=True)])"
+    )
+
+
+def test_parse_lazy_unbounded_bound():
+    ast = parse("a{2,}?")
+    assert repr(ast) == "Concat([Char('a'), Char('a'), Star(Char('a'), lazy=True)])"
+
+
 def test_parse_bound_invalid_range_raises():
     with pytest.raises(RegexSyntaxError):
         parse("a{4,2}")
@@ -223,6 +242,66 @@ def test_anchors_start_end():
 def test_greedy_star_matches_longest():
     m = match("a*", "aaabbb")
     assert m.group() == "aaa"
+
+
+# ---- matcher: lazy quantifiers ------------------------------------------
+
+def test_lazy_star_matches_empty():
+    m = match("a*?", "aaa")
+    assert m.group() == ""
+
+
+def test_lazy_plus_matches_one():
+    m = match("a+?", "aaa")
+    assert m.group() == "a"
+
+
+def test_lazy_quest_prefers_skipping():
+    m = match("a??", "a")
+    assert m.group() == ""
+
+
+def test_lazy_dot_star_stops_at_first_tag():
+    m = search("<.*?>", "<a><b>")
+    assert m.group() == "<a>"
+
+
+def test_greedy_dot_star_is_still_greedy():
+    m = search("<.*>", "<a><b>")
+    assert m.group() == "<a><b>"
+
+
+def test_lazy_dot_plus_stops_at_first_tag():
+    m = search("<.+?>", "<a><b>")
+    assert m.group() == "<a>"
+
+
+def test_lazy_bound_matches_minimum():
+    m = match("a{2,4}?", "aaaaa")
+    assert m.group() == "aa"
+
+
+def test_lazy_unbounded_bound_matches_minimum():
+    m = match("a{2,}?", "aaaaa")
+    assert m.group() == "aa"
+
+
+def test_lazy_findall_stops_at_shortest_matches():
+    assert findall("<.+?>", "<a><b>") == ["<a>", "<b>"]
+
+
+def test_lazy_star_inside_group_captures_shortest():
+    m = fullmatch(r"(a*?)b", "aaab")
+    assert m.group(1) == "aaa"  # forced to consume all a's to reach 'b'
+
+
+def test_nested_lazy_quantifier_no_hang():
+    # Same shape as the exponential-backtracking regression test, but
+    # with a lazy inner star -- should stay linear-time either way
+    # since Pike's algorithm never backtracks.
+    text = "a" * 200
+    m = search("(a*?)*b", text)
+    assert m is None
 
 
 # ---- matcher: capturing groups ------------------------------------------

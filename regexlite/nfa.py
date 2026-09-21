@@ -93,18 +93,34 @@ def _compile_node(node):
         return Frag(start, dangling)
     if isinstance(node, Star):
         inner = _compile_node(node.node)
-        split = State("split", out=inner.start)
+        split = State("split")
         _patch(inner.dangling, split)
+        if node.lazy:
+            # Exit is higher priority (added to a thread list before the
+            # loop body) so a lazy '*?' prefers zero repetitions first.
+            split.out2 = inner.start
+            return Frag(split, [(split, "out")])
+        split.out = inner.start
         return Frag(split, [(split, "out2")])
     if isinstance(node, Plus):
         inner = _compile_node(node.node)
-        split = State("split", out=inner.start)
+        split = State("split")
         _patch(inner.dangling, split)
+        if node.lazy:
+            split.out2 = inner.start
+            return Frag(inner.start, [(split, "out")])
+        split.out = inner.start
         return Frag(inner.start, [(split, "out2")])
     if isinstance(node, Quest):
         inner = _compile_node(node.node)
-        split = State("split", out=inner.start)
-        dangling = list(inner.dangling) + [(split, "out2")]
+        split = State("split")
+        if node.lazy:
+            # Skipping the atom is higher priority than matching it.
+            split.out2 = inner.start
+            dangling = [(split, "out")] + list(inner.dangling)
+        else:
+            split.out = inner.start
+            dangling = list(inner.dangling) + [(split, "out2")]
         return Frag(split, dangling)
     if isinstance(node, Group):
         inner = _compile_node(node.node)

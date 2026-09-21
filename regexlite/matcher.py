@@ -78,9 +78,13 @@ class Pattern:
         self._start_state = compile_nfa(self._ast)
 
     def _run_from(self, text, start_pos):
-        """Return (end, caps) for the furthest end position reachable by
-        any thread that starts at start_pos, or (None, None) if no
-        thread ever reaches 'match'."""
+        """Return (end, caps) for the match found by the highest-priority
+        thread that reaches 'match', or (None, None) if no thread ever
+        does. Threads are kept in priority order (earlier means tried
+        first, e.g. a greedy loop body before its exit, or a lazy exit
+        before its loop body); when a thread reaches 'match' every
+        lower-priority thread still in the list is dropped, since none
+        of them can ever produce a result preferred over it."""
         length = len(text)
         empty_caps = (None,) * (2 * self.ngroups)
         clist = []
@@ -89,14 +93,16 @@ class Pattern:
 
         matched_end = None
         matched_caps = None
-        for s, caps in clist:
-            if s.kind == "match":
-                matched_end = start_pos
-                matched_caps = caps
-                break
-
         pos = start_pos
-        while clist and pos < length:
+        while True:
+            for i, (s, caps) in enumerate(clist):
+                if s.kind == "match":
+                    matched_end = pos
+                    matched_caps = caps
+                    clist = clist[:i]
+                    break
+            if not clist or pos >= length:
+                break
             ch = text[pos]
             nlist = []
             visited2 = set()
@@ -105,11 +111,6 @@ class Pattern:
                     _add_state(s.out, pos + 1, length, nlist, visited2, caps)
             clist = nlist
             pos += 1
-            for s, caps in clist:
-                if s.kind == "match":
-                    matched_end = pos
-                    matched_caps = caps
-                    break
         return matched_end, matched_caps
 
     def match(self, text, pos=0):

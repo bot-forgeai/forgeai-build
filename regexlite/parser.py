@@ -61,15 +61,23 @@ class Parser:
                 if bound is None:
                     break
                 lo, hi = bound
-                atom = self._expand_bound(atom, lo, hi)
+                lazy = False
+                if self.peek() == "?":
+                    self.advance()
+                    lazy = True
+                atom = self._expand_bound(atom, lo, hi, lazy=lazy)
                 continue
             op = self.advance()
+            lazy = False
+            if self.peek() == "?":
+                self.advance()
+                lazy = True
             if op == "*":
-                atom = Star(atom)
+                atom = Star(atom, lazy=lazy)
             elif op == "+":
-                atom = Plus(atom)
+                atom = Plus(atom, lazy=lazy)
             else:
-                atom = Quest(atom)
+                atom = Quest(atom, lazy=lazy)
         return atom
 
     def _try_parse_bound(self):
@@ -105,14 +113,14 @@ class Parser:
         self.pos = p
         return (lo, hi)
 
-    def _expand_bound(self, atom, lo, hi):
+    def _expand_bound(self, atom, lo, hi, lazy=False):
         if hi == 0:
             return Concat([])
         parts = [atom] * lo
         if hi is None:
-            parts.append(Star(atom))
+            parts.append(Star(atom, lazy=lazy))
         else:
-            parts.extend([Quest(atom)] * (hi - lo))
+            parts.extend([Quest(atom, lazy=lazy) for _ in range(hi - lo)])
         if not parts:
             return Concat([])
         if len(parts) == 1:

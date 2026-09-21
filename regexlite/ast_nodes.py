@@ -53,26 +53,35 @@ class Alt:
 
 
 class Star:
-    def __init__(self, node):
+    def __init__(self, node, lazy=False):
         self.node = node
+        self.lazy = lazy
 
     def __repr__(self):
+        if self.lazy:
+            return f"Star({self.node!r}, lazy=True)"
         return f"Star({self.node!r})"
 
 
 class Plus:
-    def __init__(self, node):
+    def __init__(self, node, lazy=False):
         self.node = node
+        self.lazy = lazy
 
     def __repr__(self):
+        if self.lazy:
+            return f"Plus({self.node!r}, lazy=True)"
         return f"Plus({self.node!r})"
 
 
 class Quest:
-    def __init__(self, node):
+    def __init__(self, node, lazy=False):
         self.node = node
+        self.lazy = lazy
 
     def __repr__(self):
+        if self.lazy:
+            return f"Quest({self.node!r}, lazy=True)"
         return f"Quest({self.node!r})"
 
 
