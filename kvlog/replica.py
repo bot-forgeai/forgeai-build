@@ -9,12 +9,15 @@ lose its connection at any time and just resumes from its own cursor) at
 the cost of up-to-`poll_interval` staleness, which is an acceptable
 tradeoff for the scale this project operates at.
 
-Known limitation: a cursor is a byte offset into the leader's log file,
-which a leader `compact()` invalidates (compaction rewrites the file from
-offset 0). A replica that syncs across a compaction can silently miss or
-duplicate records. Not solved here — a real fix needs either disabling
-compaction while replicas are attached or a compaction-aware cursor
-scheme; out of scope for this pass.
+A cursor is a byte offset into the leader's log file, which a leader
+`compact()` invalidates (compaction rewrites the file from offset 0). To
+stay correct across a compaction, the leader also tracks a generation
+counter (KVStore.generation, bumped on every compact()) and reports it in
+every sync response. A replica persists the last generation it saw
+alongside its cursor; if the leader's generation has moved on, the
+replica's local state may include keys the compacted log no longer
+represents at all, so it clears its own store and does a fresh full sync
+from offset 0 before applying anything further.
 """
 import os
 import time
@@ -28,19 +31,28 @@ def _cursor_path(db_path):
 
 
 def load_cursor(db_path):
+    """Return (offset, generation). generation is None for a cursor file
+    written before generation tracking existed (or no file at all) — the
+    next sync then trusts whatever the leader reports without clearing
+    the store, since we have no earlier generation to compare against."""
     path = _cursor_path(db_path)
     if not os.path.exists(path):
-        return 0
+        return 0, None
     with open(path) as f:
         content = f.read().strip()
-    return int(content) if content else 0
+    if not content:
+        return 0, None
+    parts = content.split()
+    offset = int(parts[0])
+    generation = int(parts[1]) if len(parts) > 1 else None
+    return offset, generation
 
 
-def save_cursor(db_path, offset):
+def save_cursor(db_path, offset, generation):
     path = _cursor_path(db_path)
     tmp_path = path + ".tmp"
     with open(tmp_path, "w") as f:
-        f.write(str(offset))
+        f.write(f"{offset} {generation}")
     os.replace(tmp_path, path)
 
 
@@ -57,12 +69,21 @@ def apply_records(store, records):
                 store.delete(key)
 
 
-def sync_once(store, host, port, cursor):
+def sync_once(store, host, port, cursor, generation):
     """Pull and apply every leader record appended since `cursor`.
-    Returns the new cursor (unchanged if there was nothing new)."""
+    Returns (new_cursor, new_generation).
+
+    If the leader's generation has moved on since our last sync (it ran
+    compact()), `cursor` is no longer meaningful against the rewritten
+    log — clear the local store and do a fresh full sync from offset 0
+    instead of applying the (potentially bogus) diff we just fetched.
+    """
     response = call(host, port, "sync", since=cursor)
+    if generation is not None and response["generation"] != generation:
+        store.clear()
+        response = call(host, port, "sync", since=0)
     apply_records(store, response["records"])
-    return response["offset"]
+    return response["offset"], response["generation"]
 
 
 def run_replica(
@@ -85,11 +106,11 @@ def run_replica(
     without depending on real wall-clock sleeps.
     """
     store = KVStore(db_path, fsync=fsync)
-    cursor = load_cursor(db_path)
+    cursor, generation = load_cursor(db_path)
     try:
         while stop_event is None or not stop_event.is_set():
-            cursor = sync_once(store, host, port, cursor)
-            save_cursor(db_path, cursor)
+            cursor, generation = sync_once(store, host, port, cursor, generation)
+            save_cursor(db_path, cursor, generation)
             if on_sync:
                 on_sync(cursor)
             sleep_fn(poll_interval)

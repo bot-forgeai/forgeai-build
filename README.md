@@ -392,12 +392,15 @@ rather than needing a full resync. The tradeoff for this simplicity is
 up to one poll interval of staleness rather than the leader pushing
 writes the instant they happen.
 
-Replication is not resilient to the leader running `compact`: a
-compaction rewrites the leader's log from byte offset 0, so a replica
-whose cursor predates a compaction can miss or duplicate records on
-its next sync. Avoid compacting a leader with active replicas, or
-delete a replica's `--db` and `.replica_offset` sidecar to force a
-full resync afterward.
+Replication survives the leader running `compact`: the leader tracks a
+generation counter (bumped once per `compact()`, persisted alongside
+its log so it's correct even after a restart) and reports it in every
+`sync` response. A replica persists the last generation it saw next to
+its cursor; if the leader's generation has moved on since the last
+sync, the byte-offset cursor is no longer meaningful against the
+rewritten log, so the replica clears its local state and does a fresh
+full sync from offset 0 before applying anything further — no manual
+intervention needed.
 
 ## toylang
 

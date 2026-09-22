@@ -20,6 +20,32 @@ class KVStore:
         self._data = {}
         self._replay()
         self._file = open(self.path, "ab")
+        self._generation = self._load_generation()
+
+    def _generation_path(self):
+        return self.path + ".generation"
+
+    def _load_generation(self):
+        gen_path = self._generation_path()
+        if not os.path.exists(gen_path):
+            return 0
+        with open(gen_path) as f:
+            content = f.read().strip()
+        return int(content) if content else 0
+
+    def _save_generation(self):
+        gen_path = self._generation_path()
+        tmp_path = gen_path + ".tmp"
+        with open(tmp_path, "w") as f:
+            f.write(str(self._generation))
+        os.replace(tmp_path, gen_path)
+
+    @property
+    def generation(self):
+        """Bumped on every compact() — a replica compares this to what it
+        last saw to detect that the log's byte offsets have been rewritten
+        and its cursor is no longer valid."""
+        return self._generation
 
     def _replay(self):
         if not os.path.exists(self.path):
@@ -85,9 +111,9 @@ class KVStore:
 
         Used for replication — a replica passes back its own cursor as
         `offset` to fetch only what it hasn't already applied. A cursor
-        from before a compact() is not valid (the byte layout changes);
-        callers replicating across a compaction need a fresh full sync
-        from offset 0.
+        from before a compact() is not valid (the byte layout changes) —
+        pair this with `generation` to detect that case; kvlog.replica
+        handles it by resyncing from offset 0 after a generation change.
         """
         new_offset = self.offset()
         records = []
@@ -110,6 +136,20 @@ class KVStore:
             for key, value in self.items():
                 append_record(tmp, "put", key, value, fsync=self._fsync)
         os.replace(tmp_path, self.path)
+        self._file = open(self.path, "ab")
+        self._generation += 1
+        self._save_generation()
+
+    def clear(self):
+        """Discard all records and in-memory state, resetting the store to
+        empty. Used by a replica when the leader's generation has moved on
+        (a compaction happened): the old log's byte offsets are no longer
+        meaningful and a stale key the compacted log no longer contains
+        would otherwise never get removed locally.
+        """
+        self._file.close()
+        open(self.path, "wb").close()
+        self._data = {}
         self._file = open(self.path, "ab")
 
     def close(self):
