@@ -44,24 +44,60 @@ def test_apply_records_delete_of_absent_key_is_a_noop(tmp_path):
 
 def test_cursor_round_trip(tmp_path):
     db_path = str(tmp_path / "replica.db")
-    assert load_cursor(db_path) == 0
-    save_cursor(db_path, 42)
-    assert load_cursor(db_path) == 42
-    save_cursor(db_path, 100)
-    assert load_cursor(db_path) == 100
+    assert load_cursor(db_path) == (0, None)
+    save_cursor(db_path, 42, 0)
+    assert load_cursor(db_path) == (42, 0)
+    save_cursor(db_path, 100, 2)
+    assert load_cursor(db_path) == (100, 2)
+
+
+def test_load_cursor_old_format_has_no_generation(tmp_path):
+    # A cursor file written before generation tracking existed has just
+    # a bare offset — must still parse, with generation reported as None.
+    db_path = str(tmp_path / "replica.db")
+    with open(db_path + ".replica_offset", "w") as f:
+        f.write("77")
+    assert load_cursor(db_path) == (77, None)
 
 
 def test_sync_once_applies_new_records_and_advances_cursor(running_leader, tmp_path):
     host, port, leader_store = running_leader
     leader_store.put("a", "1")
     with KVStore(str(tmp_path / "replica.db")) as replica_store:
-        cursor = sync_once(replica_store, host, port, 0)
+        cursor, generation = sync_once(replica_store, host, port, 0, None)
         assert replica_store.get("a") == "1"
         assert cursor == leader_store.offset()
+        assert generation == 0
 
         # A second sync at the new cursor with no new leader writes applies nothing.
-        cursor2 = sync_once(replica_store, host, port, cursor)
+        cursor2, generation2 = sync_once(replica_store, host, port, cursor, generation)
         assert cursor2 == cursor
+        assert generation2 == generation
+
+
+def test_sync_once_resyncs_from_scratch_after_leader_compacts(running_leader, tmp_path):
+    host, port, leader_store = running_leader
+    leader_store.put("a", "1")
+    leader_store.put("b", "2")
+    leader_store.delete("a")
+
+    with KVStore(str(tmp_path / "replica.db")) as replica_store:
+        cursor, generation = sync_once(replica_store, host, port, 0, None)
+        assert "a" not in replica_store
+        assert replica_store.get("b") == "2"
+
+        # Compaction rewrites the leader's log from offset 0 and bumps its
+        # generation. A replica syncing with its old (now-invalid) cursor
+        # must detect this via the generation mismatch, not silently apply
+        # a diff against the rewritten file.
+        leader_store.compact()
+        leader_store.put("c", "3")
+
+        cursor2, generation2 = sync_once(replica_store, host, port, cursor, generation)
+        assert generation2 == leader_store.generation
+        assert replica_store.get("b") == "2"
+        assert replica_store.get("c") == "3"
+        assert "a" not in replica_store
 
 
 def test_run_replica_catches_up_and_stops(running_leader, tmp_path):
@@ -114,7 +150,9 @@ def test_run_replica_resumes_from_persisted_cursor(running_leader, tmp_path):
     # The second run's sync should only have needed the new record, not a
     # full resync — verified indirectly via the persisted cursor matching
     # the leader's current offset.
-    assert load_cursor(db_path) == leader_store.offset()
+    cursor, generation = load_cursor(db_path)
+    assert cursor == leader_store.offset()
+    assert generation == leader_store.generation
 
 
 def test_run_replica_reflects_deletes(running_leader, tmp_path):

@@ -41,7 +41,7 @@ def dispatch(store, request):
 
     if op == "sync":
         records, offset = store.records_since(request.get("since", 0))
-        return {"ok": True, "records": records, "offset": offset}
+        return {"ok": True, "records": records, "offset": offset, "generation": store.generation}
 
     if op == "compact":
         before = os.path.getsize(store.path) if os.path.exists(store.path) else 0

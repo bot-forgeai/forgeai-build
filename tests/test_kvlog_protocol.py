@@ -60,6 +60,15 @@ def test_sync_default_since(tmp_path):
         assert response["ok"] is True
         assert response["records"] == [{"op": "put", "key": "a", "value": "1"}]
         assert response["offset"] == store.offset()
+        assert response["generation"] == 0
+
+
+def test_sync_generation_bumps_after_compact(tmp_path):
+    with KVStore(str(tmp_path / "db")) as store:
+        dispatch(store, {"op": "put", "key": "a", "value": "1"})
+        dispatch(store, {"op": "compact"})
+        response = dispatch(store, {"op": "sync"})
+        assert response["generation"] == 1
 
 
 def test_sync_since_cursor(tmp_path):

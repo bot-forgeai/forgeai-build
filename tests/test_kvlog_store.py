@@ -103,6 +103,40 @@ def test_compact_drops_deleted_keys(db_path):
         assert store.get("stays") == "y"
 
 
+def test_generation_starts_at_zero_and_bumps_on_compact(db_path):
+    with KVStore(db_path) as store:
+        assert store.generation == 0
+        store.put("a", "1")
+        store.compact()
+        assert store.generation == 1
+        store.compact()
+        assert store.generation == 2
+
+
+def test_generation_persists_across_reopen(db_path):
+    with KVStore(db_path) as store:
+        store.put("a", "1")
+        store.compact()
+    with KVStore(db_path) as store:
+        assert store.generation == 1
+
+
+def test_clear_empties_store_and_resets_log_file(db_path):
+    with KVStore(db_path) as store:
+        store.put("a", "1")
+        store.put("b", "2")
+        store.clear()
+        assert len(store) == 0
+        assert "a" not in store
+        store.put("c", "3")
+        assert store.get("c") == "3"
+
+    # cleared state survives a reopen too — the log file was actually
+    # truncated, not just the in-memory dict.
+    with KVStore(db_path) as store:
+        assert store.keys() == ["c"]
+
+
 def test_prefix(db_path):
     with KVStore(db_path) as store:
         store.put("user:1", "ada")
