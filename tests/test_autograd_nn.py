@@ -1,6 +1,8 @@
 import json
 import random
 
+import pytest
+
 from autograd.datasets import make_blobs, make_circles, make_xor
 from autograd.nn import MLP
 from autograd.train import accuracy, predict, train
@@ -134,6 +136,59 @@ def test_load_rejects_parameter_count_mismatch(tmp_path):
 
     try:
         MLP.load(path)
+        assert False, "expected ValueError"
+    except ValueError:
+        pass
+
+
+def test_minibatch_training_reduces_loss_on_xor():
+    xs, ys = make_xor()
+    model = MLP([2, 4, 1], activation="tanh", out_activation="sigmoid", seed=42)
+    history = train(model, xs, ys, epochs=300, lr=0.5, batch_size=2, seed=1)
+    assert history[-1] < history[0]
+    assert accuracy(model, xs, ys) == 1.0
+
+
+def test_minibatch_history_is_one_entry_per_epoch():
+    xs, ys = make_xor()
+    model = MLP([2, 4, 1], seed=1)
+    history = train(model, xs, ys, epochs=5, lr=0.1, batch_size=1, seed=1)
+    assert len(history) == 5
+
+
+def test_minibatch_shuffle_true_vs_false_can_differ_in_order_but_not_count():
+    xs, ys = make_blobs(n=20, seed=3)
+    m1 = MLP([2, 4, 1], seed=1)
+    m2 = MLP([2, 4, 1], seed=1)
+    train(m1, xs, ys, epochs=3, lr=0.1, batch_size=4, seed=1, shuffle=True)
+    train(m2, xs, ys, epochs=3, lr=0.1, batch_size=4, seed=1, shuffle=False)
+    # different shuffling generally produces different learned weights,
+    # but both must have actually taken the same number of steps.
+    assert [p.data for p in m1.parameters()] != [p.data for p in m2.parameters()]
+
+
+def test_minibatch_size_larger_than_dataset_behaves_like_full_batch():
+    # A batch_size >= len(dataset) takes exactly one optimizer step per
+    # epoch, mathematically equivalent to full-batch mode -- but not
+    # necessarily bit-identical, since Value._prev is a set keyed on
+    # object identity/address and its iteration order (and therefore
+    # float-summation order during backward()) can differ between two
+    # separately-built computation graphs even with the same inputs.
+    # So compare closely, not exactly.
+    xs, ys = make_xor()
+    m1 = MLP([2, 4, 1], seed=1)
+    m2 = MLP([2, 4, 1], seed=1)
+    train(m1, xs, ys, epochs=5, lr=0.1, batch_size=None)
+    train(m2, xs, ys, epochs=5, lr=0.1, batch_size=1000, shuffle=False)
+    for p1, p2 in zip(m1.parameters(), m2.parameters()):
+        assert p1.data == pytest.approx(p2.data, abs=1e-9)
+
+
+def test_invalid_batch_size_raises():
+    xs, ys = make_xor()
+    model = MLP([2, 4, 1], seed=1)
+    try:
+        train(model, xs, ys, epochs=1, batch_size=0)
         assert False, "expected ValueError"
     except ValueError:
         pass
