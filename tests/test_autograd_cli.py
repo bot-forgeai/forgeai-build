@@ -60,6 +60,21 @@ def test_cli_predict_missing_file_errors_cleanly(capsys):
     assert "error:" in err
 
 
+def test_cli_batch_size_trains_successfully(capsys):
+    code = run(["train", "--dataset", "xor", "--epochs", "300", "--lr", "0.5", "--seed", "42",
+                "--batch-size", "2"])
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "accuracy:   100.0%" in out
+
+
+def test_cli_invalid_batch_size_errors_cleanly(capsys):
+    code = run(["train", "--dataset", "xor", "--epochs", "5", "--batch-size", "0"])
+    err = capsys.readouterr().err
+    assert code == 1
+    assert "error:" in err
+
+
 def test_cli_predict_wrong_input_count_errors_cleanly(tmp_path, capsys):
     model_path = str(tmp_path / "model.json")
     run(["train", "--dataset", "xor", "--epochs", "10", "--save", model_path])

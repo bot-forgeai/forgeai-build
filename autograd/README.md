@@ -49,7 +49,7 @@ runs are reproducible) rather than a downloaded file:
 ```
 autograd-nn train [--dataset xor|blobs|circles] [--hidden N [N ...]]
                    [--epochs N] [--lr F] [--optimizer sgd|adam]
-                   [--n N] [--seed N] [--verbose]
+                   [--batch-size N] [--n N] [--seed N] [--verbose]
 ```
 
 - `--hidden` sets the sizes of the hidden layers, e.g. `--hidden 8 8`
@@ -59,6 +59,10 @@ autograd-nn train [--dataset xor|blobs|circles] [--hidden N [N ...]]
   estimates of the gradient's first and second moments and typically
   converges much faster on harder problems like `xor` — but wants a
   smaller `--lr` than `sgd` does; try `--lr 0.05` as a starting point.
+- `--batch-size N` splits each epoch into shuffled batches of `N`
+  examples, taking one optimizer step per batch instead of one step
+  over the whole dataset (default: full-batch, unchanged). Reported
+  per-epoch loss is the mean of that epoch's per-batch losses.
 - `--n` controls how many points `blobs`/`circles` generate (ignored
   for `xor`, which is always its fixed 4 points).
 - `--verbose` prints the loss roughly every 10% of training.
@@ -105,6 +109,7 @@ loaded = MLP.load("model.json")  # architecture + weights, ready to use
   toy networks and datasets. That tradeoff is deliberate: the point
   is transparency (you can print any `Value` and see exactly what
   produced it), not throughput.
-- Full-batch only (`autograd/train.py`) — no mini-batching, no
-  learning-rate schedule. `autograd/optim.py` provides both plain SGD
-  and Adam, selectable via `--optimizer`.
+- No learning-rate schedule — `--lr` is fixed for the whole run.
+  `autograd/optim.py` provides both plain SGD and Adam, selectable via
+  `--optimizer`, and `autograd/train.py` supports mini-batching via
+  `--batch-size` alongside the default full-batch mode.

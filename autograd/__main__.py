@@ -17,7 +17,12 @@ def cmd_train(args):
     model = MLP(sizes, activation="tanh", out_activation="sigmoid", seed=args.seed)
 
     log_every = max(1, args.epochs // 10) if args.verbose else None
-    history = train(model, xs, ys, epochs=args.epochs, lr=args.lr, log_every=log_every, optimizer=args.optimizer)
+    try:
+        history = train(model, xs, ys, epochs=args.epochs, lr=args.lr, log_every=log_every,
+                         optimizer=args.optimizer, batch_size=args.batch_size, seed=args.seed)
+    except ValueError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
 
     acc = accuracy(model, xs, ys)
     print(f"final loss: {history[-1]:.4f}")
@@ -56,6 +61,8 @@ def build_parser():
     p_train.add_argument("--lr", type=float, default=0.5)
     p_train.add_argument("--optimizer", choices=sorted(OPTIMIZERS), default="sgd",
                           help="update rule (default: sgd; adam typically wants a smaller --lr, e.g. 0.05)")
+    p_train.add_argument("--batch-size", type=int, default=None,
+                          help="mini-batch size (default: full-batch, one step per epoch)")
     p_train.add_argument("--n", type=int, default=60, help="number of points for blobs/circles")
     p_train.add_argument("--seed", type=int, default=42)
     p_train.add_argument("--verbose", action="store_true", help="print loss every ~10% of epochs")
