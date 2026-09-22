@@ -1053,3 +1053,46 @@ layers; `autograd/train.py` runs full-batch gradient descent;
 `autograd/datasets.py` generates three small synthetic datasets (XOR,
 two Gaussian blobs, and a ring-around-a-disk) offline via seeded
 `random`, so training is fully reproducible with no downloaded data.
+
+## gridsheet
+
+A small spreadsheet engine: cells hold either a literal (a number or
+text) or a `=formula` referencing other cells, and changing one cell
+automatically recomputes every cell that transitively depends on it —
+the same dependency-graph-plus-recalculation model real spreadsheets
+use, backed by a plain JSON file rather than a binary format.
+
+```
+pip install -e .
+gridsheet set budget.json A1 100
+gridsheet set budget.json A2 250
+gridsheet set budget.json B1 "=SUM(A1:A2)"
+gridsheet get budget.json B1   # 350
+gridsheet show budget.json     # prints the whole grid
+gridsheet shell budget.json    # interactive REPL: "A1 = 5", "show", "get A1"
+```
+
+Formulas support `+ - * /` with normal precedence, parentheses, cell
+references (`A1`), ranges (`A1:A3`), and `SUM`/`AVG`/`MIN`/`MAX`/`COUNT`
+over a range or a comma-separated mix of cells and literals. A blank
+cell reads as `0` in arithmetic; a divide-by-zero or reference to an
+unknown function produces an error value (`#DIV/0!`, `#NAME?`,
+`#VALUE!`) that propagates through anything downstream, rather than
+crashing — the same way a real spreadsheet shows an error cell instead
+of halting.
+
+`gridsheet/sheet.py`'s `Sheet` tracks a `depends_on`/`dependents` graph
+alongside the cells themselves. Setting a cell only recomputes its
+*closure* — itself plus every cell reachable via `dependents` — in
+topological order, not the whole sheet, so recalculation stays cheap
+as a sheet grows. Before accepting a new formula, `Sheet` walks its
+proposed dependencies looking for a path back to the cell being set;
+if one exists, the whole change is rejected with a clean
+`SheetError("circular reference...")` and nothing is mutated, rather
+than silently looping forever or leaving the graph half-rewired.
+Loading a saved sheet from JSON doesn't require cells to appear in
+dependency order in the file (a forward reference like `B1` naming
+`A1` before `A1`'s own entry works fine) — the whole file is parsed
+first, then evaluated in one topological pass; a cycle hand-edited
+into the JSON is caught the same way, via a short topological order
+that couldn't include every cell.
