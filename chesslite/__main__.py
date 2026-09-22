@@ -19,6 +19,7 @@ def build_arg_parser():
         help="let the engine play this color instead of a second human",
     )
     play_p.add_argument("--depth", type=int, default=2, help="AI search depth (default: 2)")
+    play_p.add_argument("--pgn", default=None, help="write the finished game's movetext to this PGN file")
 
     serve_p = sub.add_parser("serve", help="host a game over TCP and wait for two players to connect")
     serve_p.add_argument("--host", default="0.0.0.0", help="address to bind (LAN or localhost only)")
@@ -43,7 +44,12 @@ def _print_board(game: Game):
     print(f"{turn} to move{suffix}")
 
 
-def run_play(ai_color=None, depth=2):
+def _write_pgn(game: Game, path: str, result: str):
+    with open(path, "w") as f:
+        f.write(game.to_pgn(result) + "\n")
+
+
+def run_play(ai_color=None, depth=2, pgn_path=None):
     game = Game()
     while True:
         _print_board(game)
@@ -51,24 +57,33 @@ def run_play(ai_color=None, depth=2):
         if result == "checkmate":
             winner = "Black" if game.to_move == "w" else "White"
             print(f"Checkmate. {winner} wins.")
+            if pgn_path:
+                _write_pgn(game, pgn_path, "0-1" if winner == "Black" else "1-0")
             return 0
         if result == "stalemate":
             print("Stalemate. Draw.")
+            if pgn_path:
+                _write_pgn(game, pgn_path, "1/2-1/2")
             return 0
         if result == "draw":
             print("Draw.")
+            if pgn_path:
+                _write_pgn(game, pgn_path, "1/2-1/2")
             return 0
 
         if game.to_move == ai_color:
             move = choose_move(game.board, ai_color, depth=depth)
+            san = game.san(move)
             game.make_move(move)
-            print(f"AI plays {game.move_str(move)}")
+            print(f"AI plays {san} ({game.move_str(move)})")
             continue
 
         try:
             text = input(f"{'White' if game.to_move == 'w' else 'Black'}'s move: ")
         except EOFError:
             print()
+            if pgn_path:
+                _write_pgn(game, pgn_path, "*")
             return 0
         if not text.strip():
             continue
@@ -82,7 +97,7 @@ def main(argv=None):
     parser = build_arg_parser()
     args = parser.parse_args(argv)
     if args.command == "play":
-        return run_play(ai_color=args.ai, depth=args.depth)
+        return run_play(ai_color=args.ai, depth=args.depth, pgn_path=args.pgn)
     if args.command == "serve":
         print(f"Serving on {args.host}:{args.port}, waiting for players...")
         serve(args.host, args.port)
