@@ -1,6 +1,6 @@
 """Game: turn order, move parsing, and game-over detection on top of the
 pure board/move-generation layer."""
-from .board import Board, parse_square, square_name, color_of
+from .board import Board, FILES, parse_square, square_name, color_of, opponent
 from .moves import legal_moves, apply_move, is_in_check, Move
 
 PROMO_LETTERS = {"q": "Q", "r": "R", "b": "B", "n": "N"}
@@ -14,6 +14,7 @@ class Game:
     def __init__(self, board=None):
         self.board = board or Board()
         self.history = []  # list of Move applied so far
+        self.san_history = []  # list of SAN strings, parallel to history
         self.position_counts = {self.board.position_key(): 1}
 
     @property
@@ -75,8 +76,10 @@ class Game:
         )
         if move not in self.legal_moves():
             raise IllegalMoveError(f"illegal move: {move}")
+        san = self.san(move)
         self.board = apply_move(self.board, move)
         self.history.append(move)
+        self.san_history.append(san)
         key = self.board.position_key()
         self.position_counts[key] = self.position_counts.get(key, 0) + 1
         return move
@@ -86,3 +89,61 @@ class Game:
         if move.promotion:
             s += move.promotion.lower()
         return s
+
+    def _disambiguation(self, move: Move) -> str:
+        """Minimal file/rank/both prefix needed so this move can't be
+        confused with another legal move of the same piece type landing
+        on the same target square (standard SAN disambiguation rules)."""
+        piece = self.board.piece_at(move.frm)
+        others = [
+            m
+            for m in self.legal_moves()
+            if m.to == move.to
+            and m.frm != move.frm
+            and self.board.piece_at(m.frm) == piece
+        ]
+        if not others:
+            return ""
+        frm_file, frm_rank = move.frm
+        if not any(m.frm[0] == frm_file for m in others):
+            return FILES[frm_file]
+        if not any(m.frm[1] == frm_rank for m in others):
+            return str(frm_rank + 1)
+        return f"{FILES[frm_file]}{frm_rank + 1}"
+
+    def san(self, move: Move) -> str:
+        """Standard Algebraic Notation for `move`, assuming self.board is
+        the position *before* the move is applied."""
+        if move.castle == "K":
+            base = "O-O"
+        elif move.castle == "Q":
+            base = "O-O-O"
+        else:
+            piece = self.board.piece_at(move.frm)
+            is_pawn = piece.upper() == "P"
+            is_capture = move.en_passant or self.board.piece_at(move.to) is not None
+            if is_pawn:
+                prefix = f"{FILES[move.frm[0]]}x" if is_capture else ""
+            else:
+                prefix = piece.upper() + self._disambiguation(move)
+                if is_capture:
+                    prefix += "x"
+            promo = f"={move.promotion}" if move.promotion else ""
+            base = f"{prefix}{square_name(move.to)}{promo}"
+
+        mover = self.board.to_move
+        new_board = apply_move(self.board, move)
+        opp = opponent(mover)
+        if is_in_check(new_board, opp):
+            base += "#" if not legal_moves(new_board, opp) else "+"
+        return base
+
+    def to_pgn(self, result: str = "*") -> str:
+        """Movetext for the game played so far, e.g. '1. e4 e5 2. Nf3 *'."""
+        parts = []
+        for i, san in enumerate(self.san_history):
+            if i % 2 == 0:
+                parts.append(f"{i // 2 + 1}.")
+            parts.append(san)
+        parts.append(result)
+        return " ".join(parts)

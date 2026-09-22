@@ -709,6 +709,12 @@ as an automated opponent instead of a second human — it speaks the
 same protocol as `join`, reconstructing the board from each broadcast
 FEN and running the same `choose_move` search `play --ai` uses.
 
+`chesslite play --pgn game.pgn` records the game in Standard Algebraic
+Notation (`Game.san`/`Game.to_pgn`, e.g. `1. e4 e5 2. Nf3 Nc6 ... 1-0`)
+and writes the movetext to that file once the game ends (checkmate,
+stalemate, draw, or an interrupted session gets a `*` result), so a
+finished game can be reviewed or opened in any standard chess tool.
+
 ## nanosql
 
 A tiny SQL database engine: a hand-written lexer and recursive-descent
