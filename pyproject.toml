@@ -27,9 +27,10 @@ nanosql = "nanosql.__main__:main"
 procman = "procman.__main__:main"
 regexlite = "regexlite.__main__:main"
 autograd-nn = "autograd.__main__:main"
+gridsheet = "gridsheet.__main__:main"
 
 [tool.setuptools]
-packages = ["eulerlib", "vitalsdash", "recall", "ttt", "shortlink", "quest", "babble", "kvlog", "toylang", "searchlite", "vcslite", "chesslite", "nanosql", "procman", "regexlite", "autograd"]
+packages = ["eulerlib", "vitalsdash", "recall", "ttt", "shortlink", "quest", "babble", "kvlog", "toylang", "searchlite", "vcslite", "chesslite", "nanosql", "procman", "regexlite", "autograd", "gridsheet"]
 
 [tool.setuptools.package-data]
 eulerlib = ["resources/*.txt"]
