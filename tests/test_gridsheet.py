@@ -136,6 +136,103 @@ def test_extract_refs_includes_ranges_and_direct_refs():
     assert formula.extract_refs(ast) == {"A1", "B1", "B2", "B3"}
 
 
+# --- comparisons ---
+
+@pytest.mark.parametrize(
+    "expr,expected",
+    [
+        ("1=1", 1.0),
+        ("1=2", 0.0),
+        ("1<>2", 1.0),
+        ("1<>1", 0.0),
+        ("1<2", 1.0),
+        ("2<1", 0.0),
+        ("2>1", 1.0),
+        ("1>2", 0.0),
+        ("2<=2", 1.0),
+        ("3<=2", 0.0),
+        ("2>=2", 1.0),
+        ("2>=3", 0.0),
+    ],
+)
+def test_numeric_comparisons(expr, expected):
+    assert formula.evaluate(formula.parse(expr), lookup_from({})) == expected
+
+
+def test_text_equality_comparison():
+    # No string-literal syntax exists in the tokenizer, so text
+    # comparisons compare two cell references instead of a literal.
+    values = {"A1": "yes", "B1": "yes", "C1": "no"}
+    assert formula.evaluate(formula.parse("A1=B1"), lookup_from(values)) == 1.0
+    assert formula.evaluate(formula.parse("A1=C1"), lookup_from(values)) == 0.0
+
+
+def test_comparison_inside_parens_and_arithmetic():
+    ast = formula.parse("(1<2)*10")
+    assert formula.evaluate(ast, lookup_from({})) == 10.0
+
+
+# --- IF/ROUND/ABS functions ---
+
+def test_if_true_and_false_branches():
+    values = {"A1": 5.0}
+    assert formula.evaluate(formula.parse("IF(A1>3, 1, 2)"), lookup_from(values)) == 1.0
+    assert formula.evaluate(formula.parse("IF(A1>30, 1, 2)"), lookup_from(values)) == 2.0
+
+
+def test_if_only_evaluates_taken_branch():
+    # The untaken branch divides by zero; IF must not raise for it.
+    values = {"A1": 5.0}
+    ast = formula.parse("IF(A1>3, 100, 1/0)")
+    assert formula.evaluate(ast, lookup_from(values)) == 100.0
+    ast2 = formula.parse("IF(A1>30, 1/0, 100)")
+    assert formula.evaluate(ast2, lookup_from(values)) == 100.0
+
+
+def test_if_can_return_text_from_cell_refs():
+    # The tokenizer has no string-literal syntax, so a text IF branch
+    # has to come from a cell reference rather than a quoted literal.
+    text_values = {"A1": 5.0, "B1": "big", "C1": "small"}
+    ast = formula.parse("IF(A1>3, B1, C1)")
+    assert formula.evaluate(ast, lookup_from(text_values)) == "big"
+
+
+def test_if_wrong_arg_count_is_value_error():
+    ast = formula.parse("IF(1, 2)")
+    with pytest.raises(formula.SheetEvalError, match="#VALUE!"):
+        formula.evaluate(ast, lookup_from({}))
+
+
+def test_if_error_condition_propagates():
+    ast = formula.parse("IF(1/0, 1, 2)")
+    with pytest.raises(formula.SheetEvalError, match=r"#DIV/0!"):
+        formula.evaluate(ast, lookup_from({}))
+
+
+def test_round_function():
+    assert formula.evaluate(formula.parse("ROUND(3.14159, 2)"), lookup_from({})) == 3.14
+    assert formula.evaluate(formula.parse("ROUND(3.6, 0)"), lookup_from({})) == 4.0
+
+
+def test_abs_function():
+    assert formula.evaluate(formula.parse("ABS(-5)"), lookup_from({})) == 5.0
+    assert formula.evaluate(formula.parse("ABS(5)"), lookup_from({})) == 5.0
+
+
+def test_extract_refs_includes_both_if_branches():
+    ast = formula.parse("IF(A1>0, B1, C1)")
+    assert formula.extract_refs(ast) == {"A1", "B1", "C1"}
+
+
+def test_if_in_sheet_recomputes_on_condition_change():
+    sheet = Sheet()
+    sheet.set_cell("A1", "5")
+    sheet.set_cell("B1", '=IF(A1>3, 100, 200)')
+    assert sheet.get_value("B1") == 100.0
+    sheet.set_cell("A1", "1")
+    assert sheet.get_value("B1") == 200.0
+
+
 # --- Sheet: literals and recomputation ---
 
 def test_set_and_get_numeric_literal():
