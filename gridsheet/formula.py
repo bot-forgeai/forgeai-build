@@ -1,12 +1,12 @@
 """Formula tokenizer, recursive-descent parser, and evaluator for gridsheet."""
 import re
 
-from gridsheet.refs import expand_range, normalize_ref
+from gridsheet.refs import expand_range, normalize_ref, strip_abs, translate_ref
 
 TOKEN_RE = re.compile(
     r"""
     (?P<NUMBER>\d+\.\d+|\d+)
-  | (?P<CELLREF>[A-Za-z]+\d+)
+  | (?P<CELLREF>\$?[A-Za-z]+\$?\d+)
   | (?P<IDENT>[A-Za-z]+)
   | (?P<COLON>:)
   | (?P<COMMA>,)
@@ -64,13 +64,14 @@ class Num:
 
 class CellRef:
     def __init__(self, ref):
-        self.ref = normalize_ref(ref)
+        self.text = normalize_ref(ref)  # canonical case, '$' locks preserved
+        self.ref = strip_abs(self.text)  # plain form used as a cell lookup key
 
 
 class Range:
     def __init__(self, start, end):
-        self.start = normalize_ref(start)
-        self.end = normalize_ref(end)
+        self.start = strip_abs(normalize_ref(start))
+        self.end = strip_abs(normalize_ref(end))
 
 
 class BinOp:
@@ -192,6 +193,21 @@ class Parser:
 
 def parse(text):
     return Parser(tokenize(text)).parse()
+
+
+CELLREF_TOKEN_RE = re.compile(r"\$?[A-Za-z]+\$?\d+")
+
+
+def translate_formula_text(text, dcol, drow):
+    """Shift every cell reference in a formula's source text (without the
+    leading '=') by (dcol, drow), the way spreadsheet fill/copy does —
+    '$'-locked components of a reference stay fixed. Raises ValueError if a
+    shifted reference would fall off the grid."""
+
+    def repl(m):
+        return translate_ref(m.group(), dcol, drow)
+
+    return CELLREF_TOKEN_RE.sub(repl, text)
 
 
 def extract_refs(node):

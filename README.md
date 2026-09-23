@@ -1113,3 +1113,15 @@ values, not its formulas, as a plain CSV grid — useful for handing a
 sheet's results to something that only speaks CSV, e.g. vitalsdash.
 An error cell's value (`#DIV/0!`, etc.) is written out as that same
 error string, matching what `show`/`get` would already display.
+
+`gridsheet fill FILE.json SRC DEST` (also available as `fill SRC DEST`
+inside the shell) copies `SRC`'s content into `DEST` — a single cell
+(`B2`) or a range (`B2:B10`) — the same way dragging a spreadsheet
+cell's fill handle works. A formula's cell references shift by the
+offset between `SRC` and each destination cell (`=A1*10` filled from
+`B1` down into `B2` becomes `=A2*10`); prefixing a reference's column
+and/or row with `$` locks that part so it doesn't shift
+(`=A1+$D$1` filled anywhere still reads the same `D1`). A literal
+value is copied unchanged. Filling a reference off the edge of the
+grid (column/row below 1) raises a clean `SheetError` rather than
+wrapping around or crashing.

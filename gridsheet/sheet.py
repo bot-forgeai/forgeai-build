@@ -1,6 +1,6 @@
 """Sheet: cell storage, dependency graph, and formula recalculation."""
 from gridsheet import formula
-from gridsheet.refs import normalize_ref
+from gridsheet.refs import normalize_ref, parse_ref
 
 
 class SheetError(Exception):
@@ -124,6 +124,31 @@ class Sheet:
                     if in_degree[dependent] == 0:
                         ready.append(dependent)
         return order
+
+    def fill(self, src_ref, dest_refs):
+        """Copy src_ref's content into each ref in dest_refs. A formula's
+        relative cell references shift by the offset between src_ref and each
+        destination, the same way spreadsheet fill/copy works; '$'-locked
+        references (e.g. '$A$1', 'A$1', '$A1') stay fixed. A literal value is
+        copied unchanged."""
+        src_ref = normalize_ref(src_ref)
+        src_cell = self.cells.get(src_ref)
+        src_raw = src_cell.raw if src_cell else ""
+        src_c, src_r = parse_ref(src_ref)
+        for dest in dest_refs:
+            dest = normalize_ref(dest)
+            if dest == src_ref:
+                continue
+            dest_c, dest_r = parse_ref(dest)
+            dcol, drow = dest_c - src_c, dest_r - src_r
+            if src_raw.startswith("="):
+                try:
+                    new_content = "=" + formula.translate_formula_text(src_raw[1:], dcol, drow)
+                except ValueError as e:
+                    raise SheetError(f"cannot fill {dest}: {e}") from e
+            else:
+                new_content = src_raw
+            self.set_cell(dest, new_content)
 
     def get_value(self, ref):
         ref = normalize_ref(ref)

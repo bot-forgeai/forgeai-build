@@ -517,3 +517,143 @@ def test_cli_shell_export(tmp_path, capsys, monkeypatch):
     assert "exported" in out
     with open(csv_path) as f:
         assert f.read() == "5\n"
+
+
+# --- absolute/relative refs and fill ---
+
+def test_parse_ref_locked_and_translate_ref():
+    from gridsheet.refs import parse_ref_locked, translate_ref
+
+    assert parse_ref_locked("A1") == (1, 1, False, False)
+    assert parse_ref_locked("$A1") == (1, 1, True, False)
+    assert parse_ref_locked("A$1") == (1, 1, False, True)
+    assert parse_ref_locked("$A$1") == (1, 1, True, True)
+
+    assert translate_ref("A1", 1, 2) == "B3"
+    assert translate_ref("$A1", 1, 2) == "$A3"
+    assert translate_ref("A$1", 1, 2) == "B$1"
+    assert translate_ref("$A$1", 1, 2) == "$A$1"
+    with pytest.raises(ValueError):
+        translate_ref("A1", -1, 0)
+
+
+def test_strip_abs():
+    from gridsheet.refs import strip_abs
+
+    assert strip_abs("A1") == "A1"
+    assert strip_abs("$A$1") == "A1"
+    assert strip_abs("a$1") == "A1"
+
+
+def test_normalize_ref_preserves_locks():
+    assert normalize_ref("$a$1") == "$A$1"
+    assert normalize_ref("a$1") == "A$1"
+
+
+def test_translate_formula_text():
+    assert formula.translate_formula_text("A1+1", 1, 1) == "B2+1"
+    assert formula.translate_formula_text("$A1+A$1", 1, 1) == "$A2+B$1"
+    assert formula.translate_formula_text("SUM(A1:A3)", 0, 1) == "SUM(A2:A4)"
+    with pytest.raises(ValueError):
+        formula.translate_formula_text("A1", -1, 0)
+
+
+def test_formula_with_locked_ref_evaluates_normally():
+    sheet = Sheet()
+    sheet.set_cell("A1", "10")
+    sheet.set_cell("B1", "=$A$1+1")
+    assert sheet.get_value("B1") == 11.0
+
+
+def test_sheet_fill_relative_formula():
+    sheet = Sheet()
+    sheet.set_cell("A1", "1")
+    sheet.set_cell("A2", "2")
+    sheet.set_cell("B1", "=A1*10")
+    sheet.fill("B1", ["B2"])
+    assert sheet.get_raw("B2") == "=A2*10"
+    assert sheet.get_value("B2") == 20.0
+
+
+def test_sheet_fill_locked_ref_stays_fixed():
+    sheet = Sheet()
+    sheet.set_cell("A1", "3")
+    sheet.set_cell("B1", "1")
+    sheet.set_cell("B2", "2")
+    sheet.set_cell("C1", "=B1*$A$1")
+    sheet.fill("C1", ["C2"])
+    assert sheet.get_raw("C2") == "=B2*$A$1"
+    assert sheet.get_value("C2") == 6.0
+
+
+def test_sheet_fill_range():
+    sheet = Sheet()
+    for r in range(1, 4):
+        sheet.set_cell(f"A{r}", str(r))
+    sheet.set_cell("B1", "=A1*2")
+    sheet.fill("B1", ["B2", "B3"])
+    assert sheet.get_value("B2") == 4.0
+    assert sheet.get_value("B3") == 6.0
+
+
+def test_sheet_fill_literal_copies_unchanged():
+    sheet = Sheet()
+    sheet.set_cell("A1", "hello")
+    sheet.fill("A1", ["A2"])
+    assert sheet.get_value("A2") == "hello"
+
+
+def test_sheet_fill_out_of_bounds_raises():
+    sheet = Sheet()
+    sheet.set_cell("B2", "=A1+1")
+    with pytest.raises(SheetError):
+        sheet.fill("B2", ["A1"])
+
+
+def test_sheet_fill_skips_self():
+    sheet = Sheet()
+    sheet.set_cell("A1", "5")
+    sheet.fill("A1", ["A1", "A2"])
+    assert sheet.get_value("A2") == 5.0
+
+
+def test_cli_fill(tmp_path, capsys):
+    path = str(tmp_path / "s.json")
+    run_cli(["set", path, "A1", "1"], capsys)
+    run_cli(["set", path, "A2", "2"], capsys)
+    run_cli(["set", path, "B1", "=A1*10"], capsys)
+    code, _, _ = run_cli(["fill", path, "B1", "B2"], capsys)
+    assert code == 0
+    code, out, _ = run_cli(["get", path, "B2"], capsys)
+    assert out.strip() == "20"
+
+
+def test_cli_fill_range(tmp_path, capsys):
+    path = str(tmp_path / "s.json")
+    run_cli(["set", path, "A1", "1"], capsys)
+    run_cli(["set", path, "A2", "2"], capsys)
+    run_cli(["set", path, "A3", "3"], capsys)
+    run_cli(["set", path, "B1", "=A1*10"], capsys)
+    code, _, _ = run_cli(["fill", path, "B1", "B2:B3"], capsys)
+    assert code == 0
+    code, out, _ = run_cli(["get", path, "B3"], capsys)
+    assert out.strip() == "30"
+
+
+def test_cli_fill_out_of_bounds_error(tmp_path, capsys):
+    path = str(tmp_path / "s.json")
+    run_cli(["set", path, "B2", "=A1+1"], capsys)
+    code, _, err = run_cli(["fill", path, "B2", "A1"], capsys)
+    assert code == 1
+    assert "error" in err
+
+
+def test_cli_shell_fill(tmp_path, capsys, monkeypatch):
+    path = str(tmp_path / "s.json")
+    inputs = iter(
+        ["A1 = 1", "A2 = 2", "B1 = =A1*10", "fill B1 B2", "get B2", "quit"]
+    )
+    monkeypatch.setattr("builtins.input", lambda prompt="": next(inputs))
+    code, out, _ = run_cli(["shell", path], capsys)
+    assert code == 0
+    assert "20" in out
