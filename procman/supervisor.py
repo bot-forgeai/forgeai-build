@@ -43,10 +43,11 @@ class ProcState:
 
 class Supervisor:
     def __init__(self, services: List[Service], log_dir: str, status_path: Optional[str] = None,
-                 time_fn=time.time, sleep_fn=time.sleep):
+                 time_fn=time.time, sleep_fn=time.sleep, default_max_log_bytes: Optional[int] = None):
         self.services = services
         self.log_dir = log_dir
         self.status_path = status_path
+        self.default_max_log_bytes = default_max_log_bytes
         self._time_fn = time_fn
         self._sleep_fn = sleep_fn
         self.states: Dict[str, ProcState] = {s.name: ProcState(service=s) for s in services}
@@ -68,10 +69,32 @@ class Supervisor:
     def _log_path(self, name: str) -> str:
         return os.path.join(self.log_dir, f"{name}.log")
 
+    def _rotate_log_if_needed(self, state: "ProcState"):
+        """If the service's log already exceeds its size limit, move it
+        aside to a single '.1' backup (overwriting any older one) before
+        the fresh log file for this spawn is opened. Only checked at
+        spawn time (initial start and every restart) -- procman has no
+        way to make an already-running child reopen its inherited log
+        fd, so a long-lived service that never restarts won't rotate
+        mid-run."""
+        max_bytes = state.service.max_log_bytes
+        if max_bytes is None:
+            max_bytes = self.default_max_log_bytes
+        if max_bytes is None:
+            return
+        path = self._log_path(state.service.name)
+        try:
+            if os.path.getsize(path) < max_bytes:
+                return
+        except OSError:
+            return
+        os.replace(path, path + ".1")
+
     def _spawn(self, state: ProcState):
         svc = state.service
         env = dict(os.environ)
         env.update(svc.env)
+        self._rotate_log_if_needed(state)
         log_file = open(self._log_path(svc.name), "ab")
         state.proc = subprocess.Popen(
             svc.command,

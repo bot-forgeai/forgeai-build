@@ -14,7 +14,8 @@ def cmd_run(args):
         print(f"error: {e}", file=sys.stderr)
         return 1
 
-    sup = Supervisor(services, log_dir=args.log_dir, status_path=args.status)
+    sup = Supervisor(services, log_dir=args.log_dir, status_path=args.status,
+                      default_max_log_bytes=args.max_log_bytes)
 
     stopped = {"flag": False}
 
@@ -67,7 +68,8 @@ def cmd_validate(args):
     for s in services:
         deps = f" (depends_on: {', '.join(s.depends_on)})" if s.depends_on else ""
         ready = f" (ready_check: {s.ready_check['type']})" if s.ready_check else ""
-        print(f"  - {s.name}: {' '.join(s.command)}{deps}{ready}")
+        max_log = f" (max_log_bytes: {s.max_log_bytes})" if s.max_log_bytes else ""
+        print(f"  - {s.name}: {' '.join(s.command)}{deps}{ready}{max_log}")
     return 0
 
 
@@ -81,6 +83,9 @@ def build_parser():
     p_run.add_argument("--status", default=None, help="path to write a live JSON status file")
     p_run.add_argument("--interval", type=float, default=1.0, help="poll interval in seconds")
     p_run.add_argument("--max-iterations", type=int, default=None, help="stop after N poll iterations (mainly for tests)")
+    p_run.add_argument("--max-log-bytes", type=int, default=None,
+                        help="rotate a service's log to a .1 backup once it reaches this size (checked at every spawn); "
+                             "a service's own 'max_log_bytes' config value overrides this default")
     p_run.set_defaults(func=cmd_run)
 
     p_status = sub.add_parser("status", help="print a status file written by 'run'")

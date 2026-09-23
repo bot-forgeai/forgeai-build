@@ -954,6 +954,23 @@ never came up. A service with no `ready_check` still only gets the
 old ordering guarantee: spawned before its dependents, not confirmed
 ready.
 
+Each service's log (`<log-dir>/<name>.log`) otherwise grows without
+bound for the life of the config. Set `max_log_bytes` (per service) or
+pass `--max-log-bytes` (a default applied to every service that
+doesn't set its own) to rotate it to a single `.1` backup once it
+reaches that size:
+
+```json
+{"name": "web", "command": ["python3", "server.py"], "max_log_bytes": 10485760}
+```
+
+Rotation is checked at every spawn (the initial start and every
+restart), moving the existing log aside before the fresh one is
+opened — procman has no way to make an already-running child reopen
+its inherited log file descriptor, so a long-lived service that never
+restarts won't rotate mid-run. `procman validate` prints a service's
+`max_log_bytes` when set.
+
 ## regexlite
 
 A small regex engine built from scratch: a parser produces an AST,

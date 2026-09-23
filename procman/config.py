@@ -19,6 +19,7 @@ class Service:
     restart_delay: float = 0.0
     depends_on: List[str] = field(default_factory=list)
     ready_check: Optional[dict] = None
+    max_log_bytes: Optional[int] = None
 
 
 def load_config(path: str) -> List[Service]:
@@ -58,6 +59,11 @@ def load_config(path: str) -> List[Service]:
         if not isinstance(depends_on, list) or not all(isinstance(d, str) for d in depends_on):
             raise ConfigError(f"service '{name}' has invalid 'depends_on' (must be a list of strings)")
         ready_check = _validate_ready_check(name, entry.get("ready_check"))
+        max_log_bytes = entry.get("max_log_bytes")
+        if max_log_bytes is not None and (
+            not isinstance(max_log_bytes, int) or isinstance(max_log_bytes, bool) or max_log_bytes <= 0
+        ):
+            raise ConfigError(f"service '{name}' has invalid 'max_log_bytes' (must be a positive integer)")
         result.append(Service(
             name=name,
             command=command,
@@ -68,6 +74,7 @@ def load_config(path: str) -> List[Service]:
             restart_delay=restart_delay,
             depends_on=depends_on,
             ready_check=ready_check,
+            max_log_bytes=max_log_bytes,
         ))
 
     names = {s.name for s in result}
