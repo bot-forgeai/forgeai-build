@@ -401,3 +401,84 @@ def test_run_forever_stops_earlier_services_on_startup_failure(tmp_path):
     # torn down, not left running, when startup fails partway through.
     assert sup.states["a"].proc.poll() is not None
     assert sup.states["b"].proc.poll() is not None
+
+
+def test_log_rotation_on_respawn_when_over_limit(tmp_path):
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir()
+    log_path = log_dir / "a.log"
+    log_path.write_bytes(b"x" * 2000)
+
+    services = [Service(name="a", command=crash_cmd(0), max_log_bytes=1000)]
+    sup = Supervisor(services, log_dir=str(log_dir))
+    sup.start_all()
+    try:
+        wait_until(lambda: sup.states["a"].proc.poll() is not None)
+    finally:
+        sup.stop_all()
+
+    assert (log_dir / "a.log.1").read_bytes() == b"x" * 2000
+    # the fresh log for this spawn should not still be the huge old one
+    assert log_path.stat().st_size < 2000
+
+
+def test_log_rotation_skipped_when_under_limit(tmp_path):
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir()
+    log_path = log_dir / "a.log"
+    log_path.write_bytes(b"x" * 10)
+
+    services = [Service(name="a", command=crash_cmd(0), max_log_bytes=1000)]
+    sup = Supervisor(services, log_dir=str(log_dir))
+    sup.start_all()
+    try:
+        wait_until(lambda: sup.states["a"].proc.poll() is not None)
+    finally:
+        sup.stop_all()
+
+    assert not (log_dir / "a.log.1").exists()
+
+
+def test_default_max_log_bytes_applies_when_service_has_none(tmp_path):
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir()
+    (log_dir / "a.log").write_bytes(b"x" * 2000)
+
+    services = [Service(name="a", command=crash_cmd(0))]
+    sup = Supervisor(services, log_dir=str(log_dir), default_max_log_bytes=1000)
+    sup.start_all()
+    try:
+        wait_until(lambda: sup.states["a"].proc.poll() is not None)
+    finally:
+        sup.stop_all()
+
+    assert (log_dir / "a.log.1").read_bytes() == b"x" * 2000
+
+
+def test_service_max_log_bytes_overrides_default(tmp_path):
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir()
+    (log_dir / "a.log").write_bytes(b"x" * 500)
+
+    # default would trigger rotation at 100 bytes, but the service's own
+    # (higher) limit should take precedence and skip it
+    services = [Service(name="a", command=crash_cmd(0), max_log_bytes=10_000)]
+    sup = Supervisor(services, log_dir=str(log_dir), default_max_log_bytes=100)
+    sup.start_all()
+    try:
+        wait_until(lambda: sup.states["a"].proc.poll() is not None)
+    finally:
+        sup.stop_all()
+
+    assert not (log_dir / "a.log.1").exists()
+
+
+def test_no_rotation_without_existing_log_file(tmp_path):
+    services = [Service(name="a", command=crash_cmd(0), max_log_bytes=1000)]
+    sup = Supervisor(services, log_dir=str(tmp_path / "logs"))
+    sup.start_all()
+    try:
+        wait_until(lambda: sup.states["a"].proc.poll() is not None)
+    finally:
+        sup.stop_all()
+    assert not (tmp_path / "logs" / "a.log.1").exists()

@@ -290,3 +290,33 @@ def test_ready_check_accepted_without_explicit_timeout_or_interval(tmp_path):
     services = load_config(path)
     assert "timeout" not in services[0].ready_check
     assert "interval" not in services[0].ready_check
+
+
+def test_max_log_bytes_accepted(tmp_path):
+    path = write_config(tmp_path, {
+        "services": [{"name": "a", "command": ["sleep", "1"], "max_log_bytes": 1024}]
+    })
+    services = load_config(path)
+    assert services[0].max_log_bytes == 1024
+
+
+def test_max_log_bytes_defaults_to_none(tmp_path):
+    path = write_config(tmp_path, {"services": [{"name": "a", "command": ["sleep", "1"]}]})
+    services = load_config(path)
+    assert services[0].max_log_bytes is None
+
+
+def test_max_log_bytes_zero_rejected(tmp_path):
+    path = write_config(tmp_path, {
+        "services": [{"name": "a", "command": ["sleep", "1"], "max_log_bytes": 0}]
+    })
+    with pytest.raises(ConfigError, match="max_log_bytes"):
+        load_config(path)
+
+
+def test_max_log_bytes_non_integer_rejected(tmp_path):
+    path = write_config(tmp_path, {
+        "services": [{"name": "a", "command": ["sleep", "1"], "max_log_bytes": "big"}]
+    })
+    with pytest.raises(ConfigError, match="max_log_bytes"):
+        load_config(path)

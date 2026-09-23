@@ -65,3 +65,27 @@ def test_status_missing_file(tmp_path, capsys):
     err = capsys.readouterr().err
     assert code == 1
     assert "not found" in err
+
+
+def test_validate_reports_max_log_bytes(tmp_path, capsys):
+    path = write_config(tmp_path, {
+        "services": [{"name": "a", "command": ["echo", "hi"], "max_log_bytes": 5000}]
+    })
+    code = run_cli(["validate", path])
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "max_log_bytes: 5000" in out
+
+
+def test_run_with_max_log_bytes_rotates(tmp_path, capsys):
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir()
+    (log_dir / "a.log").write_bytes(b"x" * 2000)
+    status_path = str(tmp_path / "status.json")
+    path = write_config(tmp_path, {
+        "services": [{"name": "a", "command": [sys.executable, "-c", "import sys; sys.exit(0)"]}]
+    })
+    code = run_cli(["run", path, "--log-dir", str(log_dir), "--status", status_path,
+                     "--interval", "0.1", "--max-iterations", "1", "--max-log-bytes", "1000"])
+    assert code == 0
+    assert (log_dir / "a.log.1").read_bytes() == b"x" * 2000
