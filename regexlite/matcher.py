@@ -69,6 +69,57 @@ def _add_state(state, pos, length, out_list, visited, caps):
         out_list.append((state, caps))
 
 
+def _expand_repl(repl, m):
+    """Expand backreferences in a replacement string: \\N or \\g<N> is
+    replaced by group N's text (empty string if the group exists but
+    didn't participate in the match), \\\\ is a literal backslash."""
+    out = []
+    i = 0
+    length = len(repl)
+    while i < length:
+        ch = repl[i]
+        if ch != "\\":
+            out.append(ch)
+            i += 1
+            continue
+        if i + 1 >= length:
+            raise RegexSubError("bad escape at end of replacement string")
+        nxt = repl[i + 1]
+        if nxt == "\\":
+            out.append("\\")
+            i += 2
+        elif nxt == "g" and i + 2 < length and repl[i + 2] == "<":
+            close = repl.find(">", i + 3)
+            if close == -1:
+                raise RegexSubError("missing '>' in \\g<...> reference")
+            num = repl[i + 3:close]
+            if not num.isdigit():
+                raise RegexSubError(f"bad group reference: \\g<{num}>")
+            out.append(_group_text_or_empty(m, int(num)))
+            i = close + 1
+        elif nxt.isdigit():
+            j = i + 1
+            while j < length and repl[j].isdigit() and (j - i) <= 2:
+                j += 1
+            num = int(repl[i + 1:j])
+            out.append(_group_text_or_empty(m, num))
+            i = j
+        else:
+            raise RegexSubError(f"bad escape \\{nxt} in replacement string")
+    return "".join(out)
+
+
+class RegexSubError(ValueError):
+    pass
+
+
+def _group_text_or_empty(m, num):
+    try:
+        return m.group(num) or ""
+    except IndexError:
+        raise RegexSubError(f"invalid group reference {num}")
+
+
 class Pattern:
     def __init__(self, pattern):
         self.pattern = pattern
@@ -144,6 +195,29 @@ class Pattern:
                 pos += 1
         return results
 
+    def subn(self, repl, text, count=0):
+        expand = repl if callable(repl) else lambda m: _expand_repl(repl, m)
+        pieces = []
+        pos = 0
+        last_end = 0
+        n = 0
+        while pos <= len(text) and (count <= 0 or n < count):
+            end, caps = self._run_from(text, pos)
+            if end is not None:
+                m = Match(text, pos, end, caps)
+                pieces.append(text[last_end:pos])
+                pieces.append(expand(m))
+                last_end = end
+                n += 1
+                pos = end + 1 if end == pos else end
+            else:
+                pos += 1
+        pieces.append(text[last_end:])
+        return "".join(pieces), n
+
+    def sub(self, repl, text, count=0):
+        return self.subn(repl, text, count)[0]
+
 
 def compile(pattern):
     return Pattern(pattern)
@@ -163,3 +237,11 @@ def search(pattern, text):
 
 def findall(pattern, text):
     return [m.group() for m in Pattern(pattern).findall(text)]
+
+
+def sub(pattern, repl, text, count=0):
+    return Pattern(pattern).sub(repl, text, count)
+
+
+def subn(pattern, repl, text, count=0):
+    return Pattern(pattern).subn(repl, text, count)

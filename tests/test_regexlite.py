@@ -3,7 +3,16 @@ import sys
 
 import pytest
 
-from regexlite.matcher import Pattern, findall, fullmatch, match, search
+from regexlite.matcher import (
+    Pattern,
+    RegexSubError,
+    findall,
+    fullmatch,
+    match,
+    search,
+    sub,
+    subn,
+)
 from regexlite.parser import RegexSyntaxError, parse
 
 
@@ -466,4 +475,95 @@ def test_cli_grep_no_match_exits_nonzero(tmp_path):
 def test_cli_grep_missing_file_exits_cleanly():
     result = _run_cli("grep", "abc", "/no/such/file.txt")
     assert result.returncode == 1
+
+
+# ---- sub/subn -----------------------------------------------------------
+
+def test_sub_basic_replace_all():
+    assert sub(r"\d+", "#", "a1b22c333") == "a#b#c#"
+
+
+def test_sub_no_match_returns_original():
+    assert sub(r"\d+", "#", "abc") == "abc"
+
+
+def test_sub_count_limits_replacements():
+    assert sub(r"\d", "#", "1 2 3 4", count=2) == "# # 3 4"
+
+
+def test_subn_returns_count():
+    result, n = subn(r"\d+", "#", "a1b22c333")
+    assert result == "a#b#c#"
+    assert n == 3
+
+
+def test_sub_backreference_single_digit():
+    assert sub(r"(\w+)@(\w+)", r"\2@\1", "alice@example") == "example@alice"
+
+
+def test_sub_backreference_g_syntax():
+    assert sub(r"(\w+)@(\w+)", r"\g<2>@\g<1>", "alice@example") == "example@alice"
+
+
+def test_sub_literal_backslash_in_replacement():
+    assert sub(r"a", r"\\", "abc") == "\\bc"
+
+
+def test_sub_unmatched_group_expands_to_empty():
+    assert sub(r"(a)|(b)", r"[\2]", "a") == "[]"
+
+
+def test_sub_group_zero_is_whole_match():
+    assert sub(r"\d+", r"<\0>", "x123y") == "x<123>y"
+
+
+def test_sub_bad_group_reference_raises():
+    with pytest.raises(RegexSubError):
+        sub(r"(a)", r"\5", "a")
+
+
+def test_sub_dangling_backslash_raises():
+    with pytest.raises(RegexSubError):
+        sub(r"a", "\\", "abc")
+
+
+def test_sub_with_callable_repl():
+    assert sub(r"\d+", lambda m: str(int(m.group()) * 2), "a3b10") == "a6b20"
+
+
+def test_sub_zero_width_match_advances():
+    # a* can match the empty string; sub must not loop forever. Matches
+    # Python's own re.sub behavior for the same pattern/text/repl.
+    assert sub(r"a*", "-", "bab") == "-b--b-"
+
+
+def test_pattern_sub_method():
+    pat = Pattern(r"\d+")
+    assert pat.sub("#", "a1b2") == "a#b#"
+
+
+# ---- CLI: sub -----------------------------------------------------------
+
+def test_cli_sub_basic():
+    result = _run_cli("sub", r"\d+", "#", "a1b22c333")
+    assert result.returncode == 0
+    assert result.stdout.splitlines()[0] == "a#b#c#"
+
+
+def test_cli_sub_backreference():
+    result = _run_cli("sub", r"(\w+)@(\w+)", r"\2@\1", "alice@example")
+    assert result.returncode == 0
+    assert result.stdout.splitlines()[0] == "example@alice"
+
+
+def test_cli_sub_count_flag():
+    result = _run_cli("sub", r"\d", "#", "1 2 3", "--count", "1")
+    assert result.returncode == 0
+    assert result.stdout.splitlines()[0] == "# 2 3"
+
+
+def test_cli_sub_bad_backreference_exits_cleanly():
+    result = _run_cli("sub", r"(a)", r"\9", "a")
+    assert result.returncode == 1
+    assert "error:" in result.stderr
     assert "error:" in result.stderr
