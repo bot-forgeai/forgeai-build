@@ -3,7 +3,7 @@ import sys
 
 from gridsheet.refs import num_to_col
 from gridsheet.sheet import Sheet, SheetError
-from gridsheet.storage import load_sheet, save_sheet
+from gridsheet.storage import export_csv, load_sheet, save_sheet
 
 
 def _load_or_new(path):
@@ -65,6 +65,12 @@ def cmd_show(args):
     return 0
 
 
+def cmd_export(args):
+    sheet = _load_or_new(args.file)
+    export_csv(sheet, args.csv_file)
+    return 0
+
+
 def cmd_shell(args):
     sheet = _load_or_new(args.file)
     dirty = False
@@ -80,7 +86,7 @@ def cmd_shell(args):
         if line in ("quit", "exit"):
             break
         if line == "help":
-            print("commands: REF = CONTENT | get REF | show | save | quit")
+            print("commands: REF = CONTENT | get REF | show | save | export CSV_FILE | quit")
             continue
         if line == "show":
             print(render_grid(sheet))
@@ -93,6 +99,11 @@ def cmd_shell(args):
         if line.startswith("get "):
             ref = line[4:].strip()
             print(_fmt(sheet.get_value(ref)))
+            continue
+        if line.startswith("export "):
+            csv_path = line[7:].strip()
+            export_csv(sheet, csv_path)
+            print(f"exported to {csv_path}")
             continue
         if "=" in line:
             ref, content = line.split("=", 1)
@@ -130,6 +141,11 @@ def build_parser():
     p_show = sub.add_parser("show", help="print the whole sheet as a grid")
     p_show.add_argument("file")
     p_show.set_defaults(func=cmd_show)
+
+    p_export = sub.add_parser("export", help="export the sheet's computed values as CSV")
+    p_export.add_argument("file")
+    p_export.add_argument("csv_file")
+    p_export.set_defaults(func=cmd_export)
 
     p_shell = sub.add_parser("shell", help="interactive REPL")
     p_shell.add_argument("file")
