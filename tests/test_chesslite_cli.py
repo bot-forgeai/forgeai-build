@@ -1,6 +1,8 @@
 import subprocess
 import sys
 
+import pytest
+
 
 def run_play(moves_input, extra_args=()):
     return subprocess.run(
@@ -33,3 +35,19 @@ def test_ai_opponent_plays_black():
 def test_bad_syntax_reports_clean_error():
     result = run_play("nonsense\ne2e4\n")
     assert "error: unrecognized move syntax" in result.stderr
+
+
+def test_load_pgn_resumes_play_from_that_position(tmp_path):
+    pgn_file = tmp_path / "opening.pgn"
+    pgn_file.write_text("1. e4 e5 *\n")
+    result = run_play("g1f3\n", extra_args=["--load-pgn", str(pgn_file)])
+    assert result.returncode == 0
+    assert "Black to move" in result.stdout
+
+
+def test_load_pgn_with_bad_movetext_errors_cleanly(tmp_path):
+    pgn_file = tmp_path / "bad.pgn"
+    pgn_file.write_text("1. e5 *\n")
+    result = run_play("", extra_args=["--load-pgn", str(pgn_file)])
+    assert result.returncode == 1
+    assert "error: bad PGN" in result.stderr

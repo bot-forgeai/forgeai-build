@@ -20,6 +20,10 @@ def build_arg_parser():
     )
     play_p.add_argument("--depth", type=int, default=2, help="AI search depth (default: 2)")
     play_p.add_argument("--pgn", default=None, help="write the finished game's movetext to this PGN file")
+    play_p.add_argument(
+        "--load-pgn", default=None,
+        help="replay this PGN file's movetext before play continues from that position",
+    )
 
     serve_p = sub.add_parser("serve", help="host a game over TCP and wait for two players to connect")
     serve_p.add_argument("--host", default="0.0.0.0", help="address to bind (LAN or localhost only)")
@@ -49,8 +53,16 @@ def _write_pgn(game: Game, path: str, result: str):
         f.write(game.to_pgn(result) + "\n")
 
 
-def run_play(ai_color=None, depth=2, pgn_path=None):
-    game = Game()
+def run_play(ai_color=None, depth=2, pgn_path=None, load_pgn_path=None):
+    if load_pgn_path:
+        with open(load_pgn_path) as f:
+            try:
+                game = Game.from_pgn(f.read())
+            except IllegalMoveError as exc:
+                print(f"error: bad PGN in {load_pgn_path}: {exc}", file=sys.stderr)
+                return 1
+    else:
+        game = Game()
     while True:
         _print_board(game)
         result = game.result()
@@ -97,7 +109,10 @@ def main(argv=None):
     parser = build_arg_parser()
     args = parser.parse_args(argv)
     if args.command == "play":
-        return run_play(ai_color=args.ai, depth=args.depth, pgn_path=args.pgn)
+        return run_play(
+            ai_color=args.ai, depth=args.depth, pgn_path=args.pgn,
+            load_pgn_path=args.load_pgn,
+        )
     if args.command == "serve":
         print(f"Serving on {args.host}:{args.port}, waiting for players...")
         serve(args.host, args.port)

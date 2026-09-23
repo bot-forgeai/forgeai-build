@@ -715,6 +715,19 @@ and writes the movetext to that file once the game ends (checkmate,
 stalemate, draw, or an interrupted session gets a `*` result), so a
 finished game can be reviewed or opened in any standard chess tool.
 
+`chesslite play --load-pgn game.pgn` does the reverse: it parses that
+file's movetext (`chesslite/pgn.py`'s `parse_pgn_movetext`, which
+strips `[Tag "value"]` headers, `{...}` comments, move-number markers,
+and any trailing result token) and replays each SAN move
+(`Game.push_san`/`Game.from_pgn`) from the starting position before
+play continues interactively or against `--ai` — so a saved game can
+be resumed, or an imported PGN from another source can be picked up
+and finished out. `push_san` accepts `0-0`/`0-0-0` as well as
+`O-O`/`O-O-O`, and tolerates a missing trailing `+`/`#` check marker,
+since not every PGN source includes one. A movetext with an illegal
+move reports a clean `error: bad PGN in ...` and exits rather than
+crashing.
+
 ## nanosql
 
 A tiny SQL database engine: a hand-written lexer and recursive-descent
