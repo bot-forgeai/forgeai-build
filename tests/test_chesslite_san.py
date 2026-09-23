@@ -1,5 +1,8 @@
+import pytest
+
 from chesslite.board import Board
-from chesslite.game import Game
+from chesslite.game import Game, IllegalMoveError
+from chesslite.pgn import parse_pgn_movetext
 
 
 def test_pawn_move_san():
@@ -92,3 +95,70 @@ def test_to_pgn_with_result():
     game.make_move("g2g4")
     game.make_move("d8h4")
     assert game.to_pgn("0-1") == "1. f3 e5 2. g4 Qh4# 0-1"
+
+
+def test_parse_pgn_movetext_strips_numbers_headers_comments_result():
+    text = (
+        '[Event "Test"]\n'
+        '[Result "0-1"]\n\n'
+        "1. f3 {a weak opening} e5 2. g4 Qh4# 0-1\n"
+    )
+    assert parse_pgn_movetext(text) == ["f3", "e5", "g4", "Qh4#"]
+
+
+def test_parse_pgn_movetext_tolerates_no_space_after_move_number():
+    assert parse_pgn_movetext("1.e4 e5 2.Nf3 *") == ["e4", "e5", "Nf3"]
+
+
+def test_parse_pgn_movetext_strips_nag_annotations():
+    assert parse_pgn_movetext("1. e4! e5?! 2. Nf3?? *") == ["e4", "e5", "Nf3"]
+
+
+def test_push_san_applies_matching_legal_move():
+    game = Game()
+    game.push_san("e4")
+    assert game.san_history == ["e4"]
+    assert game.board.piece_at((4, 3)) == "P"
+
+
+def test_push_san_accepts_zero_castling_notation():
+    board = Board()
+    board.squares = {(4, 0): "K", (7, 0): "R", (0, 0): "R", (4, 7): "k", (7, 7): "r"}
+    game = Game(board)
+    game.push_san("0-0")
+    assert game.san_history == ["O-O"]
+
+
+def test_push_san_tolerates_missing_check_marker():
+    game = Game()
+    for text in ["f2f3", "e7e5", "g2g4"]:
+        game.make_move(text)
+    game.push_san("Qh4")  # real SAN is "Qh4#"
+    assert game.san_history[-1] == "Qh4#"
+
+
+def test_push_san_rejects_illegal_move():
+    game = Game()
+    with pytest.raises(IllegalMoveError):
+        game.push_san("e5")
+
+
+def test_game_from_pgn_replays_fools_mate():
+    pgn = "1. f3 e5 2. g4 Qh4# 0-1"
+    game = Game.from_pgn(pgn)
+    assert game.san_history == ["f3", "e5", "g4", "Qh4#"]
+    assert game.result() == "checkmate"
+
+
+def test_game_from_pgn_round_trips_with_to_pgn():
+    original = Game()
+    for text in ["e2e4", "e7e5", "g1f3"]:
+        original.make_move(text)
+    pgn = original.to_pgn("*")
+    replayed = Game.from_pgn(pgn)
+    assert replayed.san_history == original.san_history
+
+
+def test_game_from_pgn_raises_on_bad_movetext():
+    with pytest.raises(IllegalMoveError):
+        Game.from_pgn("1. e5 *")

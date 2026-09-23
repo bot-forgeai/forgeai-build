@@ -2,6 +2,7 @@
 pure board/move-generation layer."""
 from .board import Board, FILES, parse_square, square_name, color_of, opponent
 from .moves import legal_moves, apply_move, is_in_check, Move
+from .pgn import parse_pgn_movetext
 
 PROMO_LETTERS = {"q": "Q", "r": "R", "b": "B", "n": "N"}
 
@@ -147,3 +148,25 @@ class Game:
             parts.append(san)
         parts.append(result)
         return " ".join(parts)
+
+    def push_san(self, san_text: str) -> Move:
+        """Applies the legal move whose SAN matches `san_text`. Accepts
+        '0-0'/'0-0-0' as well as 'O-O'/'O-O-O', and tolerates a missing
+        trailing '+'/'#' check/mate marker."""
+        candidate = san_text.replace("0-0-0", "O-O-O").replace("0-0", "O-O")
+        bare = candidate.rstrip("+#")
+        for move in self.legal_moves():
+            move_san = self.san(move)
+            if move_san == candidate or move_san.rstrip("+#") == bare:
+                self.make_move(move)
+                return move
+        raise IllegalMoveError(f"unrecognized or illegal SAN move: {san_text!r}")
+
+    @classmethod
+    def from_pgn(cls, pgn_text: str) -> "Game":
+        """Replays a PGN movetext string from the starting position into a
+        new Game."""
+        game = cls()
+        for san_text in parse_pgn_movetext(pgn_text):
+            game.push_san(san_text)
+        return game
