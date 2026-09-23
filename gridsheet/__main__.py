@@ -1,9 +1,17 @@
 import argparse
 import sys
 
-from gridsheet.refs import num_to_col
+from gridsheet.refs import expand_range, num_to_col
 from gridsheet.sheet import Sheet, SheetError
 from gridsheet.storage import export_csv, load_sheet, save_sheet
+
+
+def _parse_dest_range(dest):
+    """Parse a fill destination: 'B1:B5' (a range) or a single ref like 'B1'."""
+    if ":" in dest:
+        start, end = dest.split(":", 1)
+        return expand_range(start.strip(), end.strip())
+    return [dest.strip()]
 
 
 def _load_or_new(path):
@@ -65,6 +73,18 @@ def cmd_show(args):
     return 0
 
 
+def cmd_fill(args):
+    sheet = _load_or_new(args.file)
+    try:
+        dest_refs = _parse_dest_range(args.dest)
+        sheet.fill(args.src, dest_refs)
+    except (SheetError, ValueError) as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    save_sheet(sheet, args.file)
+    return 0
+
+
 def cmd_export(args):
     sheet = _load_or_new(args.file)
     export_csv(sheet, args.csv_file)
@@ -86,7 +106,10 @@ def cmd_shell(args):
         if line in ("quit", "exit"):
             break
         if line == "help":
-            print("commands: REF = CONTENT | get REF | show | save | export CSV_FILE | quit")
+            print(
+                "commands: REF = CONTENT | get REF | show | fill SRC DEST | "
+                "save | export CSV_FILE | quit"
+            )
             continue
         if line == "show":
             print(render_grid(sheet))
@@ -104,6 +127,19 @@ def cmd_shell(args):
             csv_path = line[7:].strip()
             export_csv(sheet, csv_path)
             print(f"exported to {csv_path}")
+            continue
+        if line.startswith("fill "):
+            parts = line[5:].split()
+            if len(parts) != 2:
+                print("error: usage: fill SRC DEST")
+                continue
+            try:
+                dest_refs = _parse_dest_range(parts[1])
+                sheet.fill(parts[0], dest_refs)
+            except (SheetError, ValueError) as e:
+                print(f"error: {e}")
+                continue
+            dirty = True
             continue
         if "=" in line:
             ref, content = line.split("=", 1)
@@ -141,6 +177,14 @@ def build_parser():
     p_show = sub.add_parser("show", help="print the whole sheet as a grid")
     p_show.add_argument("file")
     p_show.set_defaults(func=cmd_show)
+
+    p_fill = sub.add_parser(
+        "fill", help="copy a cell's content into a range, shifting relative references"
+    )
+    p_fill.add_argument("file")
+    p_fill.add_argument("src", help="source cell, e.g. A1")
+    p_fill.add_argument("dest", help="destination cell or range, e.g. B1 or B1:B5")
+    p_fill.set_defaults(func=cmd_fill)
 
     p_export = sub.add_parser("export", help="export the sheet's computed values as CSV")
     p_export.add_argument("file")
