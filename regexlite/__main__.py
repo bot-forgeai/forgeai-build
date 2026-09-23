@@ -2,7 +2,7 @@ import argparse
 import sys
 from importlib.metadata import version as _get_version, PackageNotFoundError
 
-from .matcher import Pattern
+from .matcher import Pattern, RegexSubError
 from .parser import RegexSyntaxError
 
 
@@ -51,6 +51,14 @@ def cmd_findall(args):
     return 0
 
 
+def cmd_sub(args):
+    pat = Pattern(args.pattern)
+    result, n = pat.subn(args.repl, args.string, args.count)
+    print(result)
+    print(f"({n} substitution{'s' if n != 1 else ''})", file=sys.stderr)
+    return 0
+
+
 def cmd_grep(args):
     pat = Pattern(args.pattern)
     found = False
@@ -88,6 +96,13 @@ def build_parser():
     p_findall.add_argument("string")
     p_findall.set_defaults(func=cmd_findall)
 
+    p_sub = sub.add_parser("sub", help="replace matches of pattern in string with repl")
+    p_sub.add_argument("pattern")
+    p_sub.add_argument("repl", help=r"replacement text; \1, \2, ... refer to captured groups")
+    p_sub.add_argument("string")
+    p_sub.add_argument("--count", type=int, default=0, help="max replacements (0 = all)")
+    p_sub.set_defaults(func=cmd_sub)
+
     p_grep = sub.add_parser("grep", help="print lines of a file matching pattern")
     p_grep.add_argument("pattern")
     p_grep.add_argument("file")
@@ -101,7 +116,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     try:
         return args.func(args)
-    except RegexSyntaxError as exc:
+    except (RegexSyntaxError, RegexSubError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 

@@ -1030,6 +1030,19 @@ the string; `findall` returns every non-overlapping match, advancing
 past zero-width matches by one character to avoid looping forever on
 patterns like `a*`.
 
+`sub(pattern, repl, text, count=0)` / `subn(...)` (same, but also
+returns the number of replacements made) replace every non-overlapping
+match with `repl`, reusing the same zero-width-match advancing rule as
+`findall`. `repl` can be a plain string with backreferences — `\1`,
+`\2`, ... or `\g<N>` for a specific group number, `\\` for a literal
+backslash, `\0`/`\g<0>` for the whole match — or a callable taking a
+`Match` and returning the replacement text for it, mirroring Python's
+`re.sub`. A backreference to a group that exists but didn't
+participate in the match expands to the empty string; a reference to a
+group number that doesn't exist raises `RegexSubError`. `count`
+limits the number of replacements (0 means replace all). Available
+from the CLI too: `regexlite sub PATTERN REPL STRING [--count N]`.
+
 ## autograd
 
 A tiny scalar reverse-mode automatic differentiation engine plus a
