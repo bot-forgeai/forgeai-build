@@ -1070,6 +1070,7 @@ gridsheet set budget.json B1 "=SUM(A1:A2)"
 gridsheet get budget.json B1   # 350
 gridsheet show budget.json     # prints the whole grid
 gridsheet shell budget.json    # interactive REPL: "A1 = 5", "show", "get A1"
+gridsheet export budget.json budget.csv   # write computed values as CSV
 ```
 
 Formulas support `+ - * /` with normal precedence, parentheses, cell
@@ -1105,3 +1106,10 @@ dependency order in the file (a forward reference like `B1` naming
 first, then evaluated in one topological pass; a cycle hand-edited
 into the JSON is caught the same way, via a short topological order
 that couldn't include every cell.
+
+`gridsheet export FILE.json OUT.csv` (also available as `export
+OUT.csv` inside the interactive shell) writes the sheet's *computed*
+values, not its formulas, as a plain CSV grid — useful for handing a
+sheet's results to something that only speaks CSV, e.g. vitalsdash.
+An error cell's value (`#DIV/0!`, etc.) is written out as that same
+error string, matching what `show`/`get` would already display.

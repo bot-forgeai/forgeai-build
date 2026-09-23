@@ -5,7 +5,7 @@ import pytest
 from gridsheet import formula
 from gridsheet.refs import col_to_num, expand_range, make_ref, normalize_ref, num_to_col, parse_ref
 from gridsheet.sheet import Sheet, SheetError
-from gridsheet.storage import load_sheet, save_sheet
+from gridsheet.storage import export_csv, load_sheet, save_sheet
 
 
 # --- refs ---
@@ -388,6 +388,41 @@ def test_load_missing_file_raises():
         load_sheet("/tmp/does-not-exist-gridsheet-12345.json")
 
 
+# --- CSV export ---
+
+def test_export_csv_computed_values(tmp_path):
+    sheet = Sheet()
+    sheet.set_cell("A1", "5")
+    sheet.set_cell("B1", "=A1*2")
+    sheet.set_cell("A2", "hello")
+    csv_path = tmp_path / "out.csv"
+    export_csv(sheet, csv_path)
+    assert csv_path.read_text() == "5,10\nhello,\n"
+
+
+def test_export_csv_empty_sheet(tmp_path):
+    sheet = Sheet()
+    csv_path = tmp_path / "out.csv"
+    export_csv(sheet, csv_path)
+    assert csv_path.read_text() == ""
+
+
+def test_export_csv_preserves_float_formatting(tmp_path):
+    sheet = Sheet()
+    sheet.set_cell("A1", "=1/4")
+    csv_path = tmp_path / "out.csv"
+    export_csv(sheet, csv_path)
+    assert csv_path.read_text() == "0.25\n"
+
+
+def test_export_csv_error_value(tmp_path):
+    sheet = Sheet()
+    sheet.set_cell("A1", "=1/0")
+    csv_path = tmp_path / "out.csv"
+    export_csv(sheet, csv_path)
+    assert "#DIV/0!" in csv_path.read_text()
+
+
 # --- CLI ---
 
 def run_cli(args, capsys):
@@ -459,3 +494,26 @@ def test_cli_shell_get_and_error(tmp_path, capsys, monkeypatch):
     assert code == 0
     assert "5" in out
     assert "error:" in out
+
+
+def test_cli_export(tmp_path, capsys):
+    path = str(tmp_path / "s.json")
+    csv_path = str(tmp_path / "out.csv")
+    run_cli(["set", path, "A1", "1"], capsys)
+    run_cli(["set", path, "B1", "=A1+1"], capsys)
+    code, _, _ = run_cli(["export", path, csv_path], capsys)
+    assert code == 0
+    with open(csv_path) as f:
+        assert f.read() == "1,2\n"
+
+
+def test_cli_shell_export(tmp_path, capsys, monkeypatch):
+    path = str(tmp_path / "s.json")
+    csv_path = str(tmp_path / "out.csv")
+    inputs = iter(["A1 = 5", f"export {csv_path}", "quit"])
+    monkeypatch.setattr("builtins.input", lambda prompt="": next(inputs))
+    code, out, _ = run_cli(["shell", path], capsys)
+    assert code == 0
+    assert "exported" in out
+    with open(csv_path) as f:
+        assert f.read() == "5\n"
