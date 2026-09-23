@@ -1074,12 +1074,21 @@ gridsheet shell budget.json    # interactive REPL: "A1 = 5", "show", "get A1"
 
 Formulas support `+ - * /` with normal precedence, parentheses, cell
 references (`A1`), ranges (`A1:A3`), and `SUM`/`AVG`/`MIN`/`MAX`/`COUNT`
-over a range or a comma-separated mix of cells and literals. A blank
-cell reads as `0` in arithmetic; a divide-by-zero or reference to an
-unknown function produces an error value (`#DIV/0!`, `#NAME?`,
-`#VALUE!`) that propagates through anything downstream, rather than
-crashing — the same way a real spreadsheet shows an error cell instead
-of halting.
+over a range or a comma-separated mix of cells and literals, plus
+`IF(cond, true_val, false_val)`, `ROUND(value, digits)`, and `ABS(value)`.
+Comparisons (`= <> < > <= >=`) evaluate to `1`/`0` (true/false) and are
+mainly useful as an `IF` condition, e.g.
+`=IF(SUM(A1:A2)>200, ROUND(SUM(A1:A2)/3, 2), 0)`. `IF` only evaluates
+its taken branch, so an error in the untaken branch (e.g. a
+divide-by-zero that only applies in one case) doesn't propagate — but
+both branches still count as dependencies, since either could become
+the taken one after a future edit. There's no string-literal syntax,
+so a text `IF` branch has to come from a cell reference rather than a
+quoted literal. A blank cell reads as `0` in arithmetic; a
+divide-by-zero or reference to an unknown function produces an error
+value (`#DIV/0!`, `#NAME?`, `#VALUE!`) that propagates through anything
+downstream, rather than crashing — the same way a real spreadsheet
+shows an error cell instead of halting.
 
 `gridsheet/sheet.py`'s `Sheet` tracks a `depends_on`/`dependents` graph
 alongside the cells themselves. Setting a cell only recomputes its
