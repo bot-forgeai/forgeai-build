@@ -1176,3 +1176,44 @@ and/or row with `$` locks that part so it doesn't shift
 value is copied unchanged. Filling a reference off the edge of the
 grid (column/row below 1) raises a clean `SheetError` rather than
 wrapping around or crashing.
+
+## huffc
+
+A small Huffman-coding file compressor: a genuinely different state
+shape from every prior build-lane project — a frequency-weighted
+binary tree and a bit-packed stream, rather than a graph, an index, a
+socket protocol, or a relational store.
+
+```
+pip install -e .
+huffc compress input.txt input.huf
+huffc decompress input.huf output.txt
+huffc stats input.txt          # show sizes/ratio without writing a file
+```
+
+`huffc/huffman.py` builds a frequency table over the input's raw bytes
+(`build_frequencies`), then a Huffman tree via the standard
+repeatedly-merge-the-two-least-frequent-nodes algorithm (`build_tree`,
+via `heapq`), then walks it to assign each byte a variable-length
+bit-string code (`build_codes`) — more frequent bytes get shorter
+codes, which is what makes the output smaller for skewed data (plain
+English text, or any file with repeated bytes) while random/already-
+compressed data barely shrinks or can even grow slightly, the same
+tradeoff any Huffman coder has.
+
+A compressed file (`huffc/format.py`) is fully self-contained: a
+`HUFC1` magic header, the frequency table itself (so the decoder can
+rebuild the *exact* same tree — including canonical tie-breaking by
+symbol value when two bytes share a frequency, not by whatever order
+they happened to appear in memory, since compress and decompress see
+that order differently), and the bit-packed stream. Knowing the total
+symbol count from the frequency table lets the decoder stop at exactly
+the right point without a separate padding-length field. A single
+distinct byte (e.g. a run of the same character) still produces a
+valid one-leaf tree with a defined code, and an empty file round-trips
+to an empty file. `huffc/bitio.py` provides the `BitWriter`/`BitReader`
+helpers used to pack/unpack the bitstream.
+
+`decompress` raises a clean `FormatError` (reported as `error: ...`,
+exit 1) on a file that isn't a valid `huffc` blob, rather than
+crashing or silently producing garbage.
