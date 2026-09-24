@@ -373,3 +373,11 @@ def test_explicit_add_of_ignored_file_still_works(project, capsys):
     out = capsys.readouterr().out
     assert "staged for commit" in out
     assert "debug.log" in out
+
+
+def test_version(capsys):
+    with pytest.raises(SystemExit) as exc:
+        main(["--version"])
+    assert exc.value.code == 0
+    out = capsys.readouterr().out
+    assert "0.1.0" in out or "0.1" in out

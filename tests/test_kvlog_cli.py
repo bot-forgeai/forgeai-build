@@ -189,3 +189,13 @@ def test_replicate_picks_up_leader_writes(tmp_path):
         server.shutdown()
         server.server_close()
         thread.join(timeout=5)
+
+
+def test_version():
+    result = subprocess.run(
+        [sys.executable, "-m", "kvlog", "--version"],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0
+    assert "0.1.0" in result.stdout or "0.1" in result.stdout
