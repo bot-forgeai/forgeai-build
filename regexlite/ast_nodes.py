@@ -88,11 +88,14 @@ class Quest:
 class Group:
     """A capturing group: `(...)`. `index` is its 1-based capture-group
     number, assigned left-to-right by opening paren, matching the
-    convention of Python's own `re` module."""
+    convention of Python's own `re` module. `name` is set for a named
+    group `(?P<name>...)`, else None. A non-capturing group `(?:...)`
+    never produces a Group node at all — its inner node is used as-is."""
 
-    def __init__(self, node, index):
+    def __init__(self, node, index, name=None):
         self.node = node
         self.index = index
+        self.name = name
 
     def __repr__(self):
-        return f"Group({self.node!r}, index={self.index})"
+        return f"Group({self.node!r}, index={self.index}, name={self.name!r})"

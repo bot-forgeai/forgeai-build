@@ -9,13 +9,15 @@ from .parser import Parser
 
 
 class Match:
-    def __init__(self, string, start, end, caps=()):
+    def __init__(self, string, start, end, caps=(), group_names=None):
         self.string = string
         self.start_pos = start
         self.end_pos = end
         self._caps = caps
+        self._group_names = group_names or {}
 
     def group(self, n=0):
+        n = self._resolve_group(n)
         if n == 0:
             return self.string[self.start_pos:self.end_pos]
         s, e = self._group_span(n)
@@ -26,20 +28,33 @@ class Match:
     def groups(self):
         return tuple(self.group(i + 1) for i in range(len(self._caps) // 2))
 
+    def groupdict(self):
+        return {name: self.group(index) for name, index in self._group_names.items()}
+
     def start(self, n=0):
+        n = self._resolve_group(n)
         if n == 0:
             return self.start_pos
         return self._group_span(n)[0]
 
     def end(self, n=0):
+        n = self._resolve_group(n)
         if n == 0:
             return self.end_pos
         return self._group_span(n)[1]
 
     def span(self, n=0):
+        n = self._resolve_group(n)
         if n == 0:
             return (self.start_pos, self.end_pos)
         return self._group_span(n)
+
+    def _resolve_group(self, n):
+        if isinstance(n, str):
+            if n not in self._group_names:
+                raise IndexError(f"no such group: {n!r}")
+            return self._group_names[n]
+        return n
 
     def _group_span(self, n):
         i = 2 * (n - 1)
@@ -92,10 +107,11 @@ def _expand_repl(repl, m):
             close = repl.find(">", i + 3)
             if close == -1:
                 raise RegexSubError("missing '>' in \\g<...> reference")
-            num = repl[i + 3:close]
-            if not num.isdigit():
-                raise RegexSubError(f"bad group reference: \\g<{num}>")
-            out.append(_group_text_or_empty(m, int(num)))
+            ref = repl[i + 3:close]
+            if not ref:
+                raise RegexSubError("empty group reference in \\g<...>")
+            key = int(ref) if ref.isdigit() else ref
+            out.append(_group_text_or_empty(m, key))
             i = close + 1
         elif nxt.isdigit():
             j = i + 1
@@ -126,6 +142,7 @@ class Pattern:
         parser = Parser(pattern)
         self._ast = parser.parse()
         self.ngroups = parser.group_count
+        self.group_names = dict(parser.group_names)
         self._start_state = compile_nfa(self._ast)
 
     def _run_from(self, text, start_pos):
@@ -168,19 +185,19 @@ class Pattern:
         end, caps = self._run_from(text, pos)
         if end is None:
             return None
-        return Match(text, pos, end, caps)
+        return Match(text, pos, end, caps, group_names=self.group_names)
 
     def fullmatch(self, text):
         end, caps = self._run_from(text, 0)
         if end != len(text):
             return None
-        return Match(text, 0, end, caps)
+        return Match(text, 0, end, caps, group_names=self.group_names)
 
     def search(self, text):
         for start in range(len(text) + 1):
             end, caps = self._run_from(text, start)
             if end is not None:
-                return Match(text, start, end, caps)
+                return Match(text, start, end, caps, group_names=self.group_names)
         return None
 
     def findall(self, text):
@@ -189,7 +206,7 @@ class Pattern:
         while pos <= len(text):
             end, caps = self._run_from(text, pos)
             if end is not None:
-                results.append(Match(text, pos, end, caps))
+                results.append(Match(text, pos, end, caps, group_names=self.group_names))
                 pos = end + 1 if end == pos else end
             else:
                 pos += 1
@@ -204,7 +221,7 @@ class Pattern:
         while pos <= len(text) and (count <= 0 or n < count):
             end, caps = self._run_from(text, pos)
             if end is not None:
-                m = Match(text, pos, end, caps)
+                m = Match(text, pos, end, caps, group_names=self.group_names)
                 pieces.append(text[last_end:pos])
                 pieces.append(expand(m))
                 last_end = end
