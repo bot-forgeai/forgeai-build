@@ -36,7 +36,7 @@ def test_parse_repeat_ops():
 
 def test_parse_group():
     ast = parse("(ab)+")
-    assert repr(ast) == "Plus(Group(Concat([Char('a'), Char('b')]), index=1))"
+    assert repr(ast) == "Plus(Group(Concat([Char('a'), Char('b')]), index=1, name=None))"
 
 
 def test_parse_charclass_range():
@@ -567,3 +567,84 @@ def test_cli_sub_bad_backreference_exits_cleanly():
     assert result.returncode == 1
     assert "error:" in result.stderr
     assert "error:" in result.stderr
+
+
+# ---- non-capturing and named groups --------------------------------------
+
+def test_noncapturing_group_does_not_count():
+    pat = Pattern(r"(?:ab)+(c)")
+    m = pat.fullmatch("ababc")
+    assert m.group() == "ababc"
+    assert m.groups() == ("c",)
+    assert pat.ngroups == 1
+
+
+def test_noncapturing_group_participates_in_alternation_and_repeat():
+    assert fullmatch(r"(?:cat|dog)s?", "dogs") is not None
+    assert fullmatch(r"(?:cat|dog)s?", "cat") is not None
+    assert fullmatch(r"(?:cat|dog)s?", "birds") is None
+
+
+def test_named_group_basic():
+    pat = Pattern(r"(?P<year>\d{4})-(?P<month>\d{2})")
+    m = pat.fullmatch("2026-09")
+    assert m.group("year") == "2026"
+    assert m.group("month") == "09"
+    assert m.group(1) == "2026"
+    assert m.group(2) == "09"
+
+
+def test_named_group_groupdict():
+    pat = Pattern(r"(?P<a>\w+)@(?P<b>\w+)")
+    m = pat.fullmatch("alice@example")
+    assert m.groupdict() == {"a": "alice", "b": "example"}
+
+
+def test_named_group_mixed_with_unnamed():
+    pat = Pattern(r"(a)(?P<mid>b)(c)")
+    m = pat.fullmatch("abc")
+    assert m.group(1) == "a"
+    assert m.group("mid") == "b"
+    assert m.group(3) == "c"
+    assert m.groupdict() == {"mid": "b"}
+
+
+def test_named_group_span_and_start_end():
+    pat = Pattern(r"x(?P<num>\d+)y")
+    m = pat.search("--x123y--")
+    assert m.span("num") == (3, 6)
+    assert m.start("num") == 3
+    assert m.end("num") == 6
+
+
+def test_group_lookup_by_unknown_name_raises():
+    pat = Pattern(r"(?P<a>x)")
+    m = pat.fullmatch("x")
+    with pytest.raises(IndexError):
+        m.group("nope")
+
+
+def test_duplicate_group_name_raises():
+    with pytest.raises(RegexSyntaxError):
+        parse(r"(?P<x>a)(?P<x>b)")
+
+
+def test_unsupported_group_extension_raises():
+    with pytest.raises(RegexSyntaxError):
+        parse(r"(?=a)")
+
+
+def test_unterminated_group_name_raises():
+    with pytest.raises(RegexSyntaxError):
+        parse(r"(?P<name")
+
+
+def test_sub_named_group_backreference():
+    assert sub(r"(?P<first>\w+)@(?P<second>\w+)", r"\g<second>@\g<first>", "alice@example") == \
+        "example@alice"
+
+
+def test_groupdict_no_named_groups_is_empty():
+    pat = Pattern(r"(a)(b)")
+    m = pat.fullmatch("ab")
+    assert m.groupdict() == {}

@@ -16,6 +16,8 @@ def _get_package_version():
 def _print_groups(m):
     for i, g in enumerate(m.groups(), start=1):
         print(f"  group {i}: {g!r} span={m.span(i)}")
+    for name, value in m.groupdict().items():
+        print(f"  group {name!r}: {value!r}")
 
 
 def cmd_match(args):

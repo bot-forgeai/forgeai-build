@@ -19,6 +19,7 @@ class Parser:
         self.pattern = pattern
         self.pos = 0
         self.group_count = 0
+        self.group_names = {}
 
     def peek(self):
         if self.pos < len(self.pattern):
@@ -133,13 +134,44 @@ class Parser:
             raise RegexSyntaxError("unexpected end of pattern")
         if ch == "(":
             self.advance()
-            self.group_count += 1
-            index = self.group_count
+            capturing = True
+            name = None
+            if self.peek() == "?":
+                self.advance()
+                if self.peek() == ":":
+                    self.advance()
+                    capturing = False
+                elif self.peek() == "P":
+                    self.advance()
+                    if self.peek() != "<":
+                        raise RegexSyntaxError("expected '<' after '(?P'")
+                    self.advance()
+                    name_start = self.pos
+                    while self.peek() is not None and self.peek() != ">":
+                        self.advance()
+                    if self.peek() != ">":
+                        raise RegexSyntaxError("unterminated group name")
+                    name = self.pattern[name_start:self.pos]
+                    self.advance()  # consume '>'
+                    if not name:
+                        raise RegexSyntaxError("empty group name")
+                    if name in self.group_names:
+                        raise RegexSyntaxError(f"duplicate group name {name!r}")
+                else:
+                    raise RegexSyntaxError(f"unsupported group syntax '(?{self.peek()}'")
+            index = None
+            if capturing:
+                self.group_count += 1
+                index = self.group_count
+                if name is not None:
+                    self.group_names[name] = index
             node = self.parse_alt()
             if self.peek() != ")":
                 raise RegexSyntaxError("unbalanced parenthesis")
             self.advance()
-            return Group(node, index)
+            if not capturing:
+                return node
+            return Group(node, index, name=name)
         if ch == "[":
             return self.parse_charclass()
         if ch == ".":
