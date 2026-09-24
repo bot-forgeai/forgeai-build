@@ -1,8 +1,16 @@
 import argparse
 import sys
+from importlib.metadata import version as _get_version, PackageNotFoundError
 
 from .engine import NanosqlError
 from .storage import load, save
+
+
+def _get_package_version():
+    try:
+        return _get_version("eulerlib")
+    except PackageNotFoundError:
+        return "0.1.0"
 
 
 def _print_result(result):
@@ -69,6 +77,7 @@ def cmd_shell(args):
 
 def build_parser():
     parser = argparse.ArgumentParser(prog="nanosql", description="a tiny SQL database engine")
+    parser.add_argument("--version", action="version", version=_get_package_version())
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_exec = sub.add_parser("exec", help="run a single SQL statement against a database file")

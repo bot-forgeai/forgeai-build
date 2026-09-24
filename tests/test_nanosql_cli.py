@@ -138,3 +138,9 @@ def test_shell_exit_with_open_transaction_warns_and_does_not_save(tmp_path, caps
 
     code, out, _ = run(capsys, ["exec", db_path, "SELECT * FROM t"])
     assert "(0 row(s))" in out
+
+
+def test_version(capsys):
+    code, out, _ = run(capsys, ["--version"])
+    assert code == 0
+    assert "0.1.0" in out or "0.1" in out

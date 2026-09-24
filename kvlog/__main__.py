@@ -2,11 +2,19 @@ import argparse
 import json
 import os
 import sys
+from importlib.metadata import version as _get_version, PackageNotFoundError
 
 from .client import RemoteError, call
 from .replica import run_replica
 from .server import serve
 from .store import KVStore
+
+
+def _get_package_version():
+    try:
+        return _get_version("eulerlib")
+    except PackageNotFoundError:
+        return "0.1.0"
 
 
 def _parse_remote(remote):
@@ -132,6 +140,7 @@ def _log_size(path):
 
 def build_parser():
     parser = argparse.ArgumentParser(prog="kvlog", description="append-only log-structured key-value store")
+    parser.add_argument("--version", action="version", version=_get_package_version())
     parser.add_argument("--db", default="kvlog.db", help="path to the log file (default: kvlog.db)")
     parser.add_argument(
         "--remote",
