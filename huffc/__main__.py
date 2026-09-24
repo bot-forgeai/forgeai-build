@@ -6,13 +6,27 @@ import sys
 from .format import FormatError, compress, decompress
 
 
+def _read_input(path):
+    if path == "-":
+        return sys.stdin.buffer.read()
+    with open(path, "rb") as f:
+        return f.read()
+
+
+def _write_output(path, data):
+    if path == "-":
+        sys.stdout.buffer.write(data)
+        sys.stdout.buffer.flush()
+    else:
+        with open(path, "wb") as f:
+            f.write(data)
+
+
 def cmd_compress(args):
-    with open(args.input, "rb") as f:
-        data = f.read()
+    data = _read_input(args.input)
     blob = compress(data)
-    with open(args.output, "wb") as f:
-        f.write(blob)
-    if not args.quiet:
+    _write_output(args.output, blob)
+    if not args.quiet and args.output != "-":
         orig = len(data)
         comp = len(blob)
         ratio = (comp / orig) if orig else 0.0
@@ -20,23 +34,20 @@ def cmd_compress(args):
 
 
 def cmd_decompress(args):
-    with open(args.input, "rb") as f:
-        blob = f.read()
+    blob = _read_input(args.input)
     try:
         data = decompress(blob)
     except FormatError as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
-    with open(args.output, "wb") as f:
-        f.write(data)
-    if not args.quiet:
+    _write_output(args.output, data)
+    if not args.quiet and args.output != "-":
         print(f"{args.input}: {len(blob)} -> {len(data)} bytes")
     return 0
 
 
 def cmd_stats(args):
-    with open(args.input, "rb") as f:
-        data = f.read()
+    data = _read_input(args.input)
     blob = compress(data)
     orig = len(data)
     comp = len(blob)

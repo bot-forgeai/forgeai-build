@@ -146,3 +146,40 @@ def test_cli_decompress_bad_file_exits_cleanly(tmp_path):
     r = _run_cli("decompress", str(bad), str(out), cwd=repo_root)
     assert r.returncode == 1
     assert "error:" in r.stderr
+
+
+def _run_cli_binary(*args, cwd, input_bytes=b""):
+    return subprocess.run(
+        [sys.executable, "-m", "huffc", *args],
+        cwd=cwd,
+        input=input_bytes,
+        capture_output=True,
+    )
+
+
+def test_cli_stdin_stdout_round_trip(tmp_path):
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    original = b"hello hello hello world\n" * 20
+
+    r1 = _run_cli_binary("compress", "-", "-", cwd=repo_root, input_bytes=original)
+    assert r1.returncode == 0
+    assert r1.stdout != original
+
+    r2 = _run_cli_binary("decompress", "-", "-", cwd=repo_root, input_bytes=r1.stdout)
+    assert r2.returncode == 0
+    assert r2.stdout == original
+
+
+def test_cli_stdin_stdout_no_summary_printed_to_stdout(tmp_path):
+    # A summary line on stdout would corrupt a piped binary stream, so it
+    # must be suppressed whenever the output side is "-", quiet or not.
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    r = _run_cli_binary("compress", "-", "-", cwd=repo_root, input_bytes=b"aaaa")
+    assert r.stderr == b""
+
+
+def test_cli_stats_from_stdin(tmp_path):
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    r = _run_cli_binary("stats", "-", cwd=repo_root, input_bytes=b"aaaaaaaaaaaaaaaaaaaa")
+    assert r.returncode == 0
+    assert b"original:" in r.stdout
