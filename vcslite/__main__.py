@@ -3,6 +3,7 @@ import argparse
 import difflib
 import os
 import sys
+from importlib.metadata import version as _get_version, PackageNotFoundError
 
 from . import commit as commit_mod
 from . import merge as merge_mod
@@ -12,6 +13,13 @@ from . import repo as repo_mod
 from . import tree as tree_mod
 from . import worktree as worktree_mod
 from .index import read_index, write_index
+
+
+def _get_package_version():
+    try:
+        return _get_version("eulerlib")
+    except PackageNotFoundError:
+        return "0.1.0"
 
 
 def cmd_init(args):
@@ -395,6 +403,7 @@ def cmd_pull(args):
 
 def build_parser():
     parser = argparse.ArgumentParser(prog="vcslite")
+    parser.add_argument("--version", action="version", version=_get_package_version())
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_init = sub.add_parser("init", help="create a new repository")
