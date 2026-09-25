@@ -1,8 +1,16 @@
 import argparse
 import os
 import sys
+from importlib.metadata import version as _get_version, PackageNotFoundError
 
 from searchlite.storage import load_or_new_index, save_index
+
+
+def _get_package_version():
+    try:
+        return _get_version("eulerlib")
+    except PackageNotFoundError:
+        return "0.1.0"
 
 
 def cmd_add(args):
@@ -71,6 +79,7 @@ def cmd_stats(args):
 
 def build_parser():
     parser = argparse.ArgumentParser(prog="searchlite", description="tiny full-text search engine (inverted index + TF-IDF)")
+    parser.add_argument("--version", action="version", version=_get_package_version())
     parser.add_argument("--index", default="searchlite.json", help="path to the index file (default: searchlite.json)")
     sub = parser.add_subparsers(dest="command", required=True)
 

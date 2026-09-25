@@ -1,7 +1,15 @@
 import argparse
 import socket
+from importlib.metadata import version as _get_version, PackageNotFoundError
 
 from .server import make_server
+
+
+def _get_package_version():
+    try:
+        return _get_version("eulerlib")
+    except PackageNotFoundError:
+        return "0.1.0"
 
 
 def build_arg_parser():
@@ -9,6 +17,7 @@ def build_arg_parser():
         prog="shortlink",
         description="A small URL shortener with SQLite-backed click tracking.",
     )
+    parser.add_argument("--version", action="version", version=_get_package_version())
     parser.add_argument("--db", default="shortlink.db", help="path to the SQLite database file")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8100)

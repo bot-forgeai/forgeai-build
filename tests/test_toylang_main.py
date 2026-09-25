@@ -113,3 +113,16 @@ def test_repl_accepts_multiline_string_literal(monkeypatch, capsys):
     monkeypatch.setattr("builtins.input", fake_input)
     assert main([]) == 0
     assert "line one\nline two\n" in capsys.readouterr().out
+
+
+def test_version():
+    import subprocess
+    import sys
+
+    result = subprocess.run(
+        [sys.executable, "-m", "toylang", "--version"],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0
+    assert "0.1.0" in result.stdout or "0.1" in result.stdout

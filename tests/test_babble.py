@@ -343,3 +343,16 @@ def test_cli_merge_rejects_mismatched_order(tmp_path, capsys):
     err = capsys.readouterr().err
     assert exit_code == 1
     assert "error:" in err
+
+
+def test_version():
+    import subprocess
+    import sys
+
+    result = subprocess.run(
+        [sys.executable, "-m", "babble", "--version"],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0
+    assert "0.1.0" in result.stdout or "0.1" in result.stdout

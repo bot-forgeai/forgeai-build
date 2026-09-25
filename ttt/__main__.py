@@ -1,4 +1,5 @@
 import argparse
+from importlib.metadata import version as _get_version, PackageNotFoundError
 
 from .ai_client import run_ai_client
 from .client import run_client
@@ -6,8 +7,16 @@ from .server import serve
 from .spectator_client import run_spectator_client
 
 
+def _get_package_version():
+    try:
+        return _get_version("eulerlib")
+    except PackageNotFoundError:
+        return "0.1.0"
+
+
 def build_arg_parser():
     parser = argparse.ArgumentParser(prog="ttt", description="Two-player tic-tac-toe over TCP")
+    parser.add_argument("--version", action="version", version=_get_package_version())
     sub = parser.add_subparsers(dest="command", required=True)
 
     serve_p = sub.add_parser("serve", help="host a game and wait for two players to connect")

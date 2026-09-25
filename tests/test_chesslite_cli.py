@@ -51,3 +51,13 @@ def test_load_pgn_with_bad_movetext_errors_cleanly(tmp_path):
     result = run_play("", extra_args=["--load-pgn", str(pgn_file)])
     assert result.returncode == 1
     assert "error: bad PGN" in result.stderr
+
+
+def test_version():
+    result = subprocess.run(
+        [sys.executable, "-m", "chesslite", "--version"],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0
+    assert "0.1.0" in result.stdout or "0.1" in result.stdout
