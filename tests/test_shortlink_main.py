@@ -16,3 +16,16 @@ def test_get_lan_ip_returns_a_dotted_quad():
     parts = ip.split(".")
     assert len(parts) == 4
     assert all(part.isdigit() for part in parts)
+
+
+def test_version():
+    import subprocess
+    import sys
+
+    result = subprocess.run(
+        [sys.executable, "-m", "shortlink", "--version"],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0
+    assert "0.1.0" in result.stdout or "0.1" in result.stdout

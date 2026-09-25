@@ -1,6 +1,14 @@
 import argparse
+from importlib.metadata import version as _get_version, PackageNotFoundError
 
 from .server import make_server
+
+
+def _get_package_version():
+    try:
+        return _get_version("eulerlib")
+    except PackageNotFoundError:
+        return "0.1.0"
 
 
 def parse_thresholds(specs):
@@ -19,6 +27,7 @@ def build_arg_parser():
         prog="vitalsdash",
         description="Serve a local dashboard for a timestamp+metrics CSV.",
     )
+    parser.add_argument("--version", action="version", version=_get_package_version())
     parser.add_argument("csv", help="path to a vitals CSV (header: timestamp,<metric>,...)")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8099)

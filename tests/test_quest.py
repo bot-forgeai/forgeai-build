@@ -431,3 +431,16 @@ def test_build_arg_parser_play_defaults():
     args = parser.parse_args(["play"])
     assert args.world == DEFAULT_WORLD
     assert args.load is None
+
+
+def test_version():
+    import subprocess
+    import sys
+
+    result = subprocess.run(
+        [sys.executable, "-m", "quest", "--version"],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0
+    assert "0.1.0" in result.stdout or "0.1" in result.stdout

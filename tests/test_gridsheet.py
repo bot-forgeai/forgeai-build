@@ -657,3 +657,16 @@ def test_cli_shell_fill(tmp_path, capsys, monkeypatch):
     code, out, _ = run_cli(["shell", path], capsys)
     assert code == 0
     assert "20" in out
+
+
+def test_version():
+    import subprocess
+    import sys
+
+    result = subprocess.run(
+        [sys.executable, "-m", "gridsheet", "--version"],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0
+    assert "0.1.0" in result.stdout or "0.1" in result.stdout

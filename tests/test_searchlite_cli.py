@@ -125,3 +125,16 @@ def test_add_missing_file_exits_nonzero(tmp_path):
         assert False, "expected SystemExit"
     except SystemExit as exc:
         assert exc.code == 1
+
+
+def test_version():
+    import subprocess
+    import sys
+
+    result = subprocess.run(
+        [sys.executable, "-m", "searchlite", "--version"],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0
+    assert "0.1.0" in result.stdout or "0.1" in result.stdout

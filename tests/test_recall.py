@@ -271,3 +271,16 @@ def test_cli_decks_reports_when_nothing_registered(tmp_path):
     outputs = []
     run_decks(args, print_fn=outputs.append)
     assert outputs == ["No decks registered yet."]
+
+
+def test_version():
+    import subprocess
+    import sys
+
+    result = subprocess.run(
+        [sys.executable, "-m", "recall", "--version"],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0
+    assert "0.1.0" in result.stdout or "0.1" in result.stdout

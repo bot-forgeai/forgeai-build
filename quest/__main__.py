@@ -2,12 +2,20 @@
 import argparse
 import os
 import sys
+from importlib.metadata import version as _get_version, PackageNotFoundError
 
 from .engine import describe_room, process_command
 from .save import load_game, save_game
 from .world import GameState, WorldError, load_world
 
 DEFAULT_WORLD = os.path.join(os.path.dirname(__file__), "games", "sample.json")
+
+
+def _get_package_version():
+    try:
+        return _get_version("eulerlib")
+    except PackageNotFoundError:
+        return "0.1.0"
 
 
 def run_game(state, world_path, input_fn=input, print_fn=print, default_save_path=None):
@@ -43,6 +51,7 @@ def run_game(state, world_path, input_fn=input, print_fn=print, default_save_pat
 
 def build_arg_parser():
     parser = argparse.ArgumentParser(prog="quest", description=__doc__)
+    parser.add_argument("--version", action="version", version=_get_package_version())
     sub = parser.add_subparsers(dest="command", required=True)
 
     play_p = sub.add_parser("play", help="play a game interactively")

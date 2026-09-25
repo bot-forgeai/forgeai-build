@@ -89,3 +89,15 @@ def test_run_with_max_log_bytes_rotates(tmp_path, capsys):
                      "--interval", "0.1", "--max-iterations", "1", "--max-log-bytes", "1000"])
     assert code == 0
     assert (log_dir / "a.log.1").read_bytes() == b"x" * 2000
+
+
+def test_version():
+    import subprocess
+
+    result = subprocess.run(
+        [sys.executable, "-m", "procman", "--version"],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0
+    assert "0.1.0" in result.stdout or "0.1" in result.stdout

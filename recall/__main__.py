@@ -3,6 +3,7 @@ import argparse
 import os
 import sys
 from datetime import date
+from importlib.metadata import version as _get_version, PackageNotFoundError
 
 from .storage import (
     add_card,
@@ -18,8 +19,16 @@ from .storage import (
 )
 
 
+def _get_package_version():
+    try:
+        return _get_version("eulerlib")
+    except PackageNotFoundError:
+        return "0.1.0"
+
+
 def build_arg_parser():
     parser = argparse.ArgumentParser(prog="recall", description=__doc__)
+    parser.add_argument("--version", action="version", version=_get_package_version())
     parser.add_argument("--deck", default="recall_deck.json", help="path to the deck JSON file")
     parser.add_argument(
         "--deck-name",

@@ -1,9 +1,17 @@
 import argparse
 import sys
+from importlib.metadata import version as _get_version, PackageNotFoundError
 
 from gridsheet.refs import expand_range, num_to_col
 from gridsheet.sheet import Sheet, SheetError
 from gridsheet.storage import export_csv, load_sheet, save_sheet
+
+
+def _get_package_version():
+    try:
+        return _get_version("eulerlib")
+    except PackageNotFoundError:
+        return "0.1.0"
 
 
 def _parse_dest_range(dest):
@@ -161,6 +169,7 @@ def cmd_shell(args):
 
 def build_parser():
     p = argparse.ArgumentParser(prog="gridsheet")
+    p.add_argument("--version", action="version", version=_get_package_version())
     sub = p.add_subparsers(dest="command", required=True)
 
     p_set = sub.add_parser("set", help="set a cell's content (literal or =formula)")

@@ -1,8 +1,16 @@
 import argparse
 import sys
+from importlib.metadata import version as _get_version, PackageNotFoundError
 
 from .model import MarkovModel
 from .storage import load_model, save_model
+
+
+def _get_package_version():
+    try:
+        return _get_version("eulerlib")
+    except PackageNotFoundError:
+        return "0.1.0"
 
 
 def cmd_train(args):
@@ -62,6 +70,7 @@ def cmd_info(args):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="babble", description="Word-level Markov chain text generator")
+    parser.add_argument("--version", action="version", version=_get_package_version())
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_train = sub.add_parser("train", help="train a model from one or more text files")

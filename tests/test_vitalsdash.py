@@ -302,3 +302,16 @@ def test_unknown_path_404s(running_server):
         assert False, "expected HTTPError"
     except urllib.error.HTTPError as e:
         assert e.code == 404
+
+
+def test_version():
+    import subprocess
+    import sys
+
+    result = subprocess.run(
+        [sys.executable, "-m", "vitalsdash", "--version"],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0
+    assert "0.1.0" in result.stdout or "0.1" in result.stdout

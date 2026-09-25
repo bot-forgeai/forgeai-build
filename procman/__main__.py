@@ -2,9 +2,17 @@ import argparse
 import json
 import signal
 import sys
+from importlib.metadata import version as _get_version, PackageNotFoundError
 
 from procman.config import ConfigError, load_config
 from procman.supervisor import StartupError, Supervisor
+
+
+def _get_package_version():
+    try:
+        return _get_version("eulerlib")
+    except PackageNotFoundError:
+        return "0.1.0"
 
 
 def cmd_run(args):
@@ -75,6 +83,7 @@ def cmd_validate(args):
 
 def build_parser():
     p = argparse.ArgumentParser(prog="procman", description="A small process supervisor.")
+    p.add_argument("--version", action="version", version=_get_package_version())
     sub = p.add_subparsers(dest="cmd", required=True)
 
     p_run = sub.add_parser("run", help="start and supervise all services in a config file")

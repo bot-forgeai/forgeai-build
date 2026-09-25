@@ -1,5 +1,6 @@
 import argparse
 import sys
+from importlib.metadata import version as _get_version, PackageNotFoundError
 
 from .ai import choose_move
 from .ai_client import run_ai_client
@@ -9,8 +10,16 @@ from .game import Game, IllegalMoveError
 from .server import serve
 
 
+def _get_package_version():
+    try:
+        return _get_version("eulerlib")
+    except PackageNotFoundError:
+        return "0.1.0"
+
+
 def build_arg_parser():
     parser = argparse.ArgumentParser(prog="chesslite", description="A small chess engine")
+    parser.add_argument("--version", action="version", version=_get_package_version())
     sub = parser.add_subparsers(dest="command", required=True)
 
     play_p = sub.add_parser("play", help="play an interactive local game")

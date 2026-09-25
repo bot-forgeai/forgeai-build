@@ -1,5 +1,6 @@
 import argparse
 import sys
+from importlib.metadata import version as _get_version, PackageNotFoundError
 
 from .interpreter import Interpreter, ToylangRuntimeError
 from .lexer import ToylangSyntaxError, tokenize
@@ -7,6 +8,13 @@ from .parser import parse
 
 OPEN_BRACKETS = {"(": ")", "{": "}", "[": "]"}
 CLOSE_BRACKETS = {v: k for k, v in OPEN_BRACKETS.items()}
+
+
+def _get_package_version():
+    try:
+        return _get_version("eulerlib")
+    except PackageNotFoundError:
+        return "0.1.0"
 
 
 def run_source(source, interpreter):
@@ -74,6 +82,7 @@ def cmd_repl(args):
 
 def build_parser():
     parser = argparse.ArgumentParser(prog="toylang", description="Run or explore toylang scripts.")
+    parser.add_argument("--version", action="version", version=_get_package_version())
     parser.add_argument("path", nargs="?", help="script file to run; omit for an interactive REPL")
     return parser
 
