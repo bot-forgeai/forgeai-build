@@ -1,8 +1,10 @@
 """CLI for huffc: a small Huffman-coding file compressor."""
 
 import argparse
+import os
 import sys
 
+from .archive import ArchiveError, pack_archive, unpack_archive
 from .format import FormatError, compress, decompress
 
 
@@ -58,6 +60,50 @@ def cmd_stats(args):
     return 0
 
 
+def cmd_archive(args):
+    blob = pack_archive(args.inputs)
+    with open(args.output, "wb") as f:
+        f.write(blob)
+    if not args.quiet:
+        total_in = sum(os.path.getsize(p) for p in args.inputs)
+        print(f"{args.output}: {len(args.inputs)} file(s), {total_in} -> {len(blob)} bytes")
+    return 0
+
+
+def cmd_extract(args):
+    with open(args.archive, "rb") as f:
+        blob = f.read()
+    try:
+        entries = unpack_archive(blob)
+    except (ArchiveError, FormatError) as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+
+    outdir = args.outdir
+    os.makedirs(outdir, exist_ok=True)
+    for name, data in entries:
+        dest = os.path.join(outdir, *name.split("/"))
+        os.makedirs(os.path.dirname(dest) or ".", exist_ok=True)
+        with open(dest, "wb") as f:
+            f.write(data)
+        if not args.quiet:
+            print(f"{name}: {len(data)} bytes -> {dest}")
+    return 0
+
+
+def cmd_list(args):
+    with open(args.archive, "rb") as f:
+        blob = f.read()
+    try:
+        entries = unpack_archive(blob)
+    except (ArchiveError, FormatError) as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    for name, data in entries:
+        print(f"{name}\t{len(data)} bytes")
+    return 0
+
+
 def build_parser():
     parser = argparse.ArgumentParser(prog="huffc", description="Huffman-coding file compressor")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -77,6 +123,22 @@ def build_parser():
     s = sub.add_parser("stats", help="show compression stats without writing an output file")
     s.add_argument("input")
     s.set_defaults(func=cmd_stats)
+
+    a = sub.add_parser("archive", help="compress multiple files into one archive")
+    a.add_argument("output")
+    a.add_argument("inputs", nargs="+")
+    a.add_argument("-q", "--quiet", action="store_true")
+    a.set_defaults(func=cmd_archive)
+
+    e = sub.add_parser("extract", help="extract every file from an archive")
+    e.add_argument("archive")
+    e.add_argument("-o", "--outdir", default=".")
+    e.add_argument("-q", "--quiet", action="store_true")
+    e.set_defaults(func=cmd_extract)
+
+    ls = sub.add_parser("list", help="list files in an archive")
+    ls.add_argument("archive")
+    ls.set_defaults(func=cmd_list)
 
     return parser
 
