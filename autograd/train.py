@@ -2,6 +2,7 @@
 import random
 
 from .engine import Value
+from .lr_schedule import make_schedule
 from .optim import OPTIMIZERS
 
 
@@ -33,7 +34,8 @@ def _iter_batches(xs, ys, batch_size, rng):
 
 
 def train(model, xs, ys, epochs=100, lr=0.1, log_every=None, optimizer="sgd",
-          batch_size=None, shuffle=True, seed=None):
+          batch_size=None, shuffle=True, seed=None,
+          lr_schedule="constant", lr_decay=0.5, lr_step_size=None):
     """Trains model in place via MSE loss and gradient descent.
 
     `optimizer` selects the update rule ("sgd" or "adam", see optim.py);
@@ -50,6 +52,11 @@ def train(model, xs, ys, epochs=100, lr=0.1, log_every=None, optimizer="sgd",
     full-batch mode since batch order doesn't affect a single-step
     epoch. `seed` makes shuffling deterministic for tests.
 
+    `lr_schedule` ("constant", "step", or "cosine", see lr_schedule.py)
+    picks how `lr` changes over the run; `opt.lr` is recomputed once per
+    epoch, before that epoch's batches, so every batch in an epoch shares
+    one rate. `lr_decay`/`lr_step_size` only apply to "step".
+
     Returns a list of the mean-squared-error loss at each epoch (the
     mean over that epoch's per-batch losses in mini-batch mode), so a
     caller can inspect convergence (or plot it) without re-running.
@@ -58,11 +65,13 @@ def train(model, xs, ys, epochs=100, lr=0.1, log_every=None, optimizer="sgd",
         raise ValueError(f"unknown optimizer: {optimizer!r} (choices: {', '.join(OPTIMIZERS)})")
     if batch_size is not None and batch_size < 1:
         raise ValueError(f"batch_size must be a positive integer, got {batch_size!r}")
+    schedule = make_schedule(lr_schedule, lr, epochs, decay=lr_decay, step_size=lr_step_size)
     opt = OPTIMIZERS[optimizer](model.parameters(), lr=lr)
     rng = random.Random(seed) if shuffle and batch_size is not None else None
 
     history = []
     for epoch in range(epochs):
+        opt.lr = schedule(epoch)
         epoch_losses = []
         for batch_xs, batch_ys in _iter_batches(xs, ys, batch_size, rng):
             preds = [predict(model, x) for x in batch_xs]
@@ -78,6 +87,6 @@ def train(model, xs, ys, epochs=100, lr=0.1, log_every=None, optimizer="sgd",
         epoch_loss = sum(epoch_losses) / len(epoch_losses)
         history.append(epoch_loss)
         if log_every and (epoch % log_every == 0 or epoch == epochs - 1):
-            print(f"epoch {epoch:4d}  loss={epoch_loss:.4f}")
+            print(f"epoch {epoch:4d}  loss={epoch_loss:.4f}  lr={opt.lr:.4f}")
 
     return history

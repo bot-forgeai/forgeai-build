@@ -76,3 +76,45 @@ def test_train_with_adam_reduces_loss_on_xor():
 
 def test_optimizers_registry_has_sgd_and_adam():
     assert set(OPTIMIZERS) == {"sgd", "adam"}
+
+
+def test_train_step_schedule_decays_opt_lr_over_epochs():
+    model = MLP([2, 2, 1], seed=0)
+    xs, ys = make_xor()
+    seen_lrs = []
+
+    class RecordingSGD:
+        def __init__(self, params, lr=0.1):
+            self.params = list(params)
+            self.lr = lr
+
+        def step(self):
+            seen_lrs.append(self.lr)
+            for p in self.params:
+                p.data -= self.lr * p.grad
+
+    import autograd.train as train_mod
+    orig = train_mod.OPTIMIZERS
+    train_mod.OPTIMIZERS = dict(orig, sgd=RecordingSGD)
+    try:
+        train(model, xs, ys, epochs=10, lr=1.0, optimizer="sgd",
+              lr_schedule="step", lr_decay=0.5, lr_step_size=5)
+    finally:
+        train_mod.OPTIMIZERS = orig
+
+    assert seen_lrs[0] == pytest.approx(1.0)
+    assert seen_lrs[5] == pytest.approx(0.5)
+
+
+def test_train_unknown_lr_schedule_raises():
+    model = MLP([2, 2, 1], seed=0)
+    xs, ys = make_xor()
+    with pytest.raises(ValueError):
+        train(model, xs, ys, epochs=1, lr_schedule="nope")
+
+
+def test_train_default_lr_schedule_is_constant():
+    model = MLP([2, 2, 1], seed=0)
+    xs, ys = make_xor()
+    history = train(model, xs, ys, epochs=50, lr=0.5, optimizer="sgd")
+    assert len(history) == 50

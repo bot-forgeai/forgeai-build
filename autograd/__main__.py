@@ -2,6 +2,7 @@ import argparse
 import sys
 
 from .datasets import DATASETS
+from .lr_schedule import SCHEDULE_NAMES
 from .nn import MLP
 from .optim import OPTIMIZERS
 from .train import accuracy, predict, train
@@ -19,7 +20,9 @@ def cmd_train(args):
     log_every = max(1, args.epochs // 10) if args.verbose else None
     try:
         history = train(model, xs, ys, epochs=args.epochs, lr=args.lr, log_every=log_every,
-                         optimizer=args.optimizer, batch_size=args.batch_size, seed=args.seed)
+                         optimizer=args.optimizer, batch_size=args.batch_size, seed=args.seed,
+                         lr_schedule=args.lr_schedule, lr_decay=args.lr_decay,
+                         lr_step_size=args.lr_step_size)
     except ValueError as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
@@ -63,6 +66,12 @@ def build_parser():
                           help="update rule (default: sgd; adam typically wants a smaller --lr, e.g. 0.05)")
     p_train.add_argument("--batch-size", type=int, default=None,
                           help="mini-batch size (default: full-batch, one step per epoch)")
+    p_train.add_argument("--lr-schedule", choices=SCHEDULE_NAMES, default="constant",
+                          help="how --lr changes over training (default: constant)")
+    p_train.add_argument("--lr-decay", type=float, default=0.5,
+                          help="multiplicative factor per step for --lr-schedule step (default: 0.5)")
+    p_train.add_argument("--lr-step-size", type=int, default=None,
+                          help="epochs per decay step for --lr-schedule step (default: epochs // 5)")
     p_train.add_argument("--n", type=int, default=60, help="number of points for blobs/circles")
     p_train.add_argument("--seed", type=int, default=42)
     p_train.add_argument("--verbose", action="store_true", help="print loss every ~10% of epochs")
