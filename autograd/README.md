@@ -63,6 +63,13 @@ autograd-nn train [--dataset xor|blobs|circles] [--hidden N [N ...]]
   examples, taking one optimizer step per batch instead of one step
   over the whole dataset (default: full-batch, unchanged). Reported
   per-epoch loss is the mean of that epoch's per-batch losses.
+- `--lr-schedule {constant,step,cosine}` (`autograd/lr_schedule.py`)
+  changes `--lr` over the run instead of holding it fixed (default:
+  `constant`, unchanged behavior): `step` multiplies it by
+  `--lr-decay` (default 0.5) every `--lr-step-size` epochs (default
+  `epochs // 5`); `cosine` anneals it from `--lr` down to ~0 following
+  a cosine curve over the whole run. `--verbose` prints the current
+  `lr` alongside `loss` each logged epoch.
 - `--n` controls how many points `blobs`/`circles` generate (ignored
   for `xor`, which is always its fixed 4 points).
 - `--verbose` prints the loss roughly every 10% of training.
@@ -109,7 +116,8 @@ loaded = MLP.load("model.json")  # architecture + weights, ready to use
   toy networks and datasets. That tradeoff is deliberate: the point
   is transparency (you can print any `Value` and see exactly what
   produced it), not throughput.
-- No learning-rate schedule — `--lr` is fixed for the whole run.
-  `autograd/optim.py` provides both plain SGD and Adam, selectable via
-  `--optimizer`, and `autograd/train.py` supports mini-batching via
-  `--batch-size` alongside the default full-batch mode.
+- `autograd/optim.py` provides both plain SGD and Adam, selectable via
+  `--optimizer`; `autograd/train.py` supports mini-batching via
+  `--batch-size` alongside the default full-batch mode, and a
+  learning-rate schedule via `--lr-schedule` (constant, step, or
+  cosine) instead of a rate fixed for the whole run.

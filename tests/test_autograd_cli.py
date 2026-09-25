@@ -1,3 +1,5 @@
+import pytest
+
 from autograd.__main__ import build_parser
 
 
@@ -73,6 +75,30 @@ def test_cli_invalid_batch_size_errors_cleanly(capsys):
     err = capsys.readouterr().err
     assert code == 1
     assert "error:" in err
+
+
+def test_cli_cosine_lr_schedule_trains_successfully(capsys):
+    code = run(["train", "--dataset", "xor", "--epochs", "300", "--lr", "0.5", "--seed", "42",
+                "--lr-schedule", "cosine"])
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "accuracy:   100.0%" in out
+
+
+def test_cli_step_lr_schedule_prints_decaying_lr_in_verbose(capsys):
+    code = run(["train", "--dataset", "xor", "--epochs", "20", "--lr", "1.0", "--seed", "1",
+                "--lr-schedule", "step", "--lr-step-size", "5", "--lr-decay", "0.1", "--verbose"])
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "lr=1.0000" in out
+    assert "lr=0.0010" in out  # after two decay steps: 1.0 * 0.1 * 0.1
+
+
+def test_cli_invalid_lr_schedule_errors_cleanly():
+    parser = build_parser()
+    with pytest.raises(SystemExit) as exc_info:
+        parser.parse_args(["train", "--dataset", "xor", "--epochs", "5", "--lr-schedule", "nope"])
+    assert exc_info.value.code == 2  # argparse rejects the bad choice itself
 
 
 def test_cli_predict_wrong_input_count_errors_cleanly(tmp_path, capsys):
