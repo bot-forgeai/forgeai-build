@@ -5,6 +5,7 @@ import sys
 
 import pytest
 
+from huffc.archive import ArchiveError, pack_archive, unpack_archive
 from huffc.bitio import BitReader, BitWriter
 from huffc.format import FormatError, compress, decompress
 from huffc.huffman import build_codes, build_frequencies, build_tree
@@ -183,3 +184,82 @@ def test_cli_stats_from_stdin(tmp_path):
     r = _run_cli_binary("stats", "-", cwd=repo_root, input_bytes=b"aaaaaaaaaaaaaaaaaaaa")
     assert r.returncode == 0
     assert b"original:" in r.stdout
+
+
+def test_pack_unpack_archive_round_trip(tmp_path):
+    a = tmp_path / "a.txt"
+    b = tmp_path / "b.txt"
+    a.write_bytes(b"aaaaaaaaaaaaaaaaaaaa")
+    b.write_bytes(b"the quick brown fox")
+
+    blob = pack_archive([str(a), str(b)])
+    entries = unpack_archive(blob)
+
+    assert [name for name, _ in entries] == ["a.txt", "b.txt"]
+    assert entries[0][1] == a.read_bytes()
+    assert entries[1][1] == b.read_bytes()
+
+
+def test_pack_archive_empty_file_list():
+    blob = pack_archive([])
+    assert unpack_archive(blob) == []
+
+
+def test_unpack_archive_rejects_bad_magic():
+    with pytest.raises(ArchiveError):
+        unpack_archive(b"NOTANARCHIVE...")
+
+
+def test_pack_archive_strips_directory_components(tmp_path):
+    sub = tmp_path / "sub"
+    sub.mkdir()
+    f = sub / "nested.txt"
+    f.write_bytes(b"hello")
+
+    blob = pack_archive([str(f)])
+    entries = unpack_archive(blob)
+    assert entries[0][0] == "nested.txt"
+
+
+def test_cli_archive_extract_round_trip(tmp_path):
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    f1 = src_dir / "one.txt"
+    f2 = src_dir / "two.txt"
+    f1.write_text("hello hello hello\n" * 10)
+    f2.write_text("goodbye goodbye\n" * 10)
+    archive_path = tmp_path / "bundle.hfa"
+
+    r1 = _run_cli("archive", str(archive_path), str(f1), str(f2), cwd=repo_root)
+    assert r1.returncode == 0
+    assert "2 file(s)" in r1.stdout
+
+    out_dir = tmp_path / "out"
+    r2 = _run_cli("extract", str(archive_path), "-o", str(out_dir), cwd=repo_root)
+    assert r2.returncode == 0
+    assert (out_dir / "one.txt").read_bytes() == f1.read_bytes()
+    assert (out_dir / "two.txt").read_bytes() == f2.read_bytes()
+
+
+def test_cli_list_archive(tmp_path):
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    f = tmp_path / "only.txt"
+    f.write_text("some content")
+    archive_path = tmp_path / "bundle.hfa"
+
+    _run_cli("archive", str(archive_path), str(f), "-q", cwd=repo_root)
+    r = _run_cli("list", str(archive_path), cwd=repo_root)
+    assert r.returncode == 0
+    assert "only.txt" in r.stdout
+    assert "bytes" in r.stdout
+
+
+def test_cli_extract_bad_archive_exits_cleanly(tmp_path):
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    bad = tmp_path / "bad.hfa"
+    bad.write_bytes(b"not an archive")
+
+    r = _run_cli("extract", str(bad), cwd=repo_root)
+    assert r.returncode == 1
+    assert "error:" in r.stderr

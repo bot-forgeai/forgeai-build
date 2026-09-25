@@ -52,6 +52,24 @@ The human-readable summary line is suppressed whenever the output
 side is `-`, since it would otherwise corrupt the piped binary
 stream.
 
+## Multi-file archives
+
+- `huffc archive OUTPUT INPUT... [-q/--quiet]` — compress several
+  files into one `.hfa` archive, each entry independently
+  Huffman-compressed via the same `format.compress` used for a single
+  file (`huffc/archive.py` just adds a name+length-prefixed container
+  around per-file blobs, so all the Huffman logic stays in one place).
+  Entry names are always just each input path's basename — directory
+  components are stripped, so extracting can never write outside the
+  target directory (and two inputs with the same basename in
+  different directories will collide).
+- `huffc list ARCHIVE` — print each entry's name and decompressed
+  size without extracting.
+- `huffc extract ARCHIVE [-o/--outdir DIR] [-q/--quiet]` — decompress
+  every entry into `DIR` (default: current directory), recreating any
+  relative subdirectories in the stored names; exits 1 with a clean
+  error message on a file that isn't a valid huffc archive.
+
 ## Compression ratio
 
 huffc gets its best ratios on data with skewed byte frequencies
