@@ -55,14 +55,20 @@ stream.
 ## Multi-file archives
 
 - `huffc archive OUTPUT INPUT... [-q/--quiet]` — compress several
-  files into one `.hfa` archive, each entry independently
-  Huffman-compressed via the same `format.compress` used for a single
-  file (`huffc/archive.py` just adds a name+length-prefixed container
-  around per-file blobs, so all the Huffman logic stays in one place).
-  Entry names are always just each input path's basename — directory
-  components are stripped, so extracting can never write outside the
-  target directory (and two inputs with the same basename in
-  different directories will collide).
+  files and/or directories into one `.hfa` archive, each entry
+  independently Huffman-compressed via the same `format.compress`
+  used for a single file (`huffc/archive.py` just adds a
+  name+length-prefixed container around per-file blobs, so all the
+  Huffman logic stays in one place). A plain file's entry name is
+  just its basename. A directory input is walked recursively and its
+  files are stored as `<dirname>/<relative path>`, preserving that
+  subtree's structure — this is what lets a whole directory be
+  archived without every file's basename needing to be globally
+  unique (two *files* passed directly with the same basename still
+  collide, same as before). Every entry name is validated on both
+  pack and unpack to reject `..`/absolute components, so extracting
+  an archive — even a hand-crafted or corrupted one — can never write
+  outside the target directory.
 - `huffc list ARCHIVE` — print each entry's name and decompressed
   size without extracting.
 - `huffc extract ARCHIVE [-o/--outdir DIR] [-q/--quiet]` — decompress

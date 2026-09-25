@@ -263,3 +263,72 @@ def test_cli_extract_bad_archive_exits_cleanly(tmp_path):
     r = _run_cli("extract", str(bad), cwd=repo_root)
     assert r.returncode == 1
     assert "error:" in r.stderr
+
+
+def test_pack_archive_directory_preserves_structure(tmp_path):
+    src = tmp_path / "mydir"
+    (src / "sub").mkdir(parents=True)
+    (src / "top.txt").write_bytes(b"top level")
+    (src / "sub" / "nested.txt").write_bytes(b"nested content")
+
+    blob = pack_archive([str(src)])
+    entries = dict(unpack_archive(blob))
+
+    assert set(entries) == {"mydir/top.txt", "mydir/sub/nested.txt"}
+    assert entries["mydir/top.txt"] == b"top level"
+    assert entries["mydir/sub/nested.txt"] == b"nested content"
+
+
+def test_pack_archive_mixes_files_and_directories(tmp_path):
+    loose = tmp_path / "loose.txt"
+    loose.write_bytes(b"loose file")
+    src = tmp_path / "mydir"
+    src.mkdir()
+    (src / "inner.txt").write_bytes(b"inner")
+
+    blob = pack_archive([str(loose), str(src)])
+    entries = dict(unpack_archive(blob))
+    assert set(entries) == {"loose.txt", "mydir/inner.txt"}
+
+
+def test_unpack_archive_rejects_path_traversal_name():
+    import struct
+    from huffc.format import compress
+
+    blob_data = compress(b"payload")
+    name = b"../escape.txt"
+    archive = bytearray(b"HUFA1")
+    archive += struct.pack(">I", 1)
+    archive += struct.pack(">H", len(name))
+    archive += name
+    archive += struct.pack(">Q", len(blob_data))
+    archive += blob_data
+
+    with pytest.raises(ArchiveError):
+        unpack_archive(bytes(archive))
+
+
+def test_cli_archive_directory_extract_round_trip(tmp_path):
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    src = tmp_path / "mydir"
+    (src / "sub").mkdir(parents=True)
+    (src / "top.txt").write_text("top")
+    (src / "sub" / "nested.txt").write_text("nested")
+    archive_path = tmp_path / "bundle.hfa"
+
+    r1 = _run_cli("archive", str(archive_path), str(src), cwd=repo_root)
+    assert r1.returncode == 0
+    assert "2 file(s)" in r1.stdout
+
+    out_dir = tmp_path / "out"
+    r2 = _run_cli("extract", str(archive_path), "-o", str(out_dir), cwd=repo_root)
+    assert r2.returncode == 0
+    assert (out_dir / "mydir" / "top.txt").read_text() == "top"
+    assert (out_dir / "mydir" / "sub" / "nested.txt").read_text() == "nested"
+
+
+def test_cli_version_flag():
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    r = _run_cli("--version", cwd=repo_root)
+    assert r.returncode == 0
+    assert r.stdout.strip()

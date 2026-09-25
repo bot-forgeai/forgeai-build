@@ -3,9 +3,17 @@
 import argparse
 import os
 import sys
+from importlib.metadata import version as _get_version, PackageNotFoundError
 
-from .archive import ArchiveError, pack_archive, unpack_archive
+from .archive import ArchiveError, pack_archive, unpack_archive, _collect_entries
 from .format import FormatError, compress, decompress
+
+
+def _get_package_version():
+    try:
+        return _get_version("eulerlib")
+    except PackageNotFoundError:
+        return "0.1.0"
 
 
 def _read_input(path):
@@ -65,8 +73,9 @@ def cmd_archive(args):
     with open(args.output, "wb") as f:
         f.write(blob)
     if not args.quiet:
-        total_in = sum(os.path.getsize(p) for p in args.inputs)
-        print(f"{args.output}: {len(args.inputs)} file(s), {total_in} -> {len(blob)} bytes")
+        entries = _collect_entries(args.inputs)
+        total_in = sum(os.path.getsize(p) for p, _name in entries)
+        print(f"{args.output}: {len(entries)} file(s), {total_in} -> {len(blob)} bytes")
     return 0
 
 
@@ -106,6 +115,7 @@ def cmd_list(args):
 
 def build_parser():
     parser = argparse.ArgumentParser(prog="huffc", description="Huffman-coding file compressor")
+    parser.add_argument("--version", action="version", version=_get_package_version())
     sub = parser.add_subparsers(dest="command", required=True)
 
     c = sub.add_parser("compress", help="compress a file")
@@ -124,9 +134,9 @@ def build_parser():
     s.add_argument("input")
     s.set_defaults(func=cmd_stats)
 
-    a = sub.add_parser("archive", help="compress multiple files into one archive")
+    a = sub.add_parser("archive", help="compress multiple files (or directories) into one archive")
     a.add_argument("output")
-    a.add_argument("inputs", nargs="+")
+    a.add_argument("inputs", nargs="+", help="files and/or directories to archive")
     a.add_argument("-q", "--quiet", action="store_true")
     a.set_defaults(func=cmd_archive)
 
