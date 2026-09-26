@@ -39,6 +39,7 @@ script.
   file that isn't a valid huffc container.
 - `huffc stats INPUT` — report original/compressed size and ratio
   without writing an output file.
+- `huffc --version` — print the installed package version and exit.
 
 Any of these accept `-` for `INPUT` or `OUTPUT` to read from stdin or
 write to stdout, so huffc composes in a shell pipeline:
