@@ -11,6 +11,7 @@ from .storage import (
     due_cards,
     export_lines,
     import_cards,
+    leech_cards,
     load_deck,
     load_registry,
     register_deck,
@@ -50,6 +51,14 @@ def build_arg_parser():
     sub.add_parser("stats", help="show deck size and how many cards are due")
     sub.add_parser("list", help="preview all cards sorted by due date, without reviewing them")
     sub.add_parser("decks", help="list every deck registered so far, with its card counts")
+
+    leeches_p = sub.add_parser(
+        "leeches", help="list cards that keep getting forgotten despite review (candidates to rewrite or delete)"
+    )
+    leeches_p.add_argument(
+        "--threshold", type=int, default=4,
+        help="minimum lapse count to count as a leech (default: 4, matching Anki's default)",
+    )
 
     import_p = sub.add_parser(
         "import", help="add cards from a text file of 'front<TAB>back' lines"
@@ -125,9 +134,21 @@ def run_export(args, print_fn=print):
 def run_stats(args, print_fn=print):
     cards = load_deck(args.deck)
     due = due_cards(cards)
+    leeches = leech_cards(cards)
     print_fn(f"Deck: {args.deck}")
     print_fn(f"Total cards: {len(cards)}")
     print_fn(f"Due today ({date.today().isoformat()}): {len(due)}")
+    print_fn(f"Leeches (4+ lapses): {len(leeches)}")
+
+
+def run_leeches(args, print_fn=print):
+    cards = load_deck(args.deck)
+    leeches = leech_cards(cards, threshold=args.threshold)
+    if not leeches:
+        print_fn(f"No leeches (threshold: {args.threshold} lapses).")
+        return
+    for card in leeches:
+        print_fn(f"[{card.get('lapses', 0)} lapses] {card['front']}")
 
 
 def deck_name_for(args):
@@ -173,6 +194,8 @@ def main(argv=None):
         run_export(args)
     elif args.command == "decks":
         run_decks(args)
+    elif args.command == "leeches":
+        run_leeches(args)
 
 
 if __name__ == "__main__":

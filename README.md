@@ -104,6 +104,16 @@ pick one explicitly. `recall decks` then lists every deck registered
 so far with its total and due-today card counts, so you can keep
 several decks (e.g. one per subject) without memorizing their paths.
 
+Every card tracks its `lapses` count -- how many times it's been
+rated a failed recall (0-2) during `review`. A card that keeps
+lapsing despite repeated review is a "leech" (the Anki term): usually
+a sign the card itself is malformed (too vague, testing two facts at
+once) rather than a memory problem. `recall stats` reports the
+current leech count, and `recall leeches [--threshold N]` (default
+4, matching Anki's own default) lists them worst-first so you can
+rewrite or delete them instead of reviewing the same failing card
+forever.
+
 ## ttt
 
 A two-player tic-tac-toe game played over a TCP socket — one process

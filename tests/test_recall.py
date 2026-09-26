@@ -10,6 +10,7 @@ from recall.__main__ import (
     run_decks,
     run_export,
     run_import,
+    run_leeches,
     run_list,
     run_review,
     run_stats,
@@ -20,6 +21,7 @@ from recall.storage import (
     due_cards,
     export_lines,
     import_cards,
+    leech_cards,
     load_deck,
     load_registry,
     register_deck,
@@ -211,6 +213,59 @@ def test_cli_stats_reports_counts(tmp_path):
     run_stats(args, print_fn=outputs.append)
     assert any("Total cards: 1" in line for line in outputs)
     assert any("Due today" in line for line in outputs)
+    assert any("Leeches (4+ lapses): 0" in line for line in outputs)
+
+
+def test_apply_review_failure_increments_lapses():
+    cards = add_card([], "front", "back")
+    apply_review(cards[0], quality=1)
+    assert cards[0]["lapses"] == 1
+    apply_review(cards[0], quality=1)
+    assert cards[0]["lapses"] == 2
+
+
+def test_apply_review_success_does_not_increment_lapses():
+    cards = add_card([], "front", "back")
+    apply_review(cards[0], quality=1)
+    apply_review(cards[0], quality=5)
+    assert cards[0]["lapses"] == 1
+
+
+def test_leech_cards_filters_by_threshold_and_sorts_worst_first():
+    cards = add_card([], "easy", "back")
+    cards = add_card(cards, "hard", "back")
+    cards[0]["lapses"] = 3
+    cards[1]["lapses"] = 6
+    leeches = leech_cards(cards, threshold=4)
+    assert [c["front"] for c in leeches] == ["hard"]
+
+
+def test_leech_cards_treats_missing_lapses_field_as_zero():
+    cards = add_card([], "front", "back")
+    del cards[0]["lapses"]
+    assert leech_cards(cards, threshold=1) == []
+
+
+def test_cli_leeches_reports_none_below_threshold(tmp_path):
+    deck_path = str(tmp_path / "deck.json")
+    save_deck(deck_path, add_card([], "front", "back"))
+    parser = build_arg_parser()
+    args = parser.parse_args(["--deck", deck_path, "leeches"])
+    outputs = []
+    run_leeches(args, print_fn=outputs.append)
+    assert outputs == ["No leeches (threshold: 4 lapses)."]
+
+
+def test_cli_leeches_lists_cards_past_threshold(tmp_path):
+    deck_path = str(tmp_path / "deck.json")
+    cards = add_card([], "front", "back")
+    cards[0]["lapses"] = 5
+    save_deck(deck_path, cards)
+    parser = build_arg_parser()
+    args = parser.parse_args(["--deck", deck_path, "leeches", "--threshold", "2"])
+    outputs = []
+    run_leeches(args, print_fn=outputs.append)
+    assert any("[5 lapses] front" in line for line in outputs)
 
 
 def test_registry_roundtrip(tmp_path):
