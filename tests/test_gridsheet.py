@@ -5,7 +5,7 @@ import pytest
 from gridsheet import formula
 from gridsheet.refs import col_to_num, expand_range, make_ref, normalize_ref, num_to_col, parse_ref
 from gridsheet.sheet import Sheet, SheetError
-from gridsheet.storage import export_csv, load_sheet, save_sheet
+from gridsheet.storage import export_csv, import_csv, load_sheet, save_sheet
 
 
 # --- refs ---
@@ -423,6 +423,49 @@ def test_export_csv_error_value(tmp_path):
     assert "#DIV/0!" in csv_path.read_text()
 
 
+# --- CSV import ---
+
+def test_import_csv_literals(tmp_path):
+    csv_path = tmp_path / "in.csv"
+    csv_path.write_text("5,hello\n10,world\n")
+    sheet = Sheet()
+    import_csv(sheet, csv_path)
+    assert sheet.get_value("A1") == 5.0
+    assert sheet.get_value("B1") == "hello"
+    assert sheet.get_value("A2") == 10.0
+    assert sheet.get_value("B2") == "world"
+
+
+def test_import_csv_formulas(tmp_path):
+    csv_path = tmp_path / "in.csv"
+    csv_path.write_text("5,=A1*2\n")
+    sheet = Sheet()
+    import_csv(sheet, csv_path)
+    assert sheet.get_value("B1") == 10.0
+
+
+def test_import_csv_skips_blank_cells(tmp_path):
+    csv_path = tmp_path / "in.csv"
+    csv_path.write_text("1,,3\n")
+    sheet = Sheet()
+    import_csv(sheet, csv_path)
+    assert sheet.get_value("A1") == 1.0
+    assert sheet.get_value("B1") is None
+    assert sheet.get_value("C1") == 3.0
+
+
+def test_import_csv_round_trips_with_export(tmp_path):
+    sheet = Sheet()
+    sheet.set_cell("A1", "5")
+    sheet.set_cell("B1", "=A1*2")
+    csv_path = tmp_path / "out.csv"
+    export_csv(sheet, csv_path)
+    reimported = Sheet()
+    import_csv(reimported, csv_path)
+    assert reimported.get_value("A1") == 5.0
+    assert reimported.get_value("B1") == 10.0
+
+
 # --- CLI ---
 
 def run_cli(args, capsys):
@@ -473,6 +516,36 @@ def test_cli_get_unset_cell_prints_empty(tmp_path, capsys):
     code, out, _ = run_cli(["get", path, "A1"], capsys)
     assert code == 0
     assert out.strip() == ""
+
+
+def test_cli_import_csv(tmp_path, capsys):
+    csv_path = tmp_path / "in.csv"
+    csv_path.write_text("5,=A1*2\n")
+    path = str(tmp_path / "s.json")
+    code, _, _ = run_cli(["import", path, str(csv_path)], capsys)
+    assert code == 0
+    code, out, _ = run_cli(["get", path, "B1"], capsys)
+    assert out.strip() == "10"
+
+
+def test_cli_import_csv_bad_formula_exits_nonzero(tmp_path, capsys):
+    csv_path = tmp_path / "in.csv"
+    csv_path.write_text("=A1+\n")
+    path = str(tmp_path / "s.json")
+    code, _, err = run_cli(["import", path, str(csv_path)], capsys)
+    assert code == 1
+    assert "error:" in err
+
+
+def test_cli_shell_import(tmp_path, capsys, monkeypatch):
+    csv_path = tmp_path / "in.csv"
+    csv_path.write_text("7\n")
+    path = str(tmp_path / "s.json")
+    inputs = iter([f"import {csv_path}", "show", "quit"])
+    monkeypatch.setattr("builtins.input", lambda prompt="": next(inputs))
+    code, out, _ = run_cli(["shell", path], capsys)
+    assert code == 0
+    assert "7" in out
 
 
 def test_cli_shell_set_and_show(tmp_path, capsys, monkeypatch):

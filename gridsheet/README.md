@@ -115,6 +115,22 @@ gridsheet export FILE CSV_FILE
 Writes the sheet's *computed* values (not formula text) as CSV, one
 row per sheet row, in column order.
 
+### CSV import
+
+```
+gridsheet import FILE CSV_FILE
+```
+
+Creates (or overwrites) `FILE` from `CSV_FILE`: each CSV cell becomes
+the sheet cell at the matching row/column position. A cell whose text
+starts with `=` is loaded as a formula, just like `set`; every other
+non-blank cell is loaded as a literal (numeric or text). Blank CSV
+cells are left empty rather than cleared to `0` or `""`. Re-importing
+a file this tool exported with `export` reproduces the same computed
+values (formulas aren't preserved by `export`, since it only writes
+computed values — importing that output gives back literals, not the
+original formulas).
+
 ### Interactive shell
 
 ```
@@ -130,6 +146,7 @@ show                print the whole sheet
 fill SRC DEST        copy SRC into DEST (cell or range), shifting refs
 save                 write changes to FILE immediately
 export CSV_FILE      export computed values as CSV
+import CSV_FILE      load a CSV file's cells into the current sheet
 quit / exit          leave the shell (auto-saves if there are unsaved changes)
 ```
 

@@ -2,7 +2,7 @@
 import csv
 import json
 
-from gridsheet.refs import num_to_col
+from gridsheet.refs import make_ref, num_to_col
 from gridsheet.sheet import Sheet
 
 
@@ -36,3 +36,18 @@ def export_csv(sheet, path):
         for r in range(1, max_r + 1):
             row = [_csv_cell(sheet.get_value(f"{num_to_col(c)}{r}")) for c in range(1, max_c + 1)]
             writer.writerow(row)
+
+
+def import_csv(sheet, path):
+    """Load a CSV file into a Sheet, one cell per (row, column) position.
+
+    A cell whose text starts with '=' is set as a formula, same as
+    `set` on the CLI; every other cell is set as a literal (numeric or
+    text). Blank cells are skipped, leaving that position empty.
+    """
+    with open(path, newline="") as f:
+        for r, row in enumerate(csv.reader(f), start=1):
+            for c, text in enumerate(row, start=1):
+                if text == "":
+                    continue
+                sheet.set_cell(make_ref(c, r), text)
