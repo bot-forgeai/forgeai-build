@@ -984,6 +984,23 @@ its inherited log file descriptor, so a long-lived service that never
 restarts won't rotate mid-run. `procman validate` prints a service's
 `max_log_bytes` when set.
 
+`procman run --pid-file PATH` writes its own pid to `PATH` on start and
+removes it on clean exit, so another terminal or script can stop a
+backgrounded run without knowing its pid in advance:
+
+```
+procman run services.json --status status.json --pid-file procman.pid &
+procman stop procman.pid
+```
+
+`procman stop` sends `SIGTERM` to the pid on record and polls (every
+0.1s, up to `--timeout` seconds, default 10) until the process is gone,
+mirroring the same graceful-shutdown path `Ctrl+C`/`SIGTERM` already
+trigger directly. A missing or malformed pid file, a pid with no
+running process, or a process that doesn't exit within the timeout
+(e.g. one that's already ignoring `SIGTERM`) all report a clean error
+and exit 1 rather than hanging or crashing.
+
 ## regexlite
 
 A small regex engine built from scratch: a parser produces an AST,
