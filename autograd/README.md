@@ -75,6 +75,7 @@ autograd-nn train [--dataset xor|blobs|circles] [--hidden N [N ...]]
 - `--verbose` prints the loss roughly every 10% of training.
 - `--save PATH` saves the trained model (architecture + weights, as
   JSON) after training finishes.
+- `autograd-nn --version` prints the installed package version and exits.
 
 ```
 autograd-nn predict MODEL_PATH X [X ...]

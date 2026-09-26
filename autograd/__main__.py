@@ -1,11 +1,19 @@
 import argparse
 import sys
+from importlib.metadata import version as _get_version, PackageNotFoundError
 
 from .datasets import DATASETS
 from .lr_schedule import SCHEDULE_NAMES
 from .nn import MLP
 from .optim import OPTIMIZERS
 from .train import accuracy, predict, train
+
+
+def _get_package_version():
+    try:
+        return _get_version("eulerlib")
+    except PackageNotFoundError:
+        return "0.1.0"
 
 
 def cmd_train(args):
@@ -55,6 +63,7 @@ def cmd_predict(args):
 
 def build_parser():
     parser = argparse.ArgumentParser(prog="autograd", description="Tiny scalar autograd engine + MLP trainer")
+    parser.add_argument("--version", action="version", version=_get_package_version())
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_train = sub.add_parser("train", help="train an MLP on a synthetic dataset")

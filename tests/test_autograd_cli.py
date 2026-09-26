@@ -110,3 +110,12 @@ def test_cli_predict_wrong_input_count_errors_cleanly(tmp_path, capsys):
     err = capsys.readouterr().err
     assert code == 1
     assert "expects 2 input" in err
+
+
+def test_version(capsys):
+    parser = build_parser()
+    with pytest.raises(SystemExit) as exc_info:
+        parser.parse_args(["--version"])
+    assert exc_info.value.code == 0
+    out = capsys.readouterr().out
+    assert "0.1.0" in out or "0.1" in out
