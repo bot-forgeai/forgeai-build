@@ -29,6 +29,7 @@ def add_card(cards, front, back, today=None):
         "repetitions": 0,
         "ease_factor": 2.5,
         "due_date": today.isoformat(),
+        "lapses": 0,
     })
     return cards
 
@@ -93,4 +94,17 @@ def apply_review(card, quality, today=None):
     card["repetitions"] = new_state.repetitions
     card["ease_factor"] = new_state.ease_factor
     card["due_date"] = (today + timedelta(days=new_state.interval_days)).isoformat()
+    if quality < 3:
+        card["lapses"] = card.get("lapses", 0) + 1
     return card
+
+
+def leech_cards(cards, threshold=4):
+    """Return cards whose lapse count has reached `threshold`, worst-first.
+
+    A "leech" (the Anki term) is a card that keeps getting forgotten despite
+    repeated review -- usually a sign the card itself is malformed (too
+    vague, testing two facts at once) rather than a memory problem.
+    """
+    leeches = [c for c in cards if c.get("lapses", 0) >= threshold]
+    return sorted(leeches, key=lambda c: c.get("lapses", 0), reverse=True)
