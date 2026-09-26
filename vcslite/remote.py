@@ -63,7 +63,7 @@ def collect_objects(repo_dir: str, sha: str) -> set:
             continue
         collected.add(csha)
         c = commit_mod.read_commit(repo_dir, csha)
-        collected.add(c["tree"])
+        collected.update(tree_mod.collect_tree_shas(repo_dir, c["tree"]))
         collected.update(tree_mod.read_tree(repo_dir, c["tree"]).values())
         stack.extend(c["parents"])
     return collected

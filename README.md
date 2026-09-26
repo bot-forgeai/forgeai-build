@@ -605,9 +605,13 @@ commit and detaches HEAD — a commit made in this state advances HEAD
 itself without moving any branch, so it's easy to end up with commits
 no branch points at (same as git's own detached-HEAD footgun).
 
-Unlike git, vcslite keeps one flat tree object per commit (path ->
-blob sha) rather than nesting one tree object per directory — simpler
-to reason about, and a fine tradeoff at this project's scale.
+Like git, vcslite nests one tree object per directory rather than one
+flat tree per commit — a tree object is a sorted list of entries, each
+either a `blob` (a file) or another `tree` (a subdirectory). Because
+objects are content-addressed, an unmodified subdirectory hashes to
+the exact same tree object across commits and is only ever stored (or
+transferred, via `push`/`fetch`) once, no matter how many commits
+share it unchanged.
 
 A `.vcsliteignore` file at the repo root (one glob pattern per line;
 blank lines and `#` comments ignored) excludes matching paths from
