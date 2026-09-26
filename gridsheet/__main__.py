@@ -4,7 +4,7 @@ from importlib.metadata import version as _get_version, PackageNotFoundError
 
 from gridsheet.refs import expand_range, num_to_col
 from gridsheet.sheet import Sheet, SheetError
-from gridsheet.storage import export_csv, load_sheet, save_sheet
+from gridsheet.storage import export_csv, import_csv, load_sheet, save_sheet
 
 
 def _get_package_version():
@@ -99,6 +99,17 @@ def cmd_export(args):
     return 0
 
 
+def cmd_import(args):
+    sheet = Sheet()
+    try:
+        import_csv(sheet, args.csv_file)
+    except SheetError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    save_sheet(sheet, args.file)
+    return 0
+
+
 def cmd_shell(args):
     sheet = _load_or_new(args.file)
     dirty = False
@@ -116,7 +127,7 @@ def cmd_shell(args):
         if line == "help":
             print(
                 "commands: REF = CONTENT | get REF | show | fill SRC DEST | "
-                "save | export CSV_FILE | quit"
+                "save | export CSV_FILE | import CSV_FILE | quit"
             )
             continue
         if line == "show":
@@ -135,6 +146,16 @@ def cmd_shell(args):
             csv_path = line[7:].strip()
             export_csv(sheet, csv_path)
             print(f"exported to {csv_path}")
+            continue
+        if line.startswith("import "):
+            csv_path = line[7:].strip()
+            try:
+                import_csv(sheet, csv_path)
+            except SheetError as e:
+                print(f"error: {e}")
+                continue
+            dirty = True
+            print(f"imported {csv_path}")
             continue
         if line.startswith("fill "):
             parts = line[5:].split()
@@ -199,6 +220,11 @@ def build_parser():
     p_export.add_argument("file")
     p_export.add_argument("csv_file")
     p_export.set_defaults(func=cmd_export)
+
+    p_import = sub.add_parser("import", help="create a sheet from a CSV file")
+    p_import.add_argument("file", help="gridsheet JSON file to create (overwritten if it exists)")
+    p_import.add_argument("csv_file")
+    p_import.set_defaults(func=cmd_import)
 
     p_shell = sub.add_parser("shell", help="interactive REPL")
     p_shell.add_argument("file")
