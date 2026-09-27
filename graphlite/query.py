@@ -1,8 +1,8 @@
 """Parser and executor for graphlite's query language.
 
-Supports single-hop directed patterns:
+Supports directed patterns, chained across any number of hops:
 
-    MATCH (a:Person)-[:KNOWS]->(b:Person)
+    MATCH (a:Person)-[:KNOWS]->(b:Person)-[:WORKS_AT]->(c:Company)
     WHERE a.age > 30 AND b.city = 'Springfield'
     RETURN a.name, b
     LIMIT 10
@@ -11,7 +11,9 @@ Both the label on a node (`:Person`) and the type on an edge (`:KNOWS`)
 are optional — an unlabeled node/untyped edge matches anything. WHERE
 and LIMIT are optional; RETURN is required. A RETURN item naming a bare
 variable (e.g. `b`) returns that node's id/labels/props as a whole;
-`a.name` returns just that property.
+`a.name` returns just that property. Reusing the same variable name at
+two positions in the chain (e.g. `(a)-[:X]->(b)-[:Y]->(a)`) constrains
+both positions to the same matched node.
 """
 
 from .lexer import tokenize
@@ -45,13 +47,24 @@ class ReturnItem:
 
 
 class MatchQuery:
-    def __init__(self, left, right, edge_type, where, returns, limit):
-        self.left = left
-        self.right = right
-        self.edge_type = edge_type
+    def __init__(self, nodes, edge_types, where, returns, limit):
+        self.nodes = nodes
+        self.edge_types = edge_types
         self.where = where
         self.returns = returns
         self.limit = limit
+
+    @property
+    def left(self):
+        return self.nodes[0]
+
+    @property
+    def right(self):
+        return self.nodes[1]
+
+    @property
+    def edge_type(self):
+        return self.edge_types[0]
 
 
 class Parser:
@@ -105,16 +118,19 @@ class Parser:
 
     def parse_match_query(self):
         self.expect_keyword("MATCH")
-        left = self.parse_node_pattern()
-        self.expect_sym("-")
-        self.expect_sym("[")
-        edge_type = None
-        if self.at_sym(":"):
+        nodes = [self.parse_node_pattern()]
+        edge_types = []
+        while self.at_sym("-"):
             self.advance()
-            edge_type = self.parse_ident()
-        self.expect_sym("]")
-        self.expect_sym("->")
-        right = self.parse_node_pattern()
+            self.expect_sym("[")
+            edge_type = None
+            if self.at_sym(":"):
+                self.advance()
+                edge_type = self.parse_ident()
+            self.expect_sym("]")
+            self.expect_sym("->")
+            edge_types.append(edge_type)
+            nodes.append(self.parse_node_pattern())
 
         where = []
         if self.at_keyword("WHERE"):
@@ -141,7 +157,7 @@ class Parser:
         if self.peek().kind != "EOF":
             tok = self.peek()
             raise QueryError(f"unexpected trailing {tok.kind} {tok.value!r}")
-        return MatchQuery(left, right, edge_type, where, returns, limit)
+        return MatchQuery(nodes, edge_types, where, returns, limit)
 
     def parse_condition(self):
         var = self.parse_ident()
@@ -206,24 +222,51 @@ def _node_view(graph, node_id):
     return {"id": node_id, "labels": list(node["labels"]), "props": dict(node["props"])}
 
 
+class _LimitReached(Exception):
+    pass
+
+
 def execute(graph, query):
-    """Run a parsed MatchQuery against a Graph, returning a list of row dicts."""
-    left, right = query.left, query.right
+    """Run a parsed MatchQuery against a Graph, returning a list of row dicts.
+
+    Walks the chain of node/edge patterns hop by hop, backtracking over
+    every matching edge at each step. Reusing a variable name at more
+    than one position in the chain constrains those positions to the
+    same node, rather than being bound independently.
+    """
+    nodes, edge_types = query.nodes, query.edge_types
+    last_hop = len(nodes) - 1
     rows = []
-    for node_id, node in graph.nodes.items():
-        if left.label is not None and left.label not in node["labels"]:
-            continue
-        for edge_id, edge in graph.out_edges(node_id, edge_type=query.edge_type):
-            other_id = edge["to"]
-            other_node = graph.nodes[other_id]
-            if right.label is not None and right.label not in other_node["labels"]:
-                continue
-            binding = {left.var: node_id, right.var: other_id}
-            if not _matches_where(graph, binding, query.where):
-                continue
-            rows.append(_build_row(graph, binding, query.returns))
+
+    def recurse(hop, node_id, binding):
+        pattern = nodes[hop]
+        if pattern.var in binding:
+            if binding[pattern.var] != node_id:
+                return
+            next_binding = binding
+        else:
+            node = graph.nodes[node_id]
+            if pattern.label is not None and pattern.label not in node["labels"]:
+                return
+            next_binding = dict(binding)
+            next_binding[pattern.var] = node_id
+
+        if hop == last_hop:
+            if not _matches_where(graph, next_binding, query.where):
+                return
+            rows.append(_build_row(graph, next_binding, query.returns))
             if query.limit is not None and len(rows) >= query.limit:
-                return rows
+                raise _LimitReached()
+            return
+
+        for edge_id, edge in graph.out_edges(node_id, edge_type=edge_types[hop]):
+            recurse(hop + 1, edge["to"], next_binding)
+
+    try:
+        for node_id in graph.nodes:
+            recurse(0, node_id, {})
+    except _LimitReached:
+        pass
     return rows
 
 

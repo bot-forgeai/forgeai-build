@@ -1278,19 +1278,23 @@ JSON file, written via temp-file + fsync + `os.replace` so a crash
 mid-write can never corrupt it (the same pattern `nanosql` uses).
 
 The query language (`graphlite/lexer.py` + `graphlite/query.py`)
-supports a single-hop directed pattern:
+supports a directed pattern chained across any number of hops:
 
 ```
-MATCH (a:Label)-[:TYPE]->(b:Label) WHERE a.prop = value AND ... RETURN a.prop, b LIMIT n
+MATCH (a:Label)-[:TYPE]->(b:Label)-[:TYPE]->(c:Label) WHERE a.prop = value AND ... RETURN a.prop, b LIMIT n
 ```
 
 A node's label and an edge's type are both optional — an unlabeled
-node or untyped edge matches anything. `WHERE` conditions (`=`, `!=`,
-`<`, `<=`, `>`, `>=`, combined with `AND`) filter on bound variables'
-properties; a `RETURN` item naming a bare variable returns that node's
-full id/labels/props, while `var.prop` returns just one property. A
-syntax error, or a query referencing an unbound variable, raises a
-clean `error: ...` message and exits non-zero rather than crashing.
+node or untyped edge matches anything. Reusing the same variable name
+at two positions in the chain (e.g. `(a)-[:X]->(b)-[:Y]->(a)`)
+constrains both positions to the same matched node, rather than
+binding them independently — useful for detecting a cycle back to the
+starting node. `WHERE` conditions (`=`, `!=`, `<`, `<=`, `>`, `>=`,
+combined with `AND`) filter on bound variables' properties; a `RETURN`
+item naming a bare variable returns that node's full id/labels/props,
+while `var.prop` returns just one property. A syntax error, or a query
+referencing an unbound variable, raises a clean `error: ...` message
+and exits non-zero rather than crashing.
 
 `graphlite/algorithms.py` adds two graph algorithms independent of the
 query language: `shortest_path` (BFS, optionally restricted to one
