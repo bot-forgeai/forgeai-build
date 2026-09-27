@@ -1,0 +1,63 @@
+"""raylite CLI: render a JSON scene description to a PPM image."""
+
+from __future__ import annotations
+
+import argparse
+import sys
+import time
+
+from raylite import __version__
+from raylite.ppm import write_ppm
+from raylite.render import render
+from raylite.scene import SceneError, load_scene
+
+
+def cmd_render(args: argparse.Namespace) -> int:
+    try:
+        scene = load_scene(args.scene)
+    except (SceneError, OSError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    if args.width <= 0 or args.height <= 0:
+        print("error: width and height must be positive", file=sys.stderr)
+        return 1
+    if args.samples <= 0:
+        print("error: samples must be positive", file=sys.stderr)
+        return 1
+
+    start = time.time()
+    pixels = render(scene, args.width, args.height, samples_per_pixel=args.samples)
+    elapsed = time.time() - start
+
+    write_ppm(args.output, pixels)
+    print(f"rendered {args.width}x{args.height} ({args.samples} spp) to {args.output} in {elapsed:.2f}s")
+    return 0
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="raylite", description="A small CPU ray tracer.")
+    parser.add_argument("--version", action="version", version=f"raylite {__version__}")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    render_parser = subparsers.add_parser("render", help="render a JSON scene to a PPM image")
+    render_parser.add_argument("scene", help="path to a JSON scene description")
+    render_parser.add_argument("output", help="path to write the output .ppm image")
+    render_parser.add_argument("--width", type=int, default=400)
+    render_parser.add_argument("--height", type=int, default=300)
+    render_parser.add_argument(
+        "--samples", type=int, default=1, help="samples per pixel (anti-aliasing; higher is slower/smoother)"
+    )
+    render_parser.set_defaults(func=cmd_render)
+
+    return parser
+
+
+def main(argv=None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
