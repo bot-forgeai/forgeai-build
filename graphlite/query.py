@@ -14,6 +14,11 @@ variable (e.g. `b`) returns that node's id/labels/props as a whole;
 `a.name` returns just that property. Reusing the same variable name at
 two positions in the chain (e.g. `(a)-[:X]->(b)-[:Y]->(a)`) constrains
 both positions to the same matched node.
+
+WHERE supports both AND and OR, with the usual precedence (AND binds
+tighter than OR, so `a.x = 1 AND a.y = 2 OR a.z = 3` reads as
+`(a.x = 1 AND a.y = 2) OR (a.z = 3)`). Parentheses inside WHERE are not
+supported for further grouping.
 """
 
 from .lexer import tokenize
@@ -47,12 +52,25 @@ class ReturnItem:
 
 
 class MatchQuery:
-    def __init__(self, nodes, edge_types, where, returns, limit):
+    def __init__(self, nodes, edge_types, where_groups, returns, limit):
         self.nodes = nodes
         self.edge_types = edge_types
-        self.where = where
+        self.where_groups = where_groups
         self.returns = returns
         self.limit = limit
+
+    @property
+    def where(self):
+        """The flat AND-list of conditions, for queries with no OR.
+
+        Kept for backward compatibility with callers that predate OR
+        support, when WHERE was always a single flat AND-list. Raises
+        if the query actually uses OR (more than one group), since a
+        flat list can't represent that.
+        """
+        if len(self.where_groups) > 1:
+            raise AttributeError("query uses OR; use where_groups instead")
+        return self.where_groups[0] if self.where_groups else []
 
     @property
     def left(self):
@@ -132,13 +150,10 @@ class Parser:
             edge_types.append(edge_type)
             nodes.append(self.parse_node_pattern())
 
-        where = []
+        where_groups = []
         if self.at_keyword("WHERE"):
             self.advance()
-            where.append(self.parse_condition())
-            while self.at_keyword("AND"):
-                self.advance()
-                where.append(self.parse_condition())
+            where_groups = self.parse_where_groups()
 
         self.expect_keyword("RETURN")
         returns = [self.parse_return_item()]
@@ -157,7 +172,22 @@ class Parser:
         if self.peek().kind != "EOF":
             tok = self.peek()
             raise QueryError(f"unexpected trailing {tok.kind} {tok.value!r}")
-        return MatchQuery(nodes, edge_types, where, returns, limit)
+        return MatchQuery(nodes, edge_types, where_groups, returns, limit)
+
+    def parse_where_groups(self):
+        """Parse an OR-of-AND-groups condition list (AND binds tighter than OR)."""
+        groups = [self.parse_and_group()]
+        while self.at_keyword("OR"):
+            self.advance()
+            groups.append(self.parse_and_group())
+        return groups
+
+    def parse_and_group(self):
+        conditions = [self.parse_condition()]
+        while self.at_keyword("AND"):
+            self.advance()
+            conditions.append(self.parse_condition())
+        return conditions
 
     def parse_condition(self):
         var = self.parse_ident()
@@ -252,7 +282,7 @@ def execute(graph, query):
             next_binding[pattern.var] = node_id
 
         if hop == last_hop:
-            if not _matches_where(graph, next_binding, query.where):
+            if not _matches_where(graph, next_binding, query.where_groups):
                 return
             rows.append(_build_row(graph, next_binding, query.returns))
             if query.limit is not None and len(rows) >= query.limit:
@@ -270,7 +300,17 @@ def execute(graph, query):
     return rows
 
 
-def _matches_where(graph, binding, conditions):
+def _matches_where(graph, binding, where_groups):
+    """True if binding satisfies (group1 AND ... ) OR (group2 AND ...) OR ...
+
+    An empty group list (no WHERE clause at all) always matches.
+    """
+    if not where_groups:
+        return True
+    return any(_matches_and_group(graph, binding, group) for group in where_groups)
+
+
+def _matches_and_group(graph, binding, conditions):
     for cond in conditions:
         if cond.var not in binding:
             raise QueryError(f"unbound variable {cond.var!r} in WHERE")
