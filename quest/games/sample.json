@@ -12,6 +12,12 @@
       "room": "outside",
       "requires_item": "silver_ring",
       "message": "You slip away with nothing but a silver ring, but you're alive. A modest ending."
+    },
+    {
+      "id": "gem_ending",
+      "room": "garden",
+      "requires_item": "gem",
+      "message": "Standing among the roses with the emerald in your palm, you decide this was worth more than any idol. A quiet victory."
     }
   ],
   "items": {
@@ -39,6 +45,26 @@
       "name": "silver ring",
       "description": "A tarnished silver ring, said to bring luck.",
       "takeable": true
+    },
+    "iron_key": {
+      "name": "iron key",
+      "description": "A heavy iron key, cold to the touch.",
+      "takeable": true
+    },
+    "rusty_key": {
+      "name": "rusty key",
+      "description": "An old rusty key. It might still turn a lock, if you're lucky.",
+      "takeable": true
+    },
+    "gem": {
+      "name": "emerald",
+      "description": "A flawless emerald, glinting even in the dark.",
+      "takeable": true
+    },
+    "note": {
+      "name": "scrap of paper",
+      "description": "A scrawled note: 'Whatever guards the cellar, it doesn't like the dark.'",
+      "takeable": true
     }
   },
   "npcs": {
@@ -53,21 +79,25 @@
       "name": "black cat",
       "dialogue": "The cat eyes you and says nothing.",
       "wander_rooms": ["library", "vault", "hall"]
+    },
+    "rat": {
+      "name": "cellar rat",
+      "dialogue": "A rat scurries between the shelves, indifferent to you."
     }
   },
   "rooms": {
     "hall": {
       "name": "Grand Hall",
       "description": "A dusty entrance hall. Cobwebs hang from a cracked ceiling.",
-      "exits": {"north": "library", "east": "vault", "south": "outside"},
-      "locked_exits": {"east": "brass_key"},
+      "exits": {"north": "library", "east": "vault", "south": "outside", "down": "cellar"},
+      "locked_exits": {"east": "brass_key", "down": "iron_key"},
       "items": ["torch"],
       "npcs": ["keeper"]
     },
     "library": {
       "name": "Library",
       "description": "Rows of rotted bookshelves line the walls.",
-      "exits": {"south": "hall"},
+      "exits": {"south": "hall", "east": "study"},
       "items": ["brass_key", "statue"]
     },
     "vault": {
@@ -80,7 +110,27 @@
     "outside": {
       "name": "Outside",
       "description": "Sunlight. Fresh air. Freedom, if you're carrying what you came for.",
-      "exits": {"north": "hall"},
+      "exits": {"north": "hall", "east": "garden"},
+      "locked_exits": {"east": "rusty_key"},
+      "items": []
+    },
+    "study": {
+      "name": "Study",
+      "description": "A cramped study, its desk buried under yellowed papers.",
+      "exits": {"west": "library"},
+      "items": ["iron_key", "note"]
+    },
+    "cellar": {
+      "name": "Cellar",
+      "description": "A cold, cramped cellar. Something rustles in the dark.",
+      "exits": {"up": "hall"},
+      "items": ["rusty_key", "gem"],
+      "npcs": ["rat"]
+    },
+    "garden": {
+      "name": "Garden",
+      "description": "An overgrown garden behind the manor, roses gone wild among the weeds.",
+      "exits": {"west": "outside"},
       "items": []
     }
   }

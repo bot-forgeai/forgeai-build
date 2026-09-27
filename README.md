@@ -232,7 +232,11 @@ python3 -m venv .venv && .venv/bin/pip install -e .
 .venv/bin/quest play
 ```
 
-That launches the bundled sample game, a small four-room dungeon.
+That launches the bundled sample game, a seven-room dungeon with a
+locked cellar behind a key found in the study, and a second locked
+door beyond it leading to a garden — three endings in total (the
+treasure, a traded silver ring, or an emerald found behind that
+second lock).
 Commands: `go <direction>` (also `n`/`s`/`e`/`w`/`u`/`d` as shorthand),
 `look`, `take <item>`, `drop <item>`, `inventory`, `examine <item>`,
 `unlock <direction> with <item>`, `talk to <person>`,
