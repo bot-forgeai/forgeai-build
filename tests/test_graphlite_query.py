@@ -93,3 +93,54 @@ def test_execute_unbound_variable_in_where_raises():
     q.where.append(Condition("c", "age", "=", 1))
     with pytest.raises(QueryError):
         execute(g, q)
+
+
+def test_parse_multi_hop_pattern():
+    q = parse(
+        "MATCH (a:Person)-[:KNOWS]->(b:Person)-[:WORKS_AT]->(c:Company) RETURN a.name, c.name"
+    )
+    assert [n.var for n in q.nodes] == ["a", "b", "c"]
+    assert q.edge_types == ["KNOWS", "WORKS_AT"]
+
+
+def test_execute_multi_hop_chain():
+    g = build_graph()
+    q = parse(
+        "MATCH (a:Person)-[:KNOWS]->(b:Person)-[:WORKS_AT]->(c:Company) "
+        "RETURN a.name, b.name, c.name"
+    )
+    rows = execute(g, q)
+    assert len(rows) == 1
+    assert rows[0] == {"a.name": "Ada", "b.name": "Bob", "c.name": "Acme"}
+
+
+def test_execute_multi_hop_no_match_returns_empty():
+    g = build_graph()
+    q = parse(
+        "MATCH (a:Company)-[:WORKS_AT]->(b:Person)-[:WORKS_AT]->(c:Company) RETURN a"
+    )
+    assert execute(g, q) == []
+
+
+def test_execute_multi_hop_repeated_variable_constrains_same_node():
+    g = build_graph()
+    g.add_edge("e4", "bob", "ada", "KNOWS")
+    q = parse("MATCH (a:Person)-[:KNOWS]->(b:Person)-[:KNOWS]->(a) RETURN a.name, b.name")
+    rows = execute(g, q)
+    # ada<->bob mutually KNOWS each other, so both role assignments match.
+    pairs = sorted((r["a.name"], r["b.name"]) for r in rows)
+    assert pairs == [("Ada", "Bob"), ("Bob", "Ada")]
+
+
+def test_execute_multi_hop_limit():
+    g = build_graph()
+    g.add_node("carol", labels=["Person"], props={"name": "Carol", "age": 40})
+    g.add_edge("e5", "carol", "ada", "KNOWS")
+    unlimited = parse(
+        "MATCH (a:Person)-[:KNOWS]->(b:Person)-[:WORKS_AT]->(c:Company) RETURN a.name"
+    )
+    assert len(execute(g, unlimited)) == 2  # carol->ada->acme and ada->bob->acme
+    limited = parse(
+        "MATCH (a:Person)-[:KNOWS]->(b:Person)-[:WORKS_AT]->(c:Company) RETURN a.name LIMIT 1"
+    )
+    assert len(execute(g, limited)) == 1
