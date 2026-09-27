@@ -38,6 +38,49 @@ def test_parse_where_and_limit():
     assert q.limit == 5
 
 
+def test_parse_where_or_precedence():
+    q = parse(
+        "MATCH (a:Person) WHERE a.age > 30 AND a.name = 'Ada' OR a.age < 10 RETURN a.name"
+    )
+    assert len(q.where_groups) == 2
+    assert len(q.where_groups[0]) == 2
+    assert len(q.where_groups[1]) == 1
+    with pytest.raises(AttributeError):
+        q.where
+
+
+def test_parse_where_plain_and_still_returns_flat_where():
+    q = parse("MATCH (a:Person) WHERE a.age > 30 RETURN a.name")
+    assert q.where_groups == [q.where]
+
+
+def test_execute_where_or_matches_either_group():
+    g = build_graph()
+    q = parse(
+        "MATCH (a:Person) WHERE a.age > 100 OR a.age < 30 RETURN a.name"
+    )
+    rows = execute(g, q)
+    assert rows == [{"a.name": "Bob"}]
+
+
+def test_execute_where_or_of_ands():
+    g = build_graph()
+    q = parse(
+        "MATCH (a:Person) WHERE a.age > 30 AND a.name = 'Ada' OR a.age < 30 AND a.name = 'Bob' "
+        "RETURN a.name"
+    )
+    rows = execute(g, q)
+    assert {r["a.name"] for r in rows} == {"Ada", "Bob"}
+
+
+def test_execute_where_no_clause_matches_everything():
+    g = build_graph()
+    q = parse("MATCH (a:Person) RETURN a.name")
+    assert q.where_groups == []
+    rows = execute(g, q)
+    assert {r["a.name"] for r in rows} == {"Ada", "Bob"}
+
+
 def test_parse_syntax_error_raises():
     with pytest.raises(QueryError):
         parse("MATCH (a Person)-[:KNOWS]->(b) RETURN a")
@@ -90,7 +133,7 @@ def test_execute_no_matches_returns_empty():
 def test_execute_unbound_variable_in_where_raises():
     g = build_graph()
     q = parse("MATCH (a:Person)-[:KNOWS]->(b:Person) RETURN a.name")
-    q.where.append(Condition("c", "age", "=", 1))
+    q.where_groups.append([Condition("c", "age", "=", 1)])
     with pytest.raises(QueryError):
         execute(g, q)
 

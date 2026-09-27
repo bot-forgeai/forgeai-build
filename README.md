@@ -1281,7 +1281,7 @@ The query language (`graphlite/lexer.py` + `graphlite/query.py`)
 supports a directed pattern chained across any number of hops:
 
 ```
-MATCH (a:Label)-[:TYPE]->(b:Label)-[:TYPE]->(c:Label) WHERE a.prop = value AND ... RETURN a.prop, b LIMIT n
+MATCH (a:Label)-[:TYPE]->(b:Label)-[:TYPE]->(c:Label) WHERE a.prop = value AND ... OR ... RETURN a.prop, b LIMIT n
 ```
 
 A node's label and an edge's type are both optional — an unlabeled
@@ -1289,12 +1289,14 @@ node or untyped edge matches anything. Reusing the same variable name
 at two positions in the chain (e.g. `(a)-[:X]->(b)-[:Y]->(a)`)
 constrains both positions to the same matched node, rather than
 binding them independently — useful for detecting a cycle back to the
-starting node. `WHERE` conditions (`=`, `!=`, `<`, `<=`, `>`, `>=`,
-combined with `AND`) filter on bound variables' properties; a `RETURN`
-item naming a bare variable returns that node's full id/labels/props,
-while `var.prop` returns just one property. A syntax error, or a query
-referencing an unbound variable, raises a clean `error: ...` message
-and exits non-zero rather than crashing.
+starting node. `WHERE` conditions (`=`, `!=`, `<`, `<=`, `>`, `>=`)
+combine with both `AND` and `OR`, with the usual precedence (`AND`
+binds tighter, so `a.x = 1 AND a.y = 2 OR a.z = 3` reads as
+`(a.x = 1 AND a.y = 2) OR (a.z = 3)`; no parentheses for further
+grouping). A `RETURN` item naming a bare variable returns that node's
+full id/labels/props, while `var.prop` returns just one property. A
+syntax error, or a query referencing an unbound variable, raises a
+clean `error: ...` message and exits non-zero rather than crashing.
 
 `graphlite/algorithms.py` adds two graph algorithms independent of the
 query language: `shortest_path` (BFS, optionally restricted to one

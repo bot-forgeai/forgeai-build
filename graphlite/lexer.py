@@ -1,6 +1,6 @@
 """Tokenizer for graphlite's MATCH/WHERE/RETURN query language."""
 
-KEYWORDS = {"MATCH", "WHERE", "RETURN", "AND", "LIMIT", "TRUE", "FALSE"}
+KEYWORDS = {"MATCH", "WHERE", "RETURN", "AND", "OR", "LIMIT", "TRUE", "FALSE"}
 
 # Longer symbols must come before their prefixes (e.g. "->" before "-").
 SYMBOLS = ["->", "<=", ">=", "!=", "=", "<", ">", "(", ")", "[", "]", ":", ",", ".", "-"]
