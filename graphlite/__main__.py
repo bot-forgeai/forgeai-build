@@ -1,4 +1,5 @@
 import argparse
+import json
 import os
 import sys
 from importlib.metadata import PackageNotFoundError
@@ -109,6 +110,9 @@ def cmd_query(args):
     except (QueryError, GraphError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         sys.exit(1)
+    if args.format == "json":
+        print(json.dumps(rows))
+        return
     if not rows:
         print("(0 rows)")
         return
@@ -186,6 +190,9 @@ def build_parser():
     p_query = sub.add_parser("query", help="run a MATCH/WHERE/RETURN query")
     p_query.add_argument("db")
     p_query.add_argument("query")
+    p_query.add_argument(
+        "--format", choices=["table", "json"], default="table", help="output format (default: table)"
+    )
     p_query.set_defaults(func=cmd_query)
 
     p_sp = sub.add_parser("shortest-path", help="BFS shortest path between two nodes")
