@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from graphlite.__main__ import main
@@ -80,6 +82,42 @@ def test_query_syntax_error_exits_nonzero(tmp_path, capsys):
     code, _, err = run(capsys, ["query", db_path, "MATCH bogus"])
     assert code == 1
     assert "error:" in err
+
+
+def test_query_format_json(tmp_path, capsys):
+    db_path = str(tmp_path / "g.json")
+    run(capsys, ["init", db_path])
+    run(capsys, ["add-node", db_path, "ada", "--label", "Person", "--prop", "name=Ada"])
+    run(capsys, ["add-node", db_path, "bob", "--label", "Person", "--prop", "name=Bob"])
+    run(capsys, ["add-edge", db_path, "e1", "ada", "bob", "KNOWS"])
+    code, out, _ = run(
+        capsys, ["query", db_path, "MATCH (a:Person)-[:KNOWS]->(b:Person) RETURN a.name, b.name", "--format", "json"]
+    )
+    assert code == 0
+    rows = json.loads(out)
+    assert rows == [{"a.name": "Ada", "b.name": "Bob"}]
+
+
+def test_query_format_json_empty(tmp_path, capsys):
+    db_path = str(tmp_path / "g.json")
+    run(capsys, ["init", db_path])
+    run(capsys, ["add-node", db_path, "a"])
+    code, out, _ = run(capsys, ["query", db_path, "MATCH (a)-[]->(b) RETURN a", "--format", "json"])
+    assert code == 0
+    assert json.loads(out) == []
+
+
+def test_query_format_json_returns_whole_node(tmp_path, capsys):
+    db_path = str(tmp_path / "g.json")
+    run(capsys, ["init", db_path])
+    run(capsys, ["add-node", db_path, "ada", "--label", "Person", "--prop", "name=Ada"])
+    code, out, _ = run(capsys, ["query", db_path, "MATCH (a:Person) RETURN a", "--format", "json"])
+    assert code == 0
+    rows = json.loads(out)
+    assert len(rows) == 1
+    assert rows[0]["a"]["id"] == "ada"
+    assert rows[0]["a"]["labels"] == ["Person"]
+    assert rows[0]["a"]["props"] == {"name": "Ada"}
 
 
 def test_shortest_path(tmp_path, capsys):

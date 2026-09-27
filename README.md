@@ -1298,6 +1298,11 @@ full id/labels/props, while `var.prop` returns just one property. A
 syntax error, or a query referencing an unbound variable, raises a
 clean `error: ...` message and exits non-zero rather than crashing.
 
+`query --format json` prints the result rows as a JSON array instead
+of the default tab-separated table, for scripting against the output
+— a bare-variable item's node still serializes as its full
+`id`/`labels`/`props` dict.
+
 `graphlite/algorithms.py` adds two graph algorithms independent of the
 query language: `shortest_path` (BFS, optionally restricted to one
 edge type or traversal direction) and `connected_components` (weakly
