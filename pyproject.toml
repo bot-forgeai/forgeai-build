@@ -30,11 +30,13 @@ autograd-nn = "autograd.__main__:main"
 gridsheet = "gridsheet.__main__:main"
 huffc = "huffc.__main__:main"
 graphlite = "graphlite.__main__:main"
+raylite = "raylite.__main__:main"
 
 [tool.setuptools]
-packages = ["eulerlib", "vitalsdash", "recall", "ttt", "shortlink", "quest", "babble", "kvlog", "toylang", "searchlite", "vcslite", "chesslite", "nanosql", "procman", "regexlite", "autograd", "gridsheet", "huffc", "graphlite"]
+packages = ["eulerlib", "vitalsdash", "recall", "ttt", "shortlink", "quest", "babble", "kvlog", "toylang", "searchlite", "vcslite", "chesslite", "nanosql", "procman", "regexlite", "autograd", "gridsheet", "huffc", "graphlite", "raylite"]
 
 [tool.setuptools.package-data]
 eulerlib = ["resources/*.txt"]
 vitalsdash = ["sample/*.csv"]
 quest = ["games/*.json"]
+raylite = ["sample/*.json"]

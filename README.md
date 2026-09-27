@@ -1312,3 +1312,55 @@ query language: `shortest_path` (BFS, optionally restricted to one
 edge type or traversal direction) and `connected_components` (weakly
 connected, ignoring edge direction) — exposed as the `shortest-path`
 and `components` CLI subcommands.
+
+## raylite
+
+A small CPU ray tracer: renders a JSON scene description (a camera,
+spheres/planes, point lights) to a binary PPM image via ray-sphere/
+ray-plane intersection, Phong-style diffuse+specular shading, hard
+shadows, and recursive reflection — a numerical 3D geometry/rendering
+pipeline, a genuinely different mechanic from every prior build-lane
+project (none of the others trace rays through a scene or produce a
+raster image as output).
+
+```
+pip install -e .
+raylite render raylite/sample/scene.json out.ppm --width 400 --height 300 --samples 4
+```
+
+`raylite/vec3.py` is a small immutable `Vec3` (a `NamedTuple`) with
+the usual vector operations (`dot`, `cross`, `normalize`, `reflect`,
+`clamp01`). `raylite/shapes.py` defines `Sphere` and `Plane`, each with
+a `Material` (base color, diffuse/specular weight, shininess, and an
+optional `reflectivity`); both implement `hit(ray, t_min, t_max)`
+returning the nearest valid intersection (a quadratic solve for
+spheres, a simple plane-ray dot-product solve for planes) or `None`.
+
+`raylite/scene.py` parses a JSON scene into a `Scene` (camera, shape
+list, point lights, background color, ambient light level) — a
+missing required field, an unknown shape type, or malformed JSON all
+raise a clean `SceneError`/`OSError` rather than crashing deep inside
+the renderer. `raylite/camera.py` builds an orthonormal camera basis
+(forward/right/up) from `origin`/`look_at`/`up`/`fov_degrees` and maps
+pixel coordinates to camera rays.
+
+`raylite/render.py` is the tracer itself: `closest_hit` finds the
+nearest shape a ray hits; `shade` computes ambient + per-light
+diffuse/specular contribution, skipping a light entirely when a
+shadow ray from the hit point toward it hits anything first (hard
+shadows, no soft penumbra); a material's `reflectivity` blends in a
+recursively traced reflection ray, capped at a small max depth to
+bound recursion. `render(scene, width, height, samples_per_pixel)`
+renders a full pixel grid, jittering multiple samples per pixel for
+basic anti-aliasing (an injectable `random.Random` keeps multi-sample
+renders reproducible in tests). `raylite/ppm.py` writes the result out
+as a binary P6 PPM, viewable in most image tools that support the
+format (e.g. GIMP, ImageMagick's `display`, or converted to PNG with
+`pnmtopng`/`convert`).
+
+The CLI's one subcommand, `render SCENE OUTPUT --width --height
+--samples`, reports the render time on completion; bad scene files,
+non-positive dimensions, or non-positive sample counts all exit 1 with
+a clean `error: ...` message. `raylite/sample/scene.json` is a small
+demo scene (a ground plane, three spheres with varying reflectivity,
+two point lights) used in the README example above.
