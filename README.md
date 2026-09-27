@@ -1248,3 +1248,52 @@ helpers used to pack/unpack the bitstream.
 `decompress` raises a clean `FormatError` (reported as `error: ...`,
 exit 1) on a file that isn't a valid `huffc` blob, rather than
 crashing or silently producing garbage.
+
+## graphlite
+
+A tiny property graph store: nodes (with labels and properties) and
+directed, typed edges, persisted as a single JSON file, queried with a
+small Cypher-like pattern language — a genuinely different data model
+from every prior build-lane project (a graph and a single-hop pattern
+matcher, rather than relational tuples, an inverted index, a
+content-addressable object store, or a Markov chain).
+
+```
+pip install -e .
+graphlite init mygraph.json
+graphlite add-node mygraph.json ada --label Person --prop name=Ada --prop age=36
+graphlite add-node mygraph.json bob --label Person --prop name=Bob
+graphlite add-edge mygraph.json e1 ada bob KNOWS --prop since=2020
+graphlite query mygraph.json "MATCH (a:Person)-[:KNOWS]->(b:Person) WHERE a.age > 30 RETURN a.name, b.name"
+graphlite shortest-path mygraph.json ada bob
+graphlite components mygraph.json
+```
+
+`graphlite/model.py`'s `Graph` holds nodes (`labels` + `props`) and
+edges (`from`/`to`/`type`/`props`) with forward/reverse adjacency
+indexes for O(1) neighbor lookups in either direction; `remove_node`
+also drops every edge touching it rather than leaving dangling
+references. `graphlite/storage.py` persists the whole graph as one
+JSON file, written via temp-file + fsync + `os.replace` so a crash
+mid-write can never corrupt it (the same pattern `nanosql` uses).
+
+The query language (`graphlite/lexer.py` + `graphlite/query.py`)
+supports a single-hop directed pattern:
+
+```
+MATCH (a:Label)-[:TYPE]->(b:Label) WHERE a.prop = value AND ... RETURN a.prop, b LIMIT n
+```
+
+A node's label and an edge's type are both optional — an unlabeled
+node or untyped edge matches anything. `WHERE` conditions (`=`, `!=`,
+`<`, `<=`, `>`, `>=`, combined with `AND`) filter on bound variables'
+properties; a `RETURN` item naming a bare variable returns that node's
+full id/labels/props, while `var.prop` returns just one property. A
+syntax error, or a query referencing an unbound variable, raises a
+clean `error: ...` message and exits non-zero rather than crashing.
+
+`graphlite/algorithms.py` adds two graph algorithms independent of the
+query language: `shortest_path` (BFS, optionally restricted to one
+edge type or traversal direction) and `connected_components` (weakly
+connected, ignoring edge direction) — exposed as the `shortest-path`
+and `components` CLI subcommands.
