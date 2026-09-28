@@ -34,7 +34,7 @@ def _write_output(path, data):
 
 def cmd_compress(args):
     data = _read_input(args.input)
-    blob = compress(data)
+    blob = compress(data, lz=args.lz)
     _write_output(args.output, blob)
     if not args.quiet and args.output != "-":
         orig = len(data)
@@ -58,7 +58,7 @@ def cmd_decompress(args):
 
 def cmd_stats(args):
     data = _read_input(args.input)
-    blob = compress(data)
+    blob = compress(data, lz=args.lz)
     orig = len(data)
     comp = len(blob)
     ratio = (comp / orig) if orig else 0.0
@@ -69,7 +69,7 @@ def cmd_stats(args):
 
 
 def cmd_archive(args):
-    blob = pack_archive(args.inputs)
+    blob = pack_archive(args.inputs, lz=args.lz)
     with open(args.output, "wb") as f:
         f.write(blob)
     if not args.quiet:
@@ -122,6 +122,10 @@ def build_parser():
     c.add_argument("input")
     c.add_argument("output")
     c.add_argument("-q", "--quiet", action="store_true")
+    c.add_argument(
+        "--lz", action="store_true",
+        help="LZ77 pre-pass before Huffman coding (better ratio on repetitive data)",
+    )
     c.set_defaults(func=cmd_compress)
 
     d = sub.add_parser("decompress", help="decompress a file")
@@ -132,12 +136,17 @@ def build_parser():
 
     s = sub.add_parser("stats", help="show compression stats without writing an output file")
     s.add_argument("input")
+    s.add_argument("--lz", action="store_true", help="show stats with the LZ77 pre-pass enabled")
     s.set_defaults(func=cmd_stats)
 
     a = sub.add_parser("archive", help="compress multiple files (or directories) into one archive")
     a.add_argument("output")
     a.add_argument("inputs", nargs="+", help="files and/or directories to archive")
     a.add_argument("-q", "--quiet", action="store_true")
+    a.add_argument(
+        "--lz", action="store_true",
+        help="LZ77 pre-pass before Huffman coding for each archived file",
+    )
     a.set_defaults(func=cmd_archive)
 
     e = sub.add_parser("extract", help="extract every file from an archive")

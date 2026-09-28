@@ -1,8 +1,17 @@
 """Container format for huffc's compressed files.
 
-Layout:
+Layout (HUFC1, plain Huffman coding of the input's raw bytes):
     magic (5 bytes)      b"HUFC1"
     num_symbols (2 bytes, big-endian)   0-256
+    per symbol (5 bytes each): byte value (1) + frequency (4, big-endian)
+    bitstream (remaining bytes, zero-padded to a whole byte)
+
+Layout (HUFC2, an LZ77 pre-pass followed by Huffman coding of the
+*resulting* byte stream -- everything after the magic is identical in
+shape to HUFC1, just describing the LZ77-encoded bytes instead of the
+original ones):
+    magic (5 bytes)      b"HUFC2"
+    num_symbols (2 bytes, big-endian)
     per symbol (5 bytes each): byte value (1) + frequency (4, big-endian)
     bitstream (remaining bytes, zero-padded to a whole byte)
 
@@ -15,18 +24,20 @@ import struct
 
 from .bitio import BitReader, BitWriter
 from .huffman import build_codes, build_frequencies, build_tree
+from .lz77 import lz77_compress, lz77_decompress
 
 MAGIC = b"HUFC1"
+MAGIC_LZ = b"HUFC2"
 
 
 class FormatError(Exception):
     pass
 
 
-def compress(data):
+def _huffman_encode(data, magic):
     freqs = build_frequencies(data)
 
-    header = bytearray(MAGIC)
+    header = bytearray(magic)
     header += struct.pack(">H", len(freqs))
     for sym, freq in sorted(freqs.items()):
         header += struct.pack(">BI", sym, freq)
@@ -44,10 +55,7 @@ def compress(data):
     return bytes(header) + writer.getvalue()
 
 
-def decompress(blob):
-    if blob[:5] != MAGIC:
-        raise FormatError("not a huffc file (bad magic)")
-
+def _huffman_decode(blob):
     pos = 5
     (num_symbols,) = struct.unpack_from(">H", blob, pos)
     pos += 2
@@ -78,3 +86,18 @@ def decompress(blob):
         node = node.right if bit else node.left
 
     return bytes(out)
+
+
+def compress(data, lz=False):
+    if lz:
+        return _huffman_encode(lz77_compress(data), MAGIC_LZ)
+    return _huffman_encode(data, MAGIC)
+
+
+def decompress(blob):
+    magic = blob[:5]
+    if magic == MAGIC:
+        return _huffman_decode(blob)
+    if magic == MAGIC_LZ:
+        return lz77_decompress(_huffman_decode(blob))
+    raise FormatError("not a huffc file (bad magic)")
