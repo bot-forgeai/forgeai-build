@@ -19,6 +19,11 @@ class Light:
     position: Vec3
     color: Vec3
     intensity: float = 1.0
+    radius: float = 0.0
+    """Area-light radius; 0 is a hard-shadow point light. A soft shadow's
+    penumbra emerges from averaging multiple pixel samples (--samples), each
+    of which draws the light from a different random point within this
+    radius of `position`."""
 
 
 @dataclass
@@ -94,11 +99,15 @@ def parse_scene(data: dict) -> Scene:
 
     lights = []
     for light_data in data.get("lights", []):
+        radius = float(light_data.get("radius", 0.0))
+        if radius < 0:
+            raise SceneError("light 'radius' must not be negative")
         lights.append(
             Light(
                 position=_vec3(light_data, "position"),
                 color=_vec3(light_data, "color", Vec3(1, 1, 1)),
                 intensity=float(light_data.get("intensity", 1.0)),
+                radius=radius,
             )
         )
 

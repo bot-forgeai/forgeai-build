@@ -32,6 +32,25 @@ def test_camera_defaults():
     assert scene.camera.fov_degrees == 60.0
 
 
+def test_light_radius_defaults_to_zero_hard_shadow():
+    scene = parse_scene(MINIMAL)
+    assert scene.lights[0].radius == 0.0
+
+
+def test_light_radius_parsed_from_scene():
+    data = json.loads(json.dumps(MINIMAL))
+    data["lights"][0]["radius"] = 2.5
+    scene = parse_scene(data)
+    assert scene.lights[0].radius == 2.5
+
+
+def test_negative_light_radius_raises():
+    data = json.loads(json.dumps(MINIMAL))
+    data["lights"][0]["radius"] = -1.0
+    with pytest.raises(SceneError):
+        parse_scene(data)
+
+
 def test_missing_camera_raises():
     with pytest.raises(SceneError):
         parse_scene({"shapes": []})
