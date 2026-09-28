@@ -1316,12 +1316,13 @@ and `components` CLI subcommands.
 ## raylite
 
 A small CPU ray tracer: renders a JSON scene description (a camera,
-spheres/planes, point/area lights) to a binary PPM image via
-ray-sphere/ray-plane intersection, Phong-style diffuse+specular
-shading, hard and soft shadows, and recursive reflection — a
-numerical 3D geometry/rendering pipeline, a genuinely different
-mechanic from every prior build-lane project (none of the others
-trace rays through a scene or produce a raster image as output).
+spheres/planes/triangle meshes, point/area lights) to a binary PPM
+image via ray-sphere/ray-plane/ray-triangle intersection, Phong-style
+diffuse+specular shading, hard and soft shadows, and recursive
+reflection — a numerical 3D geometry/rendering pipeline, a genuinely
+different mechanic from every prior build-lane project (none of the
+others trace rays through a scene or produce a raster image as
+output).
 
 ```
 pip install -e .
@@ -1330,11 +1331,30 @@ raylite render raylite/sample/scene.json out.ppm --width 400 --height 300 --samp
 
 `raylite/vec3.py` is a small immutable `Vec3` (a `NamedTuple`) with
 the usual vector operations (`dot`, `cross`, `normalize`, `reflect`,
-`clamp01`). `raylite/shapes.py` defines `Sphere` and `Plane`, each with
-a `Material` (base color, diffuse/specular weight, shininess, and an
-optional `reflectivity`); both implement `hit(ray, t_min, t_max)`
-returning the nearest valid intersection (a quadratic solve for
-spheres, a simple plane-ray dot-product solve for planes) or `None`.
+`clamp01`). `raylite/shapes.py` defines `Sphere`, `Plane`, and
+`Triangle`, each with a `Material` (base color, diffuse/specular
+weight, shininess, and an optional `reflectivity`); all three
+implement `hit(ray, t_min, t_max)` returning the nearest valid
+intersection (a quadratic solve for spheres, a simple plane-ray
+dot-product solve for planes, Möller–Trumbore for triangles) or
+`None`. Every shape's returned normal is flipped to face the
+incoming ray, so a triangle (or any shape) shades and shadows
+correctly whichever side it's viewed from — there's no backface
+culling.
+
+`raylite/mesh.py` is a minimal Wavefront `.obj` parser: `v` vertex
+lines and `f` face lines (triangles or larger convex polygons,
+fan-triangulated into one `Triangle` per extra vertex); `vt`/`vn`
+indices in a face line are accepted but ignored, since shading uses
+each triangle's own flat geometric normal rather than interpolated
+vertex normals. A scene's `"type": "mesh"` shape (`{"type": "mesh",
+"file": "model.obj", "material": {...}}`) loads an OBJ file — every
+triangle in it shares that one material — resolved relative to the
+scene JSON file's own directory (so a scene and its meshes can be
+moved together), or via `os.getcwd()` when scene data comes from
+`parse_scene` directly rather than a file path. A malformed OBJ line
+or a missing/out-of-range face index raises a `MeshError`, wrapped
+into the same `SceneError` a bad scene field would raise.
 
 `raylite/scene.py` parses a JSON scene into a `Scene` (camera, shape
 list, lights, background color, ambient light level) — a missing
@@ -1378,5 +1398,6 @@ PNG, anything else -> PPM), so `render scene.json out.png` just works
 without the flag. Bad scene files, non-positive dimensions, or
 non-positive sample counts all exit 1 with a clean `error: ...`
 message. `raylite/sample/scene.json` is a small demo scene (a ground
-plane, three spheres with varying reflectivity, two point lights)
-used in the README example above.
+plane, three spheres with varying reflectivity, two point lights, and
+a `raylite/sample/pyramid.obj` triangle-mesh pyramid) used in the
+README example above.
