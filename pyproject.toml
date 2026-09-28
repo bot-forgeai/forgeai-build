@@ -39,4 +39,4 @@ packages = ["eulerlib", "vitalsdash", "recall", "ttt", "shortlink", "quest", "ba
 eulerlib = ["resources/*.txt"]
 vitalsdash = ["sample/*.csv"]
 quest = ["games/*.json"]
-raylite = ["sample/*.json"]
+raylite = ["sample/*.json", "sample/*.obj"]

@@ -3,7 +3,7 @@ import json
 import pytest
 
 from raylite.scene import SceneError, load_scene, parse_scene
-from raylite.shapes import Plane, Sphere
+from raylite.shapes import Plane, Sphere, Triangle
 from raylite.vec3 import Vec3
 
 MINIMAL = {
@@ -85,3 +85,58 @@ def test_load_scene_bad_json_raises(tmp_path):
     path.write_text("{not valid json")
     with pytest.raises(SceneError):
         load_scene(str(path))
+
+
+OBJ_TRIANGLE = "v -1 -1 -5\nv 1 -1 -5\nv 0 1 -5\nf 1 2 3\n"
+
+
+def test_mesh_shape_loads_relative_to_scene_file(tmp_path):
+    (tmp_path / "tri.obj").write_text(OBJ_TRIANGLE)
+    data = {
+        "camera": {"origin": [0, 0, 0]},
+        "shapes": [{"type": "mesh", "file": "tri.obj", "material": {"color": [0, 1, 0]}}],
+    }
+    scene_path = tmp_path / "scene.json"
+    scene_path.write_text(json.dumps(data))
+    scene = load_scene(str(scene_path))
+    assert len(scene.shapes) == 1
+    assert isinstance(scene.shapes[0], Triangle)
+    assert scene.shapes[0].material.color == Vec3(0, 1, 0)
+
+
+def test_mesh_shape_parse_scene_without_base_dir_uses_cwd_relative_path():
+    data = {
+        "camera": {"origin": [0, 0, 0]},
+        "shapes": [{"type": "mesh", "file": "does/not/exist.obj"}],
+    }
+    with pytest.raises(SceneError):
+        parse_scene(data)
+
+
+def test_mesh_shape_missing_file_field_raises():
+    data = {"camera": {"origin": [0, 0, 0]}, "shapes": [{"type": "mesh"}]}
+    with pytest.raises(SceneError, match="missing a 'file'"):
+        parse_scene(data)
+
+
+def test_mesh_shape_bad_obj_raises_scene_error(tmp_path):
+    (tmp_path / "bad.obj").write_text("v not a number 0\nf 1 2 3\n")
+    data = {
+        "camera": {"origin": [0, 0, 0]},
+        "shapes": [{"type": "mesh", "file": "bad.obj"}],
+    }
+    scene_path = tmp_path / "scene.json"
+    scene_path.write_text(json.dumps(data))
+    with pytest.raises(SceneError):
+        load_scene(str(scene_path))
+
+
+def test_mesh_shape_missing_obj_file_raises_scene_error(tmp_path):
+    data = {
+        "camera": {"origin": [0, 0, 0]},
+        "shapes": [{"type": "mesh", "file": "missing.obj"}],
+    }
+    scene_path = tmp_path / "scene.json"
+    scene_path.write_text(json.dumps(data))
+    with pytest.raises(SceneError):
+        load_scene(str(scene_path))

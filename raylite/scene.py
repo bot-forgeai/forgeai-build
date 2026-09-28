@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from typing import Any, List, Optional
 
+from raylite.mesh import MeshError, load_obj
 from raylite.shapes import Material, Plane, Sphere
 from raylite.vec3 import Vec3
 
@@ -64,7 +66,7 @@ def _material(data: dict) -> Material:
     )
 
 
-def parse_scene(data: dict) -> Scene:
+def parse_scene(data: dict, base_dir: Optional[str] = None) -> Scene:
     if "camera" not in data:
         raise SceneError("scene is missing a 'camera'")
     cam_data = data["camera"]
@@ -94,6 +96,19 @@ def parse_scene(data: dict) -> Scene:
                     material=_material(shape_data.get("material", {})),
                 )
             )
+        elif kind == "mesh":
+            if "file" not in shape_data:
+                raise SceneError("mesh shape is missing a 'file'")
+            mesh_path = shape_data["file"]
+            if base_dir is not None and not os.path.isabs(mesh_path):
+                mesh_path = os.path.join(base_dir, mesh_path)
+            material = _material(shape_data.get("material", {}))
+            try:
+                shapes.extend(load_obj(mesh_path, material))
+            except MeshError as exc:
+                raise SceneError(f"mesh {shape_data['file']!r}: {exc}") from exc
+            except OSError as exc:
+                raise SceneError(f"mesh {shape_data['file']!r}: {exc}") from exc
         else:
             raise SceneError(f"unknown shape type: {kind!r}")
 
@@ -123,4 +138,4 @@ def load_scene(path: str) -> Scene:
             data = json.load(f)
         except json.JSONDecodeError as exc:
             raise SceneError(f"invalid JSON: {exc}") from exc
-    return parse_scene(data)
+    return parse_scene(data, base_dir=os.path.dirname(os.path.abspath(path)))
