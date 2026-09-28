@@ -73,6 +73,21 @@ def test_render_rejects_non_positive_samples(tmp_path, capsys):
     assert "error:" in capsys.readouterr().err
 
 
+def test_render_rejects_non_positive_workers(tmp_path, capsys):
+    scene_path = write_scene(tmp_path)
+    rc = main(["render", scene_path, str(tmp_path / "out.ppm"), "--workers", "0"])
+    assert rc == 1
+    assert "error:" in capsys.readouterr().err
+
+
+def test_render_with_multiple_workers(tmp_path, capsys):
+    scene_path = write_scene(tmp_path)
+    out_path = tmp_path / "out.ppm"
+    rc = main(["render", scene_path, str(out_path), "--width", "8", "--height", "6", "--workers", "2", "--seed", "1"])
+    assert rc == 0
+    assert out_path.read_bytes().startswith(b"P6\n8 6\n255\n")
+
+
 def test_version_flag():
     with pytest.raises(SystemExit) as exc_info:
         main(["--version"])
