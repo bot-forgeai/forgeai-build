@@ -125,6 +125,27 @@ def test_shade_uses_provided_rng_deterministically():
     assert color_a == color_b
 
 
+def test_render_with_workers_produces_correct_grid_dimensions():
+    scene = make_scene()
+    pixels = render(scene, width=8, height=6, samples_per_pixel=1, workers=2)
+    assert len(pixels) == 6
+    assert all(len(row) == 8 for row in pixels)
+
+
+def test_render_with_workers_matches_single_worker_for_same_seed():
+    scene = make_scene()
+    parallel = render(scene, width=6, height=6, samples_per_pixel=3, workers=3, seed=123)
+    parallel_again = render(scene, width=6, height=6, samples_per_pixel=3, workers=2, seed=123)
+    assert parallel == parallel_again
+
+
+def test_render_with_workers_center_pixel_hits_sphere_not_background():
+    scene = make_scene()
+    pixels = render(scene, width=5, height=5, samples_per_pixel=1, workers=2)
+    center = pixels[2][2]
+    assert center != scene.background
+
+
 def test_area_light_softens_shadow_edge_with_multiple_samples():
     # A small blocker only partially covers a wide area light from a point
     # just past its edge; with a hard point light that point is either fully

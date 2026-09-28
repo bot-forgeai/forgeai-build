@@ -26,13 +26,23 @@ def cmd_render(args: argparse.Namespace) -> int:
     if args.samples <= 0:
         print("error: samples must be positive", file=sys.stderr)
         return 1
+    if args.workers <= 0:
+        print("error: workers must be positive", file=sys.stderr)
+        return 1
 
     fmt = args.format
     if fmt is None:
         fmt = "png" if args.output.lower().endswith(".png") else "ppm"
 
     start = time.time()
-    pixels = render(scene, args.width, args.height, samples_per_pixel=args.samples)
+    pixels = render(
+        scene,
+        args.width,
+        args.height,
+        samples_per_pixel=args.samples,
+        workers=args.workers,
+        seed=args.seed,
+    )
     elapsed = time.time() - start
 
     if fmt == "png":
@@ -61,6 +71,19 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["ppm", "png"],
         default=None,
         help="output image format; defaults to inferring from the output filename's extension (.png -> png, else ppm)",
+    )
+    render_parser.add_argument(
+        "--workers",
+        type=int,
+        default=1,
+        help="number of worker processes to render rows in parallel (default 1, sequential)",
+    )
+    render_parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="RNG seed for reproducible renders (only used when --workers > 1; a single-worker render "
+        "already uses a fresh internal RNG unless a caller supplies one)",
     )
     render_parser.set_defaults(func=cmd_render)
 

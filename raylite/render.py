@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import multiprocessing
 import random
 from typing import List, Optional
 
@@ -86,22 +87,57 @@ def trace_ray(scene: Scene, ray: Ray, depth: int = 0, rng: Optional[random.Rando
     return shade(scene, hit, ray.direction, depth, rng=rng)
 
 
-def render(scene: Scene, width: int, height: int, samples_per_pixel: int = 1, rng: Optional[random.Random] = None) -> List[List[Vec3]]:
-    """Renders the scene to a height x width grid of Vec3 colors (each channel in [0, 1])."""
-    rng = rng or random.Random()
+def _render_row(scene: Scene, cam: CameraRays, width: int, y: int, samples_per_pixel: int, rng: random.Random) -> List[Vec3]:
+    row = []
+    for x in range(width):
+        accum = Vec3(0, 0, 0)
+        for _ in range(samples_per_pixel):
+            if samples_per_pixel == 1:
+                jitter_x, jitter_y = 0.5, 0.5
+            else:
+                jitter_x, jitter_y = rng.random(), rng.random()
+            ray = cam.ray_for_pixel(x + jitter_x, y + jitter_y)
+            accum = accum + trace_ray(scene, ray, rng=rng)
+        row.append((accum / samples_per_pixel).clamp01())
+    return row
+
+
+def _render_row_task(args) -> "tuple[int, List[Vec3]]":
+    scene, cam, width, y, samples_per_pixel, row_seed = args
+    return y, _render_row(scene, cam, width, y, samples_per_pixel, random.Random(row_seed))
+
+
+def render(
+    scene: Scene,
+    width: int,
+    height: int,
+    samples_per_pixel: int = 1,
+    rng: Optional[random.Random] = None,
+    workers: int = 1,
+    seed: Optional[int] = None,
+) -> List[List[Vec3]]:
+    """Renders the scene to a height x width grid of Vec3 colors (each channel in [0, 1]).
+
+    With workers=1 (the default) this renders sequentially on a single shared
+    `rng`, exactly as before. With workers>1, rows are rendered in parallel
+    worker processes; since a shared Random can't be split across processes,
+    each row instead gets its own Random seeded deterministically from `seed`
+    (or a freshly generated one if omitted) combined with its row index, so
+    the image is still fully reproducible for a given seed regardless of
+    worker count.
+    """
     cam = CameraRays(scene.camera, width, height)
-    pixels: List[List[Vec3]] = []
-    for y in range(height):
-        row = []
-        for x in range(width):
-            accum = Vec3(0, 0, 0)
-            for _ in range(samples_per_pixel):
-                if samples_per_pixel == 1:
-                    jitter_x, jitter_y = 0.5, 0.5
-                else:
-                    jitter_x, jitter_y = rng.random(), rng.random()
-                ray = cam.ray_for_pixel(x + jitter_x, y + jitter_y)
-                accum = accum + trace_ray(scene, ray, rng=rng)
-            row.append((accum / samples_per_pixel).clamp01())
-        pixels.append(row)
-    return pixels
+
+    if workers <= 1:
+        rng = rng or random.Random()
+        pixels: List[List[Vec3]] = []
+        for y in range(height):
+            pixels.append(_render_row(scene, cam, width, y, samples_per_pixel, rng))
+        return pixels
+
+    base_seed = seed if seed is not None else random.SystemRandom().randrange(2**31)
+    tasks = [(scene, cam, width, y, samples_per_pixel, base_seed + y) for y in range(height)]
+    with multiprocessing.Pool(workers) as pool:
+        results = pool.map(_render_row_task, tasks)
+    results.sort(key=lambda item: item[0])
+    return [row for _, row in results]
