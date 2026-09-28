@@ -7,6 +7,7 @@ import sys
 import time
 
 from raylite import __version__
+from raylite.png import write_png
 from raylite.ppm import write_ppm
 from raylite.render import render
 from raylite.scene import SceneError, load_scene
@@ -26,12 +27,19 @@ def cmd_render(args: argparse.Namespace) -> int:
         print("error: samples must be positive", file=sys.stderr)
         return 1
 
+    fmt = args.format
+    if fmt is None:
+        fmt = "png" if args.output.lower().endswith(".png") else "ppm"
+
     start = time.time()
     pixels = render(scene, args.width, args.height, samples_per_pixel=args.samples)
     elapsed = time.time() - start
 
-    write_ppm(args.output, pixels)
-    print(f"rendered {args.width}x{args.height} ({args.samples} spp) to {args.output} in {elapsed:.2f}s")
+    if fmt == "png":
+        write_png(args.output, pixels)
+    else:
+        write_ppm(args.output, pixels)
+    print(f"rendered {args.width}x{args.height} ({args.samples} spp) to {args.output} ({fmt}) in {elapsed:.2f}s")
     return 0
 
 
@@ -47,6 +55,12 @@ def build_parser() -> argparse.ArgumentParser:
     render_parser.add_argument("--height", type=int, default=300)
     render_parser.add_argument(
         "--samples", type=int, default=1, help="samples per pixel (anti-aliasing; higher is slower/smoother)"
+    )
+    render_parser.add_argument(
+        "--format",
+        choices=["ppm", "png"],
+        default=None,
+        help="output image format; defaults to inferring from the output filename's extension (.png -> png, else ppm)",
     )
     render_parser.set_defaults(func=cmd_render)
 

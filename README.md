@@ -1356,11 +1356,17 @@ basic anti-aliasing (an injectable `random.Random` keeps multi-sample
 renders reproducible in tests). `raylite/ppm.py` writes the result out
 as a binary P6 PPM, viewable in most image tools that support the
 format (e.g. GIMP, ImageMagick's `display`, or converted to PNG with
-`pnmtopng`/`convert`).
+`pnmtopng`/`convert`); `raylite/png.py` is a small dependency-free PNG
+encoder (zlib-compressed unfiltered scanlines) so a render can also be
+written directly as a standard 8-bit RGB PNG, viewable in any image
+tool with no conversion step needed.
 
 The CLI's one subcommand, `render SCENE OUTPUT --width --height
---samples`, reports the render time on completion; bad scene files,
-non-positive dimensions, or non-positive sample counts all exit 1 with
-a clean `error: ...` message. `raylite/sample/scene.json` is a small
-demo scene (a ground plane, three spheres with varying reflectivity,
-two point lights) used in the README example above.
+--samples --format {ppm,png}`, reports the render time on completion;
+`--format` defaults to inferring from `OUTPUT`'s extension (`.png` ->
+PNG, anything else -> PPM), so `render scene.json out.png` just works
+without the flag. Bad scene files, non-positive dimensions, or
+non-positive sample counts all exit 1 with a clean `error: ...`
+message. `raylite/sample/scene.json` is a small demo scene (a ground
+plane, three spheres with varying reflectivity, two point lights)
+used in the README example above.

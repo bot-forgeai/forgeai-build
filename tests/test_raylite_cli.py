@@ -28,6 +28,23 @@ def test_render_writes_ppm_file(tmp_path, capsys):
     assert "rendered 8x6" in captured.out
 
 
+def test_render_infers_png_format_from_extension(tmp_path, capsys):
+    scene_path = write_scene(tmp_path)
+    out_path = tmp_path / "out.png"
+    rc = main(["render", scene_path, str(out_path), "--width", "8", "--height", "6"])
+    assert rc == 0
+    assert out_path.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+    assert "(png)" in capsys.readouterr().out
+
+
+def test_render_explicit_format_overrides_extension(tmp_path, capsys):
+    scene_path = write_scene(tmp_path)
+    out_path = tmp_path / "out.ppm"
+    rc = main(["render", scene_path, str(out_path), "--width", "8", "--height", "6", "--format", "png"])
+    assert rc == 0
+    assert out_path.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+
+
 def test_render_missing_scene_file_errors_cleanly(tmp_path, capsys):
     rc = main(["render", str(tmp_path / "nope.json"), str(tmp_path / "out.ppm")])
     assert rc == 1
