@@ -1253,6 +1253,19 @@ helpers used to pack/unpack the bitstream.
 exit 1) on a file that isn't a valid `huffc` blob, rather than
 crashing or silently producing garbage.
 
+Plain byte-frequency Huffman coding can't exploit repeated
+*substrings* — only individual byte frequencies — so a `--lz` flag on
+`compress`/`stats`/`archive` runs a small LZ77/LZSS pre-pass
+(`huffc/lz77.py`, 4KB sliding window) that replaces repeated runs with
+short back-references before Huffman coding the result. This produces
+a `HUFC2`-tagged file instead of `HUFC1`; `decompress` auto-detects
+which one it's looking at from the magic header, so no flag is needed
+to decompress either. `--lz` helps most on data with long repeated
+runs or substrings (e.g. structured text, repeated whitespace) and can
+occasionally cost a few bytes of overhead on data with no repeats at
+all — `stats --lz` shows the ratio you'd actually get before
+committing to it.
+
 ## graphlite
 
 A tiny property graph store: nodes (with labels and properties) and

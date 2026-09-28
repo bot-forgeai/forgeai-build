@@ -7,8 +7,9 @@ import pytest
 
 from huffc.archive import ArchiveError, pack_archive, unpack_archive
 from huffc.bitio import BitReader, BitWriter
-from huffc.format import FormatError, compress, decompress
+from huffc.format import MAGIC, MAGIC_LZ, FormatError, compress, decompress
 from huffc.huffman import build_codes, build_frequencies, build_tree
+from huffc.lz77 import lz77_compress, lz77_decompress
 
 
 def test_bitio_round_trip():
@@ -102,6 +103,54 @@ def test_decompress_rejects_bad_magic():
         decompress(b"NOTHUFF...")
 
 
+@pytest.mark.parametrize(
+    "data",
+    [
+        b"",
+        b"a",
+        b"aaaaaaaaaaaa",
+        bytes([0xFF]),
+        bytes([0xFF, 0xFF, 0xFF]),
+        b"x" * 500 + bytes([0xFF]) + b"y" * 500,
+        b"the quick brown fox the quick brown fox the quick brown fox",
+        bytes(range(256)) * 3,
+    ],
+)
+def test_lz77_round_trip(data):
+    assert lz77_decompress(lz77_compress(data)) == data
+
+
+def test_lz77_shrinks_repetitive_data():
+    data = b"abcabcabcabcabcabcabcabcabcabc"
+    assert len(lz77_compress(data)) < len(data)
+
+
+def test_compress_lz_round_trip():
+    data = b"hello hello hello hello world world world world\n" * 20
+    blob = compress(data, lz=True)
+    assert blob[:5] == MAGIC_LZ
+    assert decompress(blob) == data
+
+
+def test_compress_lz_beats_plain_on_repetitive_data():
+    data = (b"the quick brown fox jumps over the lazy dog. " * 100)
+    plain = compress(data)
+    lz = compress(data, lz=True)
+    assert plain[:5] == MAGIC
+    assert lz[:5] == MAGIC_LZ
+    assert len(lz) < len(plain)
+
+
+def test_compress_default_has_no_lz():
+    assert compress(b"abcabcabc")[:5] == MAGIC
+
+
+def test_compress_random_binary_round_trip_with_lz():
+    rng = random.Random(7)
+    data = bytes(rng.randrange(256) for _ in range(2000))
+    assert decompress(compress(data, lz=True)) == data
+
+
 def _run_cli(*args, cwd):
     return subprocess.run(
         [sys.executable, "-m", "huffc", *args],
@@ -125,6 +174,32 @@ def test_cli_compress_decompress_round_trip(tmp_path):
     r2 = _run_cli("decompress", str(comp), str(out), cwd=repo_root)
     assert r2.returncode == 0
     assert out.read_bytes() == src.read_bytes()
+
+
+def test_cli_compress_lz_decompress_round_trip(tmp_path):
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    src = tmp_path / "input.txt"
+    src.write_text("hello hello hello world\n" * 20)
+    comp = tmp_path / "input.huf"
+    out = tmp_path / "output.txt"
+
+    r1 = _run_cli("compress", "--lz", str(src), str(comp), cwd=repo_root)
+    assert r1.returncode == 0
+    assert comp.read_bytes()[:5] == b"HUFC2"
+
+    r2 = _run_cli("decompress", str(comp), str(out), cwd=repo_root)
+    assert r2.returncode == 0
+    assert out.read_bytes() == src.read_bytes()
+
+
+def test_cli_stats_lz(tmp_path):
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    src = tmp_path / "input.txt"
+    src.write_text("ab" * 500)
+
+    r = _run_cli("stats", "--lz", str(src), cwd=repo_root)
+    assert r.returncode == 0
+    assert "ratio:" in r.stdout
 
 
 def test_cli_stats(tmp_path):
@@ -198,6 +273,16 @@ def test_pack_unpack_archive_round_trip(tmp_path):
     assert [name for name, _ in entries] == ["a.txt", "b.txt"]
     assert entries[0][1] == a.read_bytes()
     assert entries[1][1] == b.read_bytes()
+
+
+def test_pack_archive_with_lz_round_trip(tmp_path):
+    a = tmp_path / "a.txt"
+    a.write_bytes(b"hello hello hello hello world world world\n" * 10)
+
+    blob = pack_archive([str(a)], lz=True)
+    entries = unpack_archive(blob)
+
+    assert entries[0][1] == a.read_bytes()
 
 
 def test_pack_archive_empty_file_list():

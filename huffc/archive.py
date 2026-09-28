@@ -29,7 +29,7 @@ class ArchiveError(Exception):
     pass
 
 
-def pack_archive(paths):
+def pack_archive(paths, lz=False):
     """Compress each file in `paths` and pack them into one archive blob.
 
     A plain file's entry name is just its basename (directory components
@@ -38,6 +38,10 @@ def pack_archive(paths):
     preserving that subtree's internal structure -- this is what lets a
     whole directory be archived without every file's basename needing to
     be globally unique, the collision case a flat file list can't avoid.
+
+    `lz` is passed straight through to `format.compress` for each file,
+    so an archive's per-file blobs carry their own HUFC1/HUFC2 magic and
+    decompress correctly regardless of what `lz` was at pack time.
     """
     entries = _collect_entries(paths)
     out = bytearray(MAGIC)
@@ -45,7 +49,7 @@ def pack_archive(paths):
     for path, name in entries:
         with open(path, "rb") as f:
             data = f.read()
-        blob = compress(data)
+        blob = compress(data, lz=lz)
         name_bytes = name.encode("utf-8")
         out += struct.pack(">H", len(name_bytes))
         out += name_bytes
