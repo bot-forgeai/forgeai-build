@@ -1316,12 +1316,12 @@ and `components` CLI subcommands.
 ## raylite
 
 A small CPU ray tracer: renders a JSON scene description (a camera,
-spheres/planes, point lights) to a binary PPM image via ray-sphere/
-ray-plane intersection, Phong-style diffuse+specular shading, hard
-shadows, and recursive reflection — a numerical 3D geometry/rendering
-pipeline, a genuinely different mechanic from every prior build-lane
-project (none of the others trace rays through a scene or produce a
-raster image as output).
+spheres/planes, point/area lights) to a binary PPM image via
+ray-sphere/ray-plane intersection, Phong-style diffuse+specular
+shading, hard and soft shadows, and recursive reflection — a
+numerical 3D geometry/rendering pipeline, a genuinely different
+mechanic from every prior build-lane project (none of the others
+trace rays through a scene or produce a raster image as output).
 
 ```
 pip install -e .
@@ -1337,23 +1337,33 @@ returning the nearest valid intersection (a quadratic solve for
 spheres, a simple plane-ray dot-product solve for planes) or `None`.
 
 `raylite/scene.py` parses a JSON scene into a `Scene` (camera, shape
-list, point lights, background color, ambient light level) — a
-missing required field, an unknown shape type, or malformed JSON all
-raise a clean `SceneError`/`OSError` rather than crashing deep inside
-the renderer. `raylite/camera.py` builds an orthonormal camera basis
+list, lights, background color, ambient light level) — a missing
+required field, an unknown shape type, a negative light `radius`, or
+malformed JSON all raise a clean `SceneError`/`OSError` rather than
+crashing deep inside the renderer. A light's `radius` (default `0`,
+a point light casting hard shadows) sets how large an area light is;
+any positive value turns it into a soft-shadow area light, e.g.
+`{"position": [0, 5, 0], "radius": 1.5}`. `raylite/camera.py` builds
+an orthonormal camera basis
 (forward/right/up) from `origin`/`look_at`/`up`/`fov_degrees` and maps
 pixel coordinates to camera rays.
 
 `raylite/render.py` is the tracer itself: `closest_hit` finds the
 nearest shape a ray hits; `shade` computes ambient + per-light
 diffuse/specular contribution, skipping a light entirely when a
-shadow ray from the hit point toward it hits anything first (hard
-shadows, no soft penumbra); a material's `reflectivity` blends in a
-recursively traced reflection ray, capped at a small max depth to
-bound recursion. `render(scene, width, height, samples_per_pixel)`
-renders a full pixel grid, jittering multiple samples per pixel for
-basic anti-aliasing (an injectable `random.Random` keeps multi-sample
-renders reproducible in tests). `raylite/ppm.py` writes the result out
+shadow ray from the hit point toward it hits anything first. A light
+with a `radius` (see below) is an area light: each `shade` call draws
+one random point within that radius of the light's `position`
+(`_sample_light_position`, uniform within a sphere) to cast the
+shadow ray towards, instead of always the exact position — a soft
+penumbra emerges from averaging that randomness across a render's
+`--samples` per-pixel samples, the same accumulation loop that already
+does anti-aliasing (an injectable `random.Random` keeps multi-sample
+renders reproducible in tests, area lights included). A material's
+`reflectivity` blends in a recursively traced reflection ray, capped
+at a small max depth to bound recursion. `render(scene, width, height,
+samples_per_pixel)` renders a full pixel grid, jittering multiple
+samples per pixel for basic anti-aliasing. `raylite/ppm.py` writes the result out
 as a binary P6 PPM, viewable in most image tools that support the
 format (e.g. GIMP, ImageMagick's `display`, or converted to PNG with
 `pnmtopng`/`convert`); `raylite/png.py` is a small dependency-free PNG

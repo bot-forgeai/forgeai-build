@@ -1,6 +1,6 @@
 import random
 
-from raylite.render import closest_hit, render, shade, trace_ray
+from raylite.render import _sample_light_position, closest_hit, render, shade, trace_ray
 from raylite.ray import Ray
 from raylite.scene import Camera, Light, Scene
 from raylite.shapes import Material, Sphere
@@ -91,3 +91,60 @@ def test_render_center_pixel_hits_sphere_not_background():
     pixels = render(scene, width=5, height=5, samples_per_pixel=1)
     center = pixels[2][2]
     assert center != scene.background
+
+
+def test_sample_light_position_returns_exact_position_for_hard_light():
+    light = Light(position=Vec3(5, 5, 0), color=Vec3(1, 1, 1), radius=0.0)
+    rng = random.Random(1)
+    for _ in range(20):
+        assert _sample_light_position(light, rng) == light.position
+
+
+def test_sample_light_position_stays_within_radius_for_area_light():
+    light = Light(position=Vec3(5, 5, 0), color=Vec3(1, 1, 1), radius=2.0)
+    rng = random.Random(7)
+    for _ in range(50):
+        sampled = _sample_light_position(light, rng)
+        assert (sampled - light.position).length() <= 2.0 + 1e-9
+
+
+def test_sample_light_position_varies_across_calls_for_area_light():
+    light = Light(position=Vec3(5, 5, 0), color=Vec3(1, 1, 1), radius=2.0)
+    rng = random.Random(3)
+    samples = {_sample_light_position(light, rng) for _ in range(20)}
+    assert len(samples) > 1
+
+
+def test_shade_uses_provided_rng_deterministically():
+    scene = make_scene()
+    scene.lights[0].radius = 3.0
+    ray = Ray(origin=Vec3(0, 0, 0), direction=Vec3(0, 0, -1))
+    hit = closest_hit(scene, ray)
+    color_a = shade(scene, hit, ray.direction, rng=random.Random(99))
+    color_b = shade(scene, hit, ray.direction, rng=random.Random(99))
+    assert color_a == color_b
+
+
+def test_area_light_softens_shadow_edge_with_multiple_samples():
+    # A small blocker only partially covers a wide area light from a point
+    # just past its edge; with a hard point light that point is either fully
+    # lit or fully shadowed, but an area light rendered with many samples
+    # should land at a partial (soft) brightness in between.
+    material = Material(color=Vec3(1, 1, 1), diffuse=0.8, specular=0.0)
+    ground = Sphere(center=Vec3(0, -1001, 0), radius=1000, material=material)
+    blocker = Sphere(center=Vec3(0, 1, -3), radius=0.5, material=material)
+    camera = Camera(origin=Vec3(0, 0, 0), look_at=Vec3(0.15, -1, -3), up=Vec3(0, 1, 0))
+    hard_light = Light(position=Vec3(0, 5, -3), color=Vec3(1, 1, 1), intensity=1.0, radius=0.0)
+    soft_light = Light(position=Vec3(0, 5, -3), color=Vec3(1, 1, 1), intensity=1.0, radius=1.5)
+
+    hard_scene = Scene(camera=camera, shapes=[ground, blocker], lights=[hard_light], background=Vec3(0, 0, 0), ambient=0.1)
+    soft_scene = Scene(camera=camera, shapes=[ground, blocker], lights=[soft_light], background=Vec3(0, 0, 0), ambient=0.1)
+
+    hard_pixels = render(hard_scene, width=1, height=1, samples_per_pixel=1)
+    soft_pixels = render(soft_scene, width=1, height=1, samples_per_pixel=64, rng=random.Random(5))
+
+    hard_brightness = hard_pixels[0][0].x
+    soft_brightness = soft_pixels[0][0].x
+    # The point is fully shadowed under the hard light (ambient only) but
+    # partially lit on average under the soft area light.
+    assert soft_brightness > hard_brightness + 0.05

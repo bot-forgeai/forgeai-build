@@ -7,7 +7,7 @@ from typing import List, Optional
 
 from raylite.camera import CameraRays
 from raylite.ray import Ray
-from raylite.scene import Scene
+from raylite.scene import Light, Scene
 from raylite.shapes import Hit
 from raylite.vec3 import Vec3
 
@@ -36,14 +36,30 @@ def _in_shadow(scene: Scene, point: Vec3, light_position: Vec3) -> bool:
     return closest_hit(scene, shadow_ray, t_min=1e-4, t_max=distance) is not None
 
 
-def shade(scene: Scene, hit: Hit, view_direction: Vec3, depth: int = 0) -> Vec3:
+def _sample_light_position(light: Light, rng: random.Random) -> Vec3:
+    """A point to shade towards for this light: `light.position` itself for a
+    hard-shadow point light (radius 0), otherwise a random point uniformly
+    within a sphere of `light.radius` around it. Called once per shade() per
+    light, so soft penumbras emerge by rendering with multiple samples per
+    pixel (--samples), each drawing a different random point on the light."""
+    if light.radius <= 0:
+        return light.position
+    while True:
+        offset = Vec3(rng.uniform(-1, 1), rng.uniform(-1, 1), rng.uniform(-1, 1))
+        if offset.length_squared() <= 1.0:
+            return light.position + offset * light.radius
+
+
+def shade(scene: Scene, hit: Hit, view_direction: Vec3, depth: int = 0, rng: Optional[random.Random] = None) -> Vec3:
+    rng = rng or random.Random()
     material = hit.material
     color = material.color * scene.ambient
 
     for light in scene.lights:
-        if _in_shadow(scene, hit.point, light.position):
+        light_position = _sample_light_position(light, rng)
+        if _in_shadow(scene, hit.point, light_position):
             continue
-        to_light = (light.position - hit.point).normalize()
+        to_light = (light_position - hit.point).normalize()
         diffuse_strength = max(0.0, hit.normal.dot(to_light))
         color = color + material.color.multiply(light.color) * (
             material.diffuse * diffuse_strength * light.intensity
@@ -57,17 +73,17 @@ def shade(scene: Scene, hit: Hit, view_direction: Vec3, depth: int = 0) -> Vec3:
     if material.reflectivity > 0 and depth < MAX_REFLECT_DEPTH:
         reflect_dir = view_direction.reflect(hit.normal)
         reflect_ray = Ray(origin=hit.point + hit.normal * SHADOW_BIAS, direction=reflect_dir)
-        reflected_color = trace_ray(scene, reflect_ray, depth + 1)
+        reflected_color = trace_ray(scene, reflect_ray, depth + 1, rng=rng)
         color = color * (1 - material.reflectivity) + reflected_color * material.reflectivity
 
     return color
 
 
-def trace_ray(scene: Scene, ray: Ray, depth: int = 0) -> Vec3:
+def trace_ray(scene: Scene, ray: Ray, depth: int = 0, rng: Optional[random.Random] = None) -> Vec3:
     hit = closest_hit(scene, ray)
     if hit is None:
         return scene.background
-    return shade(scene, hit, ray.direction, depth)
+    return shade(scene, hit, ray.direction, depth, rng=rng)
 
 
 def render(scene: Scene, width: int, height: int, samples_per_pixel: int = 1, rng: Optional[random.Random] = None) -> List[List[Vec3]]:
@@ -85,7 +101,7 @@ def render(scene: Scene, width: int, height: int, samples_per_pixel: int = 1, rn
                 else:
                     jitter_x, jitter_y = rng.random(), rng.random()
                 ray = cam.ray_for_pixel(x + jitter_x, y + jitter_y)
-                accum = accum + trace_ray(scene, ray)
+                accum = accum + trace_ray(scene, ray, rng=rng)
             row.append((accum / samples_per_pixel).clamp01())
         pixels.append(row)
     return pixels
