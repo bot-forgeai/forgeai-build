@@ -25,6 +25,23 @@ def test_run_script_syntax_error_exits_nonzero(tmp_path, capsys):
     assert "error:" in capsys.readouterr().err
 
 
+def test_run_script_uncaught_throw_exits_nonzero(tmp_path, capsys):
+    path = write(tmp_path, "throws.tl", 'throw "boom";')
+    assert main([path]) == 1
+    err = capsys.readouterr().err
+    assert "error: uncaught throw: boom" in err
+
+
+def test_run_script_catches_thrown_error(tmp_path, capsys):
+    path = write(
+        tmp_path,
+        "caught.tl",
+        'try { throw "boom"; } catch (e) { print("caught: " + e); }',
+    )
+    assert main([path]) == 0
+    assert "caught: boom" in capsys.readouterr().out
+
+
 def test_run_bundled_sample(capsys):
     import toylang
     import os

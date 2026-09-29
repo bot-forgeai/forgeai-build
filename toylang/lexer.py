@@ -30,6 +30,7 @@ class Token:
 KEYWORDS = {
     "let", "if", "else", "while", "func", "return",
     "true", "false", "nil", "and", "or", "not",
+    "try", "catch", "finally", "throw",
 }
 
 # Longest-match-first so e.g. "==" isn't lexed as two "=" tokens.

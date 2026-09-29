@@ -264,3 +264,103 @@ def test_range_used_in_loop(capsys):
         capsys,
     )
     assert out == "10\n"
+
+
+def test_try_catch_catches_thrown_value(capsys):
+    out = run_capture(
+        'try { throw "boom"; } catch (e) { print(e); }',
+        capsys,
+    )
+    assert out == "boom\n"
+
+
+def test_try_catch_catches_runtime_error(capsys):
+    out = run_capture(
+        'try { sqrt(-1); } catch (e) { print("caught: " + e); }',
+        capsys,
+    )
+    assert out.startswith("caught: sqrt:")
+
+
+def test_try_no_exception_skips_catch(capsys):
+    out = run_capture(
+        'try { print("ok"); } catch (e) { print("nope"); }',
+        capsys,
+    )
+    assert out == "ok\n"
+
+
+def test_try_finally_always_runs_on_success(capsys):
+    out = run_capture(
+        'try { print("body"); } finally { print("cleanup"); }',
+        capsys,
+    )
+    assert out == "body\ncleanup\n"
+
+
+def test_try_catch_finally_all_run_on_error(capsys):
+    out = run_capture(
+        'try { throw 1; } catch (e) { print("caught"); } finally { print("cleanup"); }',
+        capsys,
+    )
+    assert out == "caught\ncleanup\n"
+
+
+def test_finally_runs_even_when_uncaught(capsys):
+    from toylang.interpreter import _ThrowSignal
+
+    with pytest.raises(_ThrowSignal):
+        run('try { throw "oops"; } finally { print("cleanup"); }')
+    assert capsys.readouterr().out == "cleanup\n"
+
+
+def test_uncaught_throw_propagates():
+    from toylang.interpreter import _ThrowSignal
+
+    with pytest.raises(_ThrowSignal):
+        run('throw "unhandled";')
+
+
+def test_thrown_value_can_be_any_type(capsys):
+    out = run_capture(
+        'try { throw 42; } catch (e) { print(e + 1); }',
+        capsys,
+    )
+    assert out == "43\n"
+
+
+def test_try_in_function_with_return(capsys):
+    out = run_capture(
+        '''
+        func safe_div(a, b) {
+            try {
+                if (b == 0) { throw "div by zero"; }
+                return a / b;
+            } catch (e) {
+                return -1;
+            }
+        }
+        print(safe_div(10, 2));
+        print(safe_div(10, 0));
+        ''',
+        capsys,
+    )
+    assert out == "5\n-1\n"
+
+
+def test_nested_try_catch(capsys):
+    out = run_capture(
+        '''
+        try {
+            try {
+                throw "inner";
+            } catch (e) {
+                throw "rethrown: " + e;
+            }
+        } catch (e) {
+            print(e);
+        }
+        ''',
+        capsys,
+    )
+    assert out == "rethrown: inner\n"

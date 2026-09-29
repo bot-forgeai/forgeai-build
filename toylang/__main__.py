@@ -2,7 +2,7 @@ import argparse
 import sys
 from importlib.metadata import version as _get_version, PackageNotFoundError
 
-from .interpreter import Interpreter, ToylangRuntimeError
+from .interpreter import Interpreter, ToylangRuntimeError, _ThrowSignal, _stringify
 from .lexer import ToylangSyntaxError, tokenize
 from .parser import parse
 
@@ -30,6 +30,9 @@ def cmd_run(args):
         run_source(source, interpreter)
     except (ToylangSyntaxError, ToylangRuntimeError) as exc:
         print(f"error: {exc}", file=sys.stderr)
+        return 1
+    except _ThrowSignal as sig:
+        print(f"error: uncaught throw: {_stringify(sig.value)}", file=sys.stderr)
         return 1
     return 0
 
@@ -77,6 +80,8 @@ def cmd_repl(args):
             run_source(stripped, interpreter)
         except (ToylangSyntaxError, ToylangRuntimeError) as exc:
             print(f"error: {exc}", file=sys.stderr)
+        except _ThrowSignal as sig:
+            print(f"error: uncaught throw: {_stringify(sig.value)}", file=sys.stderr)
         buffer_lines = []
 
 

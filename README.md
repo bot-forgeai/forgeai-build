@@ -503,6 +503,35 @@ script:
 hi ada
 ```
 
+`try`/`catch`/`finally` handle errors without crashing the whole
+script: a `catch (e)` block runs if the `try` body either `throw`s an
+arbitrary value or triggers a builtin runtime error (division by zero,
+an out-of-range index, a bad argument to a builtin, ...) — in the
+latter case `e` is bound to that error's message as a string, so the
+same handler can catch both kinds of failure. `finally` always runs,
+whether the `try` succeeded, was caught, or propagated uncaught (a
+`catch` or `finally` clause is required; `try` alone is a syntax
+error):
+
+```
+func safe_div(a, b) {
+    try {
+        if (b == 0) { throw "division by zero"; }
+        return a / b;
+    } catch (e) {
+        print("error: " + e);
+        return nil;
+    } finally {
+        print("done dividing " + str(a) + "/" + str(b));
+    }
+}
+print(safe_div(10, 2));   # done dividing 10/2 \n 5
+print(safe_div(10, 0));   # error: division by zero \n done dividing 10/0 \n nil
+```
+
+An uncaught `throw` prints `error: uncaught throw: <value>` and exits
+non-zero, the same as any other runtime error.
+
 ## searchlite
 
 A tiny full-text search engine — an inverted index over indexed

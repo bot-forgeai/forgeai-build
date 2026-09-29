@@ -16,6 +16,13 @@ class _Return(Exception):
         self.value = value
 
 
+class _ThrowSignal(Exception):
+    """Internal control-flow signal for `throw`, carrying the thrown value."""
+
+    def __init__(self, value):
+        self.value = value
+
+
 class Environment:
     def __init__(self, parent=None):
         self.vars = {}
@@ -309,6 +316,31 @@ class Interpreter:
     def _exec_ReturnStmt(self, node, env):
         value = self._eval(node.value, env) if node.value is not None else None
         raise _Return(value)
+
+    def _exec_ThrowStmt(self, node, env):
+        raise _ThrowSignal(self._eval(node.value, env))
+
+    def _exec_TryStmt(self, node, env):
+        try:
+            try:
+                self._exec_block(node.try_block, env)
+            except _ThrowSignal as sig:
+                if node.catch_block is None:
+                    raise
+                self._run_catch(node, env, sig.value)
+            except ToylangRuntimeError as err:
+                if node.catch_block is None:
+                    raise
+                self._run_catch(node, env, str(err))
+        finally:
+            if node.finally_block is not None:
+                self._exec_block(node.finally_block, env)
+
+    def _run_catch(self, node, env, value):
+        catch_env = Environment(parent=env)
+        if node.catch_param is not None:
+            catch_env.define(node.catch_param, value)
+        self._exec_block(node.catch_block, catch_env)
 
     def _exec_FuncDecl(self, node, env):
         env.define(node.name, Function(node.params, node.body, env, name=node.name))

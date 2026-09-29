@@ -95,3 +95,36 @@ def test_index_assignment_parses():
 def test_invalid_assignment_target_raises():
     with pytest.raises(ToylangSyntaxError):
         parse("1 = 2;")
+
+
+def test_try_catch_parses():
+    program = parse('try { throw 1; } catch (e) { print(e); }')
+    stmt = program.statements[0]
+    assert isinstance(stmt, ast.TryStmt)
+    assert stmt.catch_param == "e"
+    assert stmt.finally_block is None
+
+
+def test_try_catch_finally_parses():
+    program = parse('try { } catch (e) { } finally { print(1); }')
+    stmt = program.statements[0]
+    assert isinstance(stmt, ast.TryStmt)
+    assert stmt.finally_block is not None
+
+
+def test_try_finally_without_catch_parses():
+    program = parse('try { } finally { print(1); }')
+    stmt = program.statements[0]
+    assert isinstance(stmt, ast.TryStmt)
+    assert stmt.catch_block is None
+    assert stmt.finally_block is not None
+
+
+def test_try_without_catch_or_finally_raises():
+    with pytest.raises(ToylangSyntaxError):
+        parse('try { print(1); }')
+
+
+def test_throw_stmt_parses():
+    program = parse('throw "boom";')
+    assert isinstance(program.statements[0], ast.ThrowStmt)
