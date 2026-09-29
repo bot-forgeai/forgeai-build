@@ -47,6 +47,10 @@ class Parser:
             return self._return_stmt()
         if self._at("FUNC"):
             return self._func_decl()
+        if self._at("TRY"):
+            return self._try_stmt()
+        if self._at("THROW"):
+            return self._throw_stmt()
         if self._at("{"):
             return self._block()
         return self._expr_stmt()
@@ -86,6 +90,33 @@ class Parser:
             value = self._expr()
         self._expect(";")
         return ast.ReturnStmt(value)
+
+    def _throw_stmt(self):
+        self._advance()
+        value = self._expr()
+        self._expect(";")
+        return ast.ThrowStmt(value)
+
+    def _try_stmt(self):
+        try_line = self._advance().line
+        try_block = self._block()
+        catch_param = None
+        catch_block = None
+        if self._at("CATCH"):
+            self._advance()
+            self._expect("(")
+            catch_param = self._expect("IDENT", "catch parameter").value
+            self._expect(")")
+            catch_block = self._block()
+        finally_block = None
+        if self._at("FINALLY"):
+            self._advance()
+            finally_block = self._block()
+        if catch_block is None and finally_block is None:
+            raise ToylangSyntaxError(
+                "try requires a catch or finally clause", try_line
+            )
+        return ast.TryStmt(try_block, catch_param, catch_block, finally_block)
 
     def _func_decl(self):
         self._advance()

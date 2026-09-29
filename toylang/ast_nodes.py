@@ -111,6 +111,19 @@ class ReturnStmt(Node):
         self.value = value
 
 
+class ThrowStmt(Node):
+    def __init__(self, value):
+        self.value = value
+
+
+class TryStmt(Node):
+    def __init__(self, try_block, catch_param, catch_block, finally_block):
+        self.try_block = try_block
+        self.catch_param = catch_param
+        self.catch_block = catch_block
+        self.finally_block = finally_block
+
+
 class FuncDecl(Node):
     def __init__(self, name, params, body):
         self.name = name
