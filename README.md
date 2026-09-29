@@ -1504,3 +1504,27 @@ ASCII art. `chip8/render.py` also has `to_image()`, converting the
 display buffer into a scaled-up Pillow `Image` for a real screen —
 verified live on this Pi's attached PiTFT panel via `tools/display.py`'s
 `show_image()`, not just the terminal ASCII output.
+
+`chip8 play ROM` runs a ROM live in the terminal instead: a real 60Hz
+loop (`chip8/interactive.py`'s `run_interactive`) redraws the display
+every frame and reads the keyboard without blocking, via a cbreak-mode
+terminal (`chip8/terminal.py`'s `RawMode`, still letting Ctrl-C through
+for a hard kill). The standard CHIP-8 hex keypad is mapped onto a
+QWERTY block the way most CHIP-8 emulators do:
+
+```
+1 2 3 C        1 2 3 4
+4 5 6 D   <-   q w e r
+7 8 9 E        a s d f
+A 0 B F        z x c v
+```
+
+Since a terminal can't reliably report key-*up* events outside of a
+proper input framework, a key is only treated as still held if it
+shows up again in the very next frame's poll — good enough for the
+tap-heavy control style most CHIP-8 games use, at the cost of not
+supporting true held-key movement. A nonzero sound timer rings the
+terminal bell (`\a`) once per frame it's active, rather than trying to
+synthesize an actual tone. `ESC` quits cleanly; `--frames N` caps the
+run instead of playing until interrupted, mainly useful for scripting
+or testing rather than actual play.
