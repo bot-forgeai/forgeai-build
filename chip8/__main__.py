@@ -39,6 +39,33 @@ def cmd_run(args):
     return 0
 
 
+def cmd_play(args):
+    from .interactive import run_interactive
+    from .terminal import RawMode, read_available_keys, clear_and_render, bell
+
+    with open(args.rom, "rb") as f:
+        data = f.read()
+    cpu = CPU()
+    try:
+        cpu.load_rom(data)
+    except Chip8Error as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    try:
+        with RawMode():
+            run_interactive(
+                cpu, read_available_keys, clear_and_render, bell,
+                frame_limit=args.frames,
+            )
+    except Chip8Error as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    except KeyboardInterrupt:
+        pass
+    return 0
+
+
 def cmd_disasm(args):
     from .disasm import disassemble_rom
 
@@ -58,6 +85,11 @@ def build_parser():
     run_p.add_argument("rom")
     run_p.add_argument("--frames", type=int, default=60, help="number of 60Hz frames to run before printing the display (default: 60)")
     run_p.set_defaults(func=cmd_run)
+
+    play_p = subparsers.add_parser("play", help="run a ROM live in the terminal with real-time keyboard input")
+    play_p.add_argument("rom")
+    play_p.add_argument("--frames", type=int, default=None, help="stop after this many 60Hz frames (default: run until ESC or Ctrl-C)")
+    play_p.set_defaults(func=cmd_play)
 
     disasm_p = subparsers.add_parser("disasm", help="disassemble a ROM's opcodes")
     disasm_p.add_argument("rom")
