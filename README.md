@@ -1454,3 +1454,53 @@ instead seeds each row's own `Random` deterministically from
 `--seed` (or an internally generated one if omitted) combined with the
 row index, so the rendered image is still exactly reproducible for a
 given seed no matter how many workers rendered it.
+
+## chip8
+
+A CHIP-8 virtual machine: fetch/decode/execute over the full classic
+instruction set (35 opcodes — arithmetic, control flow, the `Dxyn`
+sprite-XOR display opcode with collision detection, BCD conversion,
+register/memory block transfers, and the built-in hex-digit font), a
+genuinely different mechanic from every other build-lane project
+(none of them decode and execute a fixed instruction set against a
+register/memory machine model).
+
+```
+pip install -e .
+chip8 run chip8/sample/counter.ch8 --frames 60
+chip8 disasm chip8/sample/counter.ch8
+```
+
+`chip8/cpu.py`'s `CPU` holds 4KB of memory (with the built-in hex
+font loaded at `0x50`), 16 general-purpose registers plus `I`, a call
+stack, delay/sound timers, and a 64x32 monochrome display buffer.
+`step()` fetches one big-endian 2-byte opcode from `[pc]`, advances
+`pc`, and dispatches it; a malformed ROM, a stack overflow, an empty-
+stack `RET`, or an unrecognized opcode all raise a clean `Chip8Error`
+rather than corrupting state silently. `DRW` XORs an 8-wide sprite
+read from `[I..I+n)` onto the display at `(Vx, Vy)`, wrapping at the
+screen edges, and sets `VF` to `1` on any pixel collision — the same
+mechanism CHIP-8 games use for both sprite drawing and hit detection.
+`FX0A` (wait for a keypress) blocks by making `step()` a no-op until
+`press_key()` supplies a key, rather than busy-looping the interpreter.
+`rng` (for `CXNN`) and `on_draw` (called after every `DRW`) are both
+injectable, so tests get deterministic random values and can observe
+display writes without a real screen.
+
+`chip8/asm.py` is a tiny hand-assembler — one Python function per
+instruction family, packing operands into the correct 2-byte opcode —
+used to build the bundled `chip8/sample/counter.ch8` ROM (cycles the
+hex digits 0-9 on screen) and every test program, since hand-written
+CHIP-8 ROMs are otherwise just opaque hex. `chip8/disasm.py` reverses
+the process, printing an address-labeled mnemonic per instruction
+(`chip8 disasm ROM`), including a `DW 0xNNNN` fallback for anything
+outside the known opcode set — useful for inspecting a ROM without
+running it.
+
+The CLI's `run` subcommand executes a ROM headlessly for a given
+number of 60Hz frames (10 CPU cycles per frame, a rough approximation
+of real CHIP-8 timing) and prints the final display as block-character
+ASCII art. `chip8/render.py` also has `to_image()`, converting the
+display buffer into a scaled-up Pillow `Image` for a real screen —
+verified live on this Pi's attached PiTFT panel via `tools/display.py`'s
+`show_image()`, not just the terminal ASCII output.
