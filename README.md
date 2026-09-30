@@ -1327,7 +1327,7 @@ The query language (`graphlite/lexer.py` + `graphlite/query.py`)
 supports a directed pattern chained across any number of hops:
 
 ```
-MATCH (a:Label)-[:TYPE]->(b:Label)-[:TYPE]->(c:Label) WHERE a.prop = value AND ... OR ... RETURN a.prop, b LIMIT n
+MATCH (a:Label)-[:TYPE]->(b:Label)-[:TYPE]->(c:Label) WHERE a.prop = value AND ... OR ... RETURN a.prop, b ORDER BY a.prop DESC LIMIT n
 ```
 
 A node's label and an edge's type are both optional — an unlabeled
@@ -1348,6 +1348,13 @@ clean `error: ...` message and exits non-zero rather than crashing.
 of the default tab-separated table, for scripting against the output
 — a bare-variable item's node still serializes as its full
 `id`/`labels`/`props` dict.
+
+`ORDER BY` takes one or more `var.prop [ASC|DESC]` items (default
+`ASC`), comma-separated for a multi-key sort — a row missing the
+property always sorts last regardless of direction. When `ORDER BY`
+is present, the whole result set is gathered and sorted before
+`LIMIT` truncates it, rather than `LIMIT` cutting the match traversal
+short the way it does with no `ORDER BY`.
 
 `graphlite/algorithms.py` adds two graph algorithms independent of the
 query language: `shortest_path` (BFS, optionally restricted to one
