@@ -1356,6 +1356,21 @@ is present, the whole result set is gathered and sorted before
 `LIMIT` truncates it, rather than `LIMIT` cutting the match traversal
 short the way it does with no `ORDER BY`.
 
+An edge hop can also be variable-length: `[:KNOWS*2]` (exactly 2
+hops), `[:KNOWS*1..3]` (1 to 3 hops inclusive), `[:KNOWS*2..]` (2 or
+more hops), or `[:KNOWS*..3]` (1 to 3 hops) — the same `*N`, `*N..M`,
+`*N..`, `*..M` shorthand real Cypher uses. Every edge along a
+variable-length hop must share the same type (or, with no type given,
+e.g. `[*1..3]`, match any type). `graphlite/query.py`'s
+`_variable_length_targets` explores only simple paths (no repeated
+node), via a depth-first walk that adds a node to a `visited` set on
+the way down and removes it on the way back up, so a cycle in the
+graph can't turn a query into an infinite walk; a node reachable by
+two different qualifying path lengths produces two separate result
+rows, the same way two different matching edges at a fixed hop would.
+A variable-length hop can be freely chained with fixed hops on either
+side, e.g. `MATCH (a)-[:KNOWS*1..2]->(b)-[:WORKS_AT]->(c)`.
+
 `graphlite/algorithms.py` adds two graph algorithms independent of the
 query language: `shortest_path` (BFS, optionally restricted to one
 edge type or traversal direction) and `connected_components` (weakly

@@ -6,7 +6,7 @@ KEYWORDS = {
 }
 
 # Longer symbols must come before their prefixes (e.g. "->" before "-").
-SYMBOLS = ["->", "<=", ">=", "!=", "=", "<", ">", "(", ")", "[", "]", ":", ",", ".", "-"]
+SYMBOLS = ["->", "<=", ">=", "!=", "=", "<", ">", "(", ")", "[", "]", ":", ",", ".", "-", "*"]
 
 
 class Token:
@@ -51,10 +51,15 @@ def tokenize(text):
         if c.isdigit():
             j = i
             is_float = False
-            while j < n and (text[j].isdigit() or text[j] == "."):
-                if text[j] == ".":
-                    is_float = True
+            while j < n and text[j].isdigit():
                 j += 1
+            # A single '.' followed by a digit extends the number into a float;
+            # '..' (a hop-range separator, e.g. "1..3") must NOT be consumed here.
+            if j < n and text[j] == "." and j + 1 < n and text[j + 1].isdigit():
+                is_float = True
+                j += 1
+                while j < n and text[j].isdigit():
+                    j += 1
             value = text[i:j]
             tokens.append(Token("NUMBER", float(value) if is_float else int(value)))
             i = j
