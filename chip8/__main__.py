@@ -71,6 +71,25 @@ def cmd_play(args):
     return 0
 
 
+def cmd_debug(args):
+    from .debugger import run_repl
+
+    with open(args.rom, "rb") as f:
+        data = f.read()
+    cpu = CPU(**QUIRK_PROFILES[args.quirks])
+    try:
+        cpu.load_rom(data)
+    except Chip8Error as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    try:
+        run_repl(cpu)
+    except KeyboardInterrupt:
+        print()
+    return 0
+
+
 def cmd_disasm(args):
     from .disasm import disassemble_rom
 
@@ -103,6 +122,12 @@ def build_parser():
     disasm_p = subparsers.add_parser("disasm", help="disassemble a ROM's opcodes")
     disasm_p.add_argument("rom")
     disasm_p.set_defaults(func=cmd_disasm)
+
+    debug_p = subparsers.add_parser("debug", help="interactive step-through debugger: breakpoints, single-stepping, register/memory inspection")
+    debug_p.add_argument("rom")
+    debug_p.add_argument("--quirks", choices=sorted(QUIRK_PROFILES), default="modern",
+                          help="interpreter quirk profile: 'modern' (default) or 'classic' (original COSMAC VIP 8XY6/8XYE/FX55/FX65 semantics)")
+    debug_p.set_defaults(func=cmd_debug)
 
     return parser
 

@@ -1587,3 +1587,32 @@ classic ROM:
 `SCD n`/`EXIT`/`LD HF, Vx`/`LD R, Vx`/`LD Vx, R` disassembly). No new
 CLI flag is needed for any of this — a ROM that uses these opcodes
 just works under `run`/`play`, the same as any other opcode.
+
+### Interactive debugger
+
+`chip8 debug ROM [--quirks {modern,classic}]` loads a ROM and drops
+into a step-through debugger instead of running it to completion.
+`chip8/debugger.py`'s `Debugger` wraps a `CPU` with a breakpoint set
+and `step()`/`run_until_stop()`, kept independent of any I/O so the
+same logic backs both the real REPL and its tests; `run_repl` takes
+injectable `input_fn`/`print_fn` for the same reason. Commands:
+
+```
+s, step [n]        execute n instructions (default 1)
+c, continue        run until a breakpoint, halt, or key-wait
+b, break ADDR      set a breakpoint at ADDR (hex like 0x200, or decimal)
+d, delete ADDR     remove a breakpoint
+bp, breakpoints    list breakpoints
+r, regs            dump registers, PC, I, timers, and the stack
+x, mem ADDR [n]    dump n bytes of memory starting at ADDR (default 16)
+l, list [n]        disassemble n upcoming instructions from PC (default 5)
+key N              press key N (0-F), resolving an FX0A key-wait
+h, help            show this text
+q, quit            exit the debugger
+```
+
+A breakpoint fires when `PC` equals its address *after* an
+instruction executes, so `continue` naturally stops right before the
+breakpointed instruction runs — the same convention most debuggers
+use. `key N` presses and releases a key in one step, enough to
+resolve an `FX0A` key-wait without needing a real terminal.
