@@ -17,6 +17,15 @@ variable name at two positions in the chain (e.g.
 `(a)-[:X]->(b)-[:Y]->(a)`) constrains both positions to the same
 matched node.
 
+An edge can also be variable-length: `[:KNOWS*2]` (exactly 2 hops),
+`[:KNOWS*1..3]` (1 to 3 hops inclusive), `[:KNOWS*2..]` (2 or more),
+or `[:KNOWS*..3]` (1 to 3). Every edge along a variable-length hop
+must share the same type (or be untyped, e.g. `[*1..3]`, to match
+any). Only simple paths (no repeated node) are considered, so a cycle
+in the graph can't produce an infinite match; a distinct path of a
+given length produces its own row, so two different paths reaching
+the same end node both appear in the results.
+
 ORDER BY takes one or more `var.prop [ASC|DESC]` items (default ASC),
 comma-separated for a multi-key sort; a row missing the property
 always sorts last regardless of direction. When present, the whole
@@ -45,6 +54,24 @@ class NodePattern:
         self.label = label
 
 
+class EdgeSpec:
+    """One hop in a MATCH chain: an edge type plus a hop-count range.
+
+    A plain `[:TYPE]` (or untyped `[]`) hop has min_hops == max_hops == 1.
+    A variable-length hop (`[:TYPE*min..max]`) has max_hops of None for an
+    unbounded upper end (still capped in practice by simple-path length).
+    """
+
+    def __init__(self, edge_type, min_hops=1, max_hops=1):
+        self.edge_type = edge_type
+        self.min_hops = min_hops
+        self.max_hops = max_hops
+
+    @property
+    def is_variable(self):
+        return self.min_hops != 1 or self.max_hops != 1
+
+
 class Condition:
     def __init__(self, var, prop, op, value):
         self.var = var
@@ -67,9 +94,9 @@ class OrderItem:
 
 
 class MatchQuery:
-    def __init__(self, nodes, edge_types, where_groups, returns, order_by, limit):
+    def __init__(self, nodes, edge_specs, where_groups, returns, order_by, limit):
         self.nodes = nodes
-        self.edge_types = edge_types
+        self.edge_specs = edge_specs
         self.where_groups = where_groups
         self.returns = returns
         self.order_by = order_by
@@ -97,8 +124,13 @@ class MatchQuery:
         return self.nodes[1]
 
     @property
+    def edge_types(self):
+        """Kept for backward compatibility with callers that predate variable-length hops."""
+        return [spec.edge_type for spec in self.edge_specs]
+
+    @property
     def edge_type(self):
-        return self.edge_types[0]
+        return self.edge_specs[0].edge_type
 
 
 class Parser:
@@ -153,7 +185,7 @@ class Parser:
     def parse_match_query(self):
         self.expect_keyword("MATCH")
         nodes = [self.parse_node_pattern()]
-        edge_types = []
+        edge_specs = []
         while self.at_sym("-"):
             self.advance()
             self.expect_sym("[")
@@ -161,9 +193,13 @@ class Parser:
             if self.at_sym(":"):
                 self.advance()
                 edge_type = self.parse_ident()
+            min_hops, max_hops = 1, 1
+            if self.at_sym("*"):
+                self.advance()
+                min_hops, max_hops = self.parse_hop_range()
             self.expect_sym("]")
             self.expect_sym("->")
-            edge_types.append(edge_type)
+            edge_specs.append(EdgeSpec(edge_type, min_hops, max_hops))
             nodes.append(self.parse_node_pattern())
 
         where_groups = []
@@ -197,7 +233,33 @@ class Parser:
         if self.peek().kind != "EOF":
             tok = self.peek()
             raise QueryError(f"unexpected trailing {tok.kind} {tok.value!r}")
-        return MatchQuery(nodes, edge_types, where_groups, returns, order_by, limit)
+        return MatchQuery(nodes, edge_specs, where_groups, returns, order_by, limit)
+
+    def parse_hop_range(self):
+        """Parse what follows '*' in a variable-length edge: N, N.., ..N, or N..M."""
+        if self.at_sym("."):
+            self.advance()
+            self.expect_sym(".")
+            if self.peek().kind != "NUMBER":
+                raise QueryError(f"expected a number after '*..', got {self.peek().kind} {self.peek().value!r}")
+            max_hops = self._expect_hop_count()
+            return 1, max_hops
+
+        min_hops = self._expect_hop_count()
+        if not self.at_sym("."):
+            return min_hops, min_hops
+        self.advance()
+        self.expect_sym(".")
+        if self.peek().kind != "NUMBER":
+            return min_hops, None
+        max_hops = self._expect_hop_count()
+        return min_hops, max_hops
+
+    def _expect_hop_count(self):
+        tok = self.peek()
+        if tok.kind != "NUMBER" or not isinstance(tok.value, int):
+            raise QueryError(f"expected an integer hop count, got {tok.kind} {tok.value!r}")
+        return self.advance().value
 
     def parse_order_item(self):
         var = self.parse_ident()
@@ -293,6 +355,34 @@ class _LimitReached(Exception):
     pass
 
 
+def _variable_length_targets(graph, start, edge_type, min_hops, max_hops):
+    """Yield each node reachable from start via a simple path of edge_type edges.
+
+    Only simple paths (no repeated node) are explored, so a cycle can't
+    produce an infinite walk. A node reachable by more than one qualifying
+    path length is yielded once per such path, not deduplicated — each
+    distinct path is its own match, mirroring how a fixed-length chain
+    produces one row per matching edge.
+    """
+    visited = {start}
+
+    def dfs(node_id, depth):
+        if max_hops is not None and depth >= max_hops:
+            return
+        for edge_id, edge in graph.out_edges(node_id, edge_type=edge_type):
+            target = edge["to"]
+            if target in visited:
+                continue
+            next_depth = depth + 1
+            visited.add(target)
+            if next_depth >= min_hops:
+                yield target
+            yield from dfs(target, next_depth)
+            visited.discard(target)
+
+    yield from dfs(start, 0)
+
+
 def execute(graph, query):
     """Run a parsed MatchQuery against a Graph, returning a list of row dicts.
 
@@ -301,7 +391,7 @@ def execute(graph, query):
     than one position in the chain constrains those positions to the
     same node, rather than being bound independently.
     """
-    nodes, edge_types = query.nodes, query.edge_types
+    nodes, edge_specs = query.nodes, query.edge_specs
     last_hop = len(nodes) - 1
     bindings = []
     # A sort happens after every match is collected, so LIMIT can't cut the
@@ -329,8 +419,13 @@ def execute(graph, query):
                 raise _LimitReached()
             return
 
-        for edge_id, edge in graph.out_edges(node_id, edge_type=edge_types[hop]):
-            recurse(hop + 1, edge["to"], next_binding)
+        spec = edge_specs[hop]
+        if spec.is_variable:
+            for target in _variable_length_targets(graph, node_id, spec.edge_type, spec.min_hops, spec.max_hops):
+                recurse(hop + 1, target, next_binding)
+        else:
+            for edge_id, edge in graph.out_edges(node_id, edge_type=spec.edge_type):
+                recurse(hop + 1, edge["to"], next_binding)
 
     try:
         for node_id in graph.nodes:

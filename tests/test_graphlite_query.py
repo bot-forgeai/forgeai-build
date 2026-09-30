@@ -262,3 +262,137 @@ def test_execute_order_by_unbound_variable_raises():
     q.order_by.append(OrderItem("c", "age"))
     with pytest.raises(QueryError):
         execute(g, q)
+
+
+def build_chain_graph():
+    """a -KNOWS-> b -KNOWS-> c -KNOWS-> d, plus a -LIKES-> e."""
+    g = Graph()
+    for n in "abcde":
+        g.add_node(n, labels=["Person"], props={"name": n})
+    g.add_edge("e1", "a", "b", "KNOWS")
+    g.add_edge("e2", "b", "c", "KNOWS")
+    g.add_edge("e3", "c", "d", "KNOWS")
+    g.add_edge("e4", "a", "e", "LIKES")
+    return g
+
+
+def test_parse_variable_length_exact():
+    q = parse("MATCH (a)-[:KNOWS*2]->(b) RETURN a")
+    spec = q.edge_specs[0]
+    assert spec.edge_type == "KNOWS"
+    assert spec.min_hops == 2
+    assert spec.max_hops == 2
+    assert spec.is_variable
+
+
+def test_parse_variable_length_range():
+    q = parse("MATCH (a)-[:KNOWS*1..3]->(b) RETURN a")
+    spec = q.edge_specs[0]
+    assert spec.min_hops == 1
+    assert spec.max_hops == 3
+
+
+def test_parse_variable_length_open_upper():
+    q = parse("MATCH (a)-[:KNOWS*2..]->(b) RETURN a")
+    spec = q.edge_specs[0]
+    assert spec.min_hops == 2
+    assert spec.max_hops is None
+
+
+def test_parse_variable_length_open_lower():
+    q = parse("MATCH (a)-[:KNOWS*..2]->(b) RETURN a")
+    spec = q.edge_specs[0]
+    assert spec.min_hops == 1
+    assert spec.max_hops == 2
+
+
+def test_parse_variable_length_bad_hop_count_raises():
+    with pytest.raises(QueryError):
+        parse("MATCH (a)-[:KNOWS*x]->(b) RETURN a")
+
+
+def test_parse_fixed_hop_is_not_variable():
+    q = parse("MATCH (a)-[:KNOWS]->(b) RETURN a")
+    assert not q.edge_specs[0].is_variable
+
+
+def test_execute_variable_length_exact():
+    g = build_chain_graph()
+    q = parse("MATCH (a:Person)-[:KNOWS*2]->(b:Person) WHERE a.name = 'a' RETURN b.name")
+    rows = execute(g, q)
+    assert [r["b.name"] for r in rows] == ["c"]
+
+
+def test_execute_variable_length_range():
+    g = build_chain_graph()
+    q = parse("MATCH (a:Person)-[:KNOWS*1..3]->(b:Person) WHERE a.name = 'a' RETURN b.name")
+    rows = execute(g, q)
+    assert [r["b.name"] for r in rows] == ["b", "c", "d"]
+
+
+def test_execute_variable_length_open_upper():
+    g = build_chain_graph()
+    q = parse("MATCH (a:Person)-[:KNOWS*2..]->(b:Person) WHERE a.name = 'a' RETURN b.name")
+    rows = execute(g, q)
+    assert [r["b.name"] for r in rows] == ["c", "d"]
+
+
+def test_execute_variable_length_open_lower():
+    g = build_chain_graph()
+    q = parse("MATCH (a:Person)-[:KNOWS*..2]->(b:Person) WHERE a.name = 'a' RETURN b.name")
+    rows = execute(g, q)
+    assert [r["b.name"] for r in rows] == ["b", "c"]
+
+
+def test_execute_variable_length_untyped_matches_any_type():
+    g = build_chain_graph()
+    q = parse("MATCH (a:Person)-[*1..1]->(b:Person) WHERE a.name = 'a' RETURN b.name")
+    rows = execute(g, q)
+    assert sorted(r["b.name"] for r in rows) == ["b", "e"]
+
+
+def test_execute_variable_length_respects_type_filter():
+    g = build_chain_graph()
+    q = parse("MATCH (a:Person)-[:LIKES*1..3]->(b:Person) WHERE a.name = 'a' RETURN b.name")
+    rows = execute(g, q)
+    assert [r["b.name"] for r in rows] == ["e"]
+
+
+def test_execute_variable_length_no_infinite_loop_on_cycle():
+    g = Graph()
+    for n in "xyz":
+        g.add_node(n, labels=["Person"], props={"name": n})
+    g.add_edge("e1", "x", "y", "KNOWS")
+    g.add_edge("e2", "y", "z", "KNOWS")
+    g.add_edge("e3", "z", "x", "KNOWS")
+    q = parse("MATCH (a:Person)-[:KNOWS*1..10]->(b:Person) WHERE a.name = 'x' RETURN b.name")
+    rows = execute(g, q)
+    # Simple paths only: x->y, x->y->z, x->y->z->x is not simple (repeats x).
+    assert sorted(r["b.name"] for r in rows) == ["y", "z"]
+
+
+def test_execute_variable_length_chained_with_fixed_hop():
+    g = build_chain_graph()
+    q = parse("MATCH (a:Person)-[:KNOWS*1..2]->(b:Person)-[:KNOWS]->(c:Person) WHERE a.name = 'a' RETURN b.name, c.name")
+    rows = execute(g, q)
+    assert [(r["b.name"], r["c.name"]) for r in rows] == [("b", "c"), ("c", "d")]
+
+
+def test_lexer_hop_range_does_not_swallow_dots_as_a_float():
+    from graphlite.lexer import tokenize
+
+    tokens = [t for t in tokenize("*1..3") if t.kind != "EOF"]
+    assert [(t.kind, t.value) for t in tokens] == [
+        ("SYM", "*"),
+        ("NUMBER", 1),
+        ("SYM", "."),
+        ("SYM", "."),
+        ("NUMBER", 3),
+    ]
+
+
+def test_lexer_still_parses_float_literals():
+    from graphlite.lexer import tokenize
+
+    tokens = [t for t in tokenize("3.5") if t.kind != "EOF"]
+    assert [(t.kind, t.value) for t in tokens] == [("NUMBER", 3.5)]
