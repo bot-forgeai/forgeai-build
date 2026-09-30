@@ -1,7 +1,7 @@
 import pytest
 
 from graphlite.model import Graph
-from graphlite.query import Condition, QueryError, execute, parse
+from graphlite.query import Condition, OrderItem, QueryError, execute, parse
 
 
 def build_graph():
@@ -187,3 +187,78 @@ def test_execute_multi_hop_limit():
         "MATCH (a:Person)-[:KNOWS]->(b:Person)-[:WORKS_AT]->(c:Company) RETURN a.name LIMIT 1"
     )
     assert len(execute(g, limited)) == 1
+
+
+def test_parse_order_by_default_asc():
+    q = parse("MATCH (a:Person) RETURN a.name ORDER BY a.age")
+    assert len(q.order_by) == 1
+    assert q.order_by[0].var == "a"
+    assert q.order_by[0].prop == "age"
+    assert q.order_by[0].descending is False
+
+
+def test_parse_order_by_desc():
+    q = parse("MATCH (a:Person) RETURN a.name ORDER BY a.age DESC")
+    assert q.order_by[0].descending is True
+
+
+def test_parse_order_by_multi_key():
+    q = parse("MATCH (a:Person) RETURN a.name ORDER BY a.age DESC, a.name ASC")
+    assert len(q.order_by) == 2
+    assert q.order_by[0].descending is True
+    assert q.order_by[1].descending is False
+
+
+def test_execute_order_by_asc():
+    g = build_graph()
+    q = parse("MATCH (a:Person) RETURN a.name ORDER BY a.age")
+    rows = execute(g, q)
+    assert [r["a.name"] for r in rows] == ["Bob", "Ada"]
+
+
+def test_execute_order_by_desc():
+    g = build_graph()
+    q = parse("MATCH (a:Person) RETURN a.name ORDER BY a.age DESC")
+    rows = execute(g, q)
+    assert [r["a.name"] for r in rows] == ["Ada", "Bob"]
+
+
+def test_execute_order_by_then_limit():
+    g = build_graph()
+    q = parse("MATCH (a:Person) RETURN a.name ORDER BY a.age DESC LIMIT 1")
+    rows = execute(g, q)
+    assert [r["a.name"] for r in rows] == ["Ada"]
+
+
+def test_execute_order_by_missing_property_sorts_last():
+    g = build_graph()
+    g.add_node("dave", labels=["Person"], props={"name": "Dave"})  # no age
+    q = parse("MATCH (a:Person) RETURN a.name ORDER BY a.age")
+    rows = execute(g, q)
+    assert [r["a.name"] for r in rows] == ["Bob", "Ada", "Dave"]
+
+
+def test_execute_order_by_missing_property_sorts_last_desc():
+    g = build_graph()
+    g.add_node("dave", labels=["Person"], props={"name": "Dave"})  # no age
+    q = parse("MATCH (a:Person) RETURN a.name ORDER BY a.age DESC")
+    rows = execute(g, q)
+    assert [r["a.name"] for r in rows] == ["Ada", "Bob", "Dave"]
+
+
+def test_execute_order_by_multi_key_sort():
+    g = Graph()
+    g.add_node("a1", labels=["Person"], props={"name": "Zed", "team": "A"})
+    g.add_node("a2", labels=["Person"], props={"name": "Amy", "team": "A"})
+    g.add_node("b1", labels=["Person"], props={"name": "Bea", "team": "B"})
+    q = parse("MATCH (a:Person) RETURN a.name ORDER BY a.team ASC, a.name ASC")
+    rows = execute(g, q)
+    assert [r["a.name"] for r in rows] == ["Amy", "Zed", "Bea"]
+
+
+def test_execute_order_by_unbound_variable_raises():
+    g = build_graph()
+    q = parse("MATCH (a:Person)-[:KNOWS]->(b:Person) RETURN a.name")
+    q.order_by.append(OrderItem("c", "age"))
+    with pytest.raises(QueryError):
+        execute(g, q)

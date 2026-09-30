@@ -5,15 +5,23 @@ Supports directed patterns, chained across any number of hops:
     MATCH (a:Person)-[:KNOWS]->(b:Person)-[:WORKS_AT]->(c:Company)
     WHERE a.age > 30 AND b.city = 'Springfield'
     RETURN a.name, b
+    ORDER BY a.name DESC
     LIMIT 10
 
 Both the label on a node (`:Person`) and the type on an edge (`:KNOWS`)
-are optional — an unlabeled node/untyped edge matches anything. WHERE
-and LIMIT are optional; RETURN is required. A RETURN item naming a bare
-variable (e.g. `b`) returns that node's id/labels/props as a whole;
-`a.name` returns just that property. Reusing the same variable name at
-two positions in the chain (e.g. `(a)-[:X]->(b)-[:Y]->(a)`) constrains
-both positions to the same matched node.
+are optional — an unlabeled node/untyped edge matches anything. WHERE,
+ORDER BY, and LIMIT are optional; RETURN is required. A RETURN item
+naming a bare variable (e.g. `b`) returns that node's id/labels/props
+as a whole; `a.name` returns just that property. Reusing the same
+variable name at two positions in the chain (e.g.
+`(a)-[:X]->(b)-[:Y]->(a)`) constrains both positions to the same
+matched node.
+
+ORDER BY takes one or more `var.prop [ASC|DESC]` items (default ASC),
+comma-separated for a multi-key sort; a row missing the property
+always sorts last regardless of direction. When present, the whole
+result set is gathered and sorted before LIMIT is applied, rather than
+LIMIT cutting the match short as it does with no ORDER BY.
 
 WHERE supports both AND and OR, with the usual precedence (AND binds
 tighter than OR, so `a.x = 1 AND a.y = 2 OR a.z = 3` reads as
@@ -51,12 +59,20 @@ class ReturnItem:
         self.prop = prop
 
 
+class OrderItem:
+    def __init__(self, var, prop, descending=False):
+        self.var = var
+        self.prop = prop
+        self.descending = descending
+
+
 class MatchQuery:
-    def __init__(self, nodes, edge_types, where_groups, returns, limit):
+    def __init__(self, nodes, edge_types, where_groups, returns, order_by, limit):
         self.nodes = nodes
         self.edge_types = edge_types
         self.where_groups = where_groups
         self.returns = returns
+        self.order_by = order_by
         self.limit = limit
 
     @property
@@ -161,6 +177,15 @@ class Parser:
             self.advance()
             returns.append(self.parse_return_item())
 
+        order_by = []
+        if self.at_keyword("ORDER"):
+            self.advance()
+            self.expect_keyword("BY")
+            order_by.append(self.parse_order_item())
+            while self.at_sym(","):
+                self.advance()
+                order_by.append(self.parse_order_item())
+
         limit = None
         if self.at_keyword("LIMIT"):
             self.advance()
@@ -172,7 +197,19 @@ class Parser:
         if self.peek().kind != "EOF":
             tok = self.peek()
             raise QueryError(f"unexpected trailing {tok.kind} {tok.value!r}")
-        return MatchQuery(nodes, edge_types, where_groups, returns, limit)
+        return MatchQuery(nodes, edge_types, where_groups, returns, order_by, limit)
+
+    def parse_order_item(self):
+        var = self.parse_ident()
+        self.expect_sym(".")
+        prop = self.parse_ident()
+        descending = False
+        if self.at_keyword("ASC"):
+            self.advance()
+        elif self.at_keyword("DESC"):
+            self.advance()
+            descending = True
+        return OrderItem(var, prop, descending)
 
     def parse_where_groups(self):
         """Parse an OR-of-AND-groups condition list (AND binds tighter than OR)."""
@@ -266,7 +303,10 @@ def execute(graph, query):
     """
     nodes, edge_types = query.nodes, query.edge_types
     last_hop = len(nodes) - 1
-    rows = []
+    bindings = []
+    # A sort happens after every match is collected, so LIMIT can't cut the
+    # traversal short until the full result set has been ordered.
+    can_stop_early = not query.order_by
 
     def recurse(hop, node_id, binding):
         pattern = nodes[hop]
@@ -284,8 +324,8 @@ def execute(graph, query):
         if hop == last_hop:
             if not _matches_where(graph, next_binding, query.where_groups):
                 return
-            rows.append(_build_row(graph, next_binding, query.returns))
-            if query.limit is not None and len(rows) >= query.limit:
+            bindings.append(next_binding)
+            if can_stop_early and query.limit is not None and len(bindings) >= query.limit:
                 raise _LimitReached()
             return
 
@@ -297,7 +337,47 @@ def execute(graph, query):
             recurse(0, node_id, {})
     except _LimitReached:
         pass
-    return rows
+
+    if query.order_by:
+        bindings = _sort_bindings(graph, bindings, query.order_by)
+        if query.limit is not None:
+            bindings = bindings[: query.limit]
+
+    return [_build_row(graph, binding, query.returns) for binding in bindings]
+
+
+class _SortKey:
+    """Wraps a row's sort values so None always sorts last regardless of direction."""
+
+    def __init__(self, values):
+        self.values = values
+
+    def __lt__(self, other):
+        for (v1, desc), (v2, _) in zip(self.values, other.values):
+            if v1 is None and v2 is None:
+                continue
+            if v1 is None:
+                return False
+            if v2 is None:
+                return True
+            if v1 == v2:
+                continue
+            return (v1 < v2) != desc
+        return False
+
+
+def _sort_bindings(graph, bindings, order_by):
+    def key(binding):
+        values = []
+        for item in order_by:
+            if item.var not in binding:
+                raise QueryError(f"unbound variable {item.var!r} in ORDER BY")
+            node_id = binding[item.var]
+            value = graph.nodes[node_id]["props"].get(item.prop)
+            values.append((value, item.descending))
+        return _SortKey(values)
+
+    return sorted(bindings, key=key)
 
 
 def _matches_where(graph, binding, where_groups):
