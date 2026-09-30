@@ -1460,8 +1460,10 @@ given seed no matter how many workers rendered it.
 A CHIP-8 virtual machine: fetch/decode/execute over the full classic
 instruction set (35 opcodes — arithmetic, control flow, the `Dxyn`
 sprite-XOR display opcode with collision detection, BCD conversion,
-register/memory block transfers, and the built-in hex-digit font), a
-genuinely different mechanic from every other build-lane project
+register/memory block transfers, and the built-in hex-digit font),
+plus the Super-CHIP (SCHIP) extension opcodes (hi-res 128x64 display,
+16x16 sprites, scrolling, a big font, RPL flag storage — see below),
+a genuinely different mechanic from every other build-lane project
 (none of them decode and execute a fixed instruction set against a
 register/memory machine model).
 
@@ -1545,3 +1547,36 @@ the other:
 
 `CPU(shift_quirk=..., load_store_quirk=...)` exposes both flags
 independently at the library level.
+
+### Super-CHIP (SCHIP) extension opcodes
+
+Beyond the classic 35-opcode set, `CPU` also implements the Super-CHIP
+extensions many later ROMs rely on — these are all opcodes the base
+instruction set left unused, so they don't affect any existing
+classic ROM:
+
+- `00FF` / `00FE`: switch to a 128x64 hi-res display / back to the
+  classic 64x32 one. Either switch clears the screen, and `Dxyn`'s
+  wrapping and `Scr`/`Scl`/`Scd` all operate against whatever size is
+  currently active (`CPU._display_size()`).
+- `Dxy0`: draw a 16x16 sprite (2 bytes per row, 16 rows) instead of
+  the classic 8-wide `Dxyn`, with the same XOR/collision semantics.
+- `00CN` / `00FB` / `00FC`: scroll the display down `N` pixel rows,
+  or right/left by 4 pixels, used for simple screen-transition effects.
+- `00FD`: halt the interpreter (`cpu.halted`); `step()` becomes a
+  no-op afterward, the same way key-wait blocking already worked.
+- `FX30`: point `I` at a 16x16 "big font" glyph for digit `Vx`
+  (`BIG_FONT_START`, digits 0-9 only, 10 bytes/glyph — the widely-used
+  Octo big-font bitmap data, since SCHIP itself doesn't fix one
+  canonical glyph set).
+- `FX75` / `FX85`: save/load `V0..Vx` to/from 16 "RPL" flag registers
+  (`cpu.rpl_flags`) — kept in memory only for this implementation
+  rather than written to a real file, unlike the original HP
+  calculator hardware SCHIP ran on.
+
+`chip8/asm.py` and `chip8/disasm.py` both cover the full extension set
+(`asm.high()`/`low()`/`scr()`/`scl()`/`scd(n)`/`exit_()`/`ld_hf_vx(x)`/
+`ld_r_vx(x)`/`ld_vx_r(x)`, and matching `HIGH`/`LOW`/`SCR`/`SCL`/
+`SCD n`/`EXIT`/`LD HF, Vx`/`LD R, Vx`/`LD Vx, R` disassembly). No new
+CLI flag is needed for any of this — a ROM that uses these opcodes
+just works under `run`/`play`, the same as any other opcode.

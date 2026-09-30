@@ -143,6 +143,42 @@ def ld_vx_i(x):
     return bytes([0xF0 | (x & 0xF), 0x65])
 
 
+def scd(n):
+    return bytes([0x00, 0xC0 | (n & 0xF)])
+
+
+def scr():
+    return bytes([0x00, 0xFB])
+
+
+def scl():
+    return bytes([0x00, 0xFC])
+
+
+def exit_():
+    return bytes([0x00, 0xFD])
+
+
+def low():
+    return bytes([0x00, 0xFE])
+
+
+def high():
+    return bytes([0x00, 0xFF])
+
+
+def ld_hf_vx(x):
+    return bytes([0xF0 | (x & 0xF), 0x30])
+
+
+def ld_r_vx(x):
+    return bytes([0xF0 | (x & 0xF), 0x75])
+
+
+def ld_vx_r(x):
+    return bytes([0xF0 | (x & 0xF), 0x85])
+
+
 def assemble(instructions):
     """Concatenate a list of instruction byte-pairs (and/or raw bytes objects) into one ROM."""
     return b"".join(instructions)

@@ -15,6 +15,18 @@ def disassemble_instruction(opcode):
         return "CLS"
     if opcode == 0x00EE:
         return "RET"
+    if top == 0x0 and (opcode & 0xFFF0) == 0x00C0:
+        return f"SCD {n}"
+    if opcode == 0x00FB:
+        return "SCR"
+    if opcode == 0x00FC:
+        return "SCL"
+    if opcode == 0x00FD:
+        return "EXIT"
+    if opcode == 0x00FE:
+        return "LOW"
+    if opcode == 0x00FF:
+        return "HIGH"
     if top == 0x0:
         return f"SYS 0x{nnn:03X}"
     if top == 0x1:
@@ -56,6 +68,7 @@ def disassemble_instruction(opcode):
             0x07: f"LD V{x:X}, DT", 0x0A: f"LD V{x:X}, K", 0x15: f"LD DT, V{x:X}",
             0x18: f"LD ST, V{x:X}", 0x1E: f"ADD I, V{x:X}", 0x29: f"LD F, V{x:X}",
             0x33: f"LD B, V{x:X}", 0x55: f"LD [I], V{x:X}", 0x65: f"LD V{x:X}, [I]",
+            0x30: f"LD HF, V{x:X}", 0x75: f"LD R, V{x:X}", 0x85: f"LD V{x:X}, R",
         }
         if kk in f_names:
             return f_names[kk]
