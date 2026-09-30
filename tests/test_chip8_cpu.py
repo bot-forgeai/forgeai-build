@@ -6,8 +6,8 @@ from chip8 import asm
 from chip8.cpu import CPU, Chip8Error, FONT_START, PROGRAM_START
 
 
-def make_cpu(instructions, rng=None, on_draw=None):
-    cpu = CPU(rng=rng, on_draw=on_draw)
+def make_cpu(instructions, rng=None, on_draw=None, **quirks):
+    cpu = CPU(rng=rng, on_draw=on_draw, **quirks)
     cpu.load_rom(asm.assemble(instructions))
     return cpu
 
@@ -184,6 +184,36 @@ def test_shl_vx():
     assert cpu.v[0xF] == 1
 
 
+def test_shr_vx_ignores_vy_under_modern_quirk():
+    cpu = make_cpu([
+        asm.ld_vx_byte(0, 0b101), asm.ld_vx_byte(1, 0b1),
+        asm.shr_vx(0, 1),
+    ], shift_quirk=True)
+    run_n(cpu, 3)
+    assert cpu.v[0] == 0b10  # shifted V0 itself, V1 ignored
+    assert cpu.v[0xF] == 1
+
+
+def test_shr_vx_uses_vy_under_classic_quirk():
+    cpu = make_cpu([
+        asm.ld_vx_byte(0, 0b101), asm.ld_vx_byte(1, 0b100),
+        asm.shr_vx(0, 1),
+    ], shift_quirk=False)
+    run_n(cpu, 3)
+    assert cpu.v[0] == 0b10  # shifted V1 (0b100 -> 0b10), stored into V0
+    assert cpu.v[0xF] == 0
+
+
+def test_shl_vx_uses_vy_under_classic_quirk():
+    cpu = make_cpu([
+        asm.ld_vx_byte(0, 0b1), asm.ld_vx_byte(1, 0b10000001),
+        asm.shl_vx(0, 1),
+    ], shift_quirk=False)
+    run_n(cpu, 3)
+    assert cpu.v[0] == 0b00000010  # shifted V1, stored into V0
+    assert cpu.v[0xF] == 1
+
+
 def test_ld_i():
     cpu = make_cpu([asm.ld_i(0x345)])
     run_n(cpu, 1)
@@ -322,6 +352,35 @@ def test_ld_vx_i_loads_registers_from_memory():
     cpu.load_rom(asm.assemble([asm.ld_i(0x400), asm.ld_vx_i(2)]))
     run_n(cpu, 2)
     assert cpu.v[0:3] == [7, 8, 9]
+
+
+def test_ld_i_vx_leaves_i_unchanged_under_modern_quirk():
+    cpu = make_cpu([
+        asm.ld_i(0x400),
+        asm.ld_vx_byte(0, 1), asm.ld_vx_byte(1, 2),
+        asm.ld_i_vx(1),
+    ], load_store_quirk=True)
+    run_n(cpu, 4)
+    assert cpu.i == 0x400
+
+
+def test_ld_i_vx_advances_i_under_classic_quirk():
+    cpu = make_cpu([
+        asm.ld_i(0x400),
+        asm.ld_vx_byte(0, 1), asm.ld_vx_byte(1, 2),
+        asm.ld_i_vx(1),
+    ], load_store_quirk=False)
+    run_n(cpu, 4)
+    assert cpu.i == 0x402  # advanced by x + 1 registers
+
+
+def test_ld_vx_i_advances_i_under_classic_quirk():
+    cpu = CPU(load_store_quirk=False)
+    cpu.memory[0x400:0x403] = bytes([7, 8, 9])
+    cpu.load_rom(asm.assemble([asm.ld_i(0x400), asm.ld_vx_i(2)]))
+    run_n(cpu, 2)
+    assert cpu.v[0:3] == [7, 8, 9]
+    assert cpu.i == 0x403
 
 
 def test_ld_vx_k_waits_for_key():

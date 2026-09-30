@@ -42,7 +42,14 @@ class CPU:
     terminal or framebuffer.
     """
 
-    def __init__(self, rng=None, on_draw=None):
+    def __init__(self, rng=None, on_draw=None, shift_quirk=True, load_store_quirk=True):
+        """`shift_quirk`/`load_store_quirk` default to modern-interpreter behavior.
+
+        Many ROMs (especially original COSMAC VIP-era CHIP-8 programs) were
+        written against different semantics for 8XY6/8XYE and FX55/FX65 and
+        render incorrectly under the modern defaults - set both to False to
+        switch to that classic behavior instead.
+        """
         self.memory = bytearray(MEMORY_SIZE)
         self.memory[FONT_START:FONT_START + len(FONT_SET)] = bytes(FONT_SET)
         self.v = [0] * NUM_REGISTERS
@@ -57,6 +64,8 @@ class CPU:
         self._rng = rng or random.Random()
         self._on_draw = on_draw
         self.halted = False
+        self.shift_quirk = shift_quirk
+        self.load_store_quirk = load_store_quirk
 
     def load_rom(self, data):
         if len(data) > MEMORY_SIZE - PROGRAM_START:
@@ -166,14 +175,16 @@ class CPU:
             self.v[0xF] = 1 if vx >= vy else 0
             self.v[x] = (vx - vy) & 0xFF
         elif n == 0x6:
-            self.v[0xF] = vx & 0x1
-            self.v[x] = vx >> 1
+            source = vx if self.shift_quirk else vy
+            self.v[0xF] = source & 0x1
+            self.v[x] = source >> 1
         elif n == 0x7:
             self.v[0xF] = 1 if vy >= vx else 0
             self.v[x] = (vy - vx) & 0xFF
         elif n == 0xE:
-            self.v[0xF] = (vx & 0x80) >> 7
-            self.v[x] = (vx << 1) & 0xFF
+            source = vx if self.shift_quirk else vy
+            self.v[0xF] = (source & 0x80) >> 7
+            self.v[x] = (source << 1) & 0xFF
         else:
             raise Chip8Error(f"unknown 8XY{n:X} opcode")
 
@@ -215,9 +226,13 @@ class CPU:
         elif kk == 0x55:
             for offset in range(x + 1):
                 self.memory[self.i + offset] = self.v[offset]
+            if not self.load_store_quirk:
+                self.i = (self.i + x + 1) & 0xFFFF
         elif kk == 0x65:
             for offset in range(x + 1):
                 self.v[offset] = self.memory[self.i + offset]
+            if not self.load_store_quirk:
+                self.i = (self.i + x + 1) & 0xFFFF
         else:
             raise Chip8Error(f"unknown FX{kk:02X} opcode")
 
