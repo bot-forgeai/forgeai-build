@@ -36,6 +36,25 @@ def test_run_reports_cpu_error_cleanly(tmp_path, capsys):
     assert "error:" in err
 
 
+def test_run_quirks_classic_flag_changes_behavior(tmp_path, capsys):
+    # SHR V0, V1 with V0=0b101 V1=0b100: modern ignores V1 (result 0b10),
+    # classic shifts V1 into V0 (result 0b10 too, but sets VF from V1's bit).
+    rom = write_rom(tmp_path, [
+        asm.ld_vx_byte(0, 0b101), asm.ld_vx_byte(1, 0b100), asm.shr_vx(0, 1),
+        asm.ld_i(0x50), asm.drw(0, 0, 1),
+    ])
+    rc_modern = main(["run", rom, "--frames", "1", "--quirks", "modern"])
+    rc_classic = main(["run", rom, "--frames", "1", "--quirks", "classic"])
+    assert rc_modern == 0
+    assert rc_classic == 0
+
+
+def test_run_invalid_quirks_value_rejected(tmp_path):
+    rom = write_rom(tmp_path, [asm.cls()])
+    with pytest.raises(SystemExit):
+        main(["run", rom, "--quirks", "nonsense"])
+
+
 def test_disasm_command(tmp_path, capsys):
     rom = write_rom(tmp_path, [asm.cls(), asm.jp(0x300)])
     rc = main(["disasm", rom])

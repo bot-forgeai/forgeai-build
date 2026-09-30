@@ -1528,3 +1528,20 @@ terminal bell (`\a`) once per frame it's active, rather than trying to
 synthesize an actual tone. `ESC` quits cleanly; `--frames N` caps the
 run instead of playing until interrupted, mainly useful for scripting
 or testing rather than actual play.
+
+Both `run` and `play` accept `--quirks {modern,classic}` (default
+`modern`). Real CHIP-8 ROMs were written against two different sets
+of semantics for `8XY6`/`8XYE` (shift) and `FX55`/`FX65` (register
+block load/store), and a ROM written for one behaves incorrectly under
+the other:
+
+- `modern` (default): `8XY6`/`8XYE` shift `Vx` in place, ignoring `Vy`;
+  `FX55`/`FX65` leave `I` unchanged. This matches most modern
+  interpreters and the majority of ROMs found today.
+- `classic`: `8XY6`/`8XYE` shift `Vy` and store the result into `Vx`
+  (the original COSMAC VIP behavior); `FX55`/`FX65` advance `I` by
+  `x + 1` afterward, so a ROM relying on `I` pointing just past the
+  loaded/stored block still works.
+
+`CPU(shift_quirk=..., load_store_quirk=...)` exposes both flags
+independently at the library level.

@@ -7,6 +7,11 @@ from .render import to_ascii
 
 CYCLES_PER_FRAME = 10  # a rough approximation of real CHIP-8 timing (~600Hz CPU, 60Hz timers)
 
+QUIRK_PROFILES = {
+    "modern": {"shift_quirk": True, "load_store_quirk": True},
+    "classic": {"shift_quirk": False, "load_store_quirk": False},
+}
+
 
 def _get_package_version():
     try:
@@ -18,7 +23,7 @@ def _get_package_version():
 def cmd_run(args):
     with open(args.rom, "rb") as f:
         data = f.read()
-    cpu = CPU()
+    cpu = CPU(**QUIRK_PROFILES[args.quirks])
     try:
         cpu.load_rom(data)
     except Chip8Error as exc:
@@ -45,7 +50,7 @@ def cmd_play(args):
 
     with open(args.rom, "rb") as f:
         data = f.read()
-    cpu = CPU()
+    cpu = CPU(**QUIRK_PROFILES[args.quirks])
     try:
         cpu.load_rom(data)
     except Chip8Error as exc:
@@ -84,11 +89,15 @@ def build_parser():
     run_p = subparsers.add_parser("run", help="run a ROM headlessly and print the final display as ASCII")
     run_p.add_argument("rom")
     run_p.add_argument("--frames", type=int, default=60, help="number of 60Hz frames to run before printing the display (default: 60)")
+    run_p.add_argument("--quirks", choices=sorted(QUIRK_PROFILES), default="modern",
+                        help="interpreter quirk profile: 'modern' (default) or 'classic' (original COSMAC VIP 8XY6/8XYE/FX55/FX65 semantics)")
     run_p.set_defaults(func=cmd_run)
 
     play_p = subparsers.add_parser("play", help="run a ROM live in the terminal with real-time keyboard input")
     play_p.add_argument("rom")
     play_p.add_argument("--frames", type=int, default=None, help="stop after this many 60Hz frames (default: run until ESC or Ctrl-C)")
+    play_p.add_argument("--quirks", choices=sorted(QUIRK_PROFILES), default="modern",
+                         help="interpreter quirk profile: 'modern' (default) or 'classic' (original COSMAC VIP 8XY6/8XYE/FX55/FX65 semantics)")
     play_p.set_defaults(func=cmd_play)
 
     disasm_p = subparsers.add_parser("disasm", help="disassemble a ROM's opcodes")
