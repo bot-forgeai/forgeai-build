@@ -1631,3 +1631,71 @@ instruction executes, so `continue` naturally stops right before the
 breakpointed instruction runs — the same convention most debuggers
 use. `key N` presses and releases a key in one step, enough to
 resolve an `FX0A` key-wait without needing a real terminal.
+
+## raftlite
+
+A small Raft consensus implementation: leader election and log
+replication for an in-memory key-value store, run as real networked
+processes over TCP — a genuinely different mechanic from every other
+build-lane project (none of them do distributed consensus; the
+closest, kvlog's TCP wrapper and ttt/chesslite's socket play, expose
+a single authoritative process rather than a cluster that keeps
+working after any one node dies).
+
+```
+pip install -e .
+raftlite node --id 0 --host 127.0.0.1 --port 9000 --peers "1=127.0.0.1:9001,2=127.0.0.1:9002"
+raftlite node --id 1 --host 127.0.0.1 --port 9001 --peers "0=127.0.0.1:9000,2=127.0.0.1:9002"
+raftlite node --id 2 --host 127.0.0.1 --port 9002 --peers "0=127.0.0.1:9000,1=127.0.0.1:9001"
+
+raftlite put 127.0.0.1:9000 key1 hello   # works against any node, but only a leader accepts writes
+raftlite get 127.0.0.1:9001 key1         # reads are served locally by whichever node you ask
+raftlite status 127.0.0.1:9000           # role, term, leader_id, commit_index
+```
+
+`raftlite/node.py`'s `RaftNode` is a pure state machine with no I/O of
+its own: `tick()` and `receive(sender, msg)` are its only inputs, and
+every call returns the list of `(dest, message)` pairs to send out,
+following the same "functional core" pattern as `chip8/cpu.py` and
+`ttt`'s board logic. That makes elections and log replication
+deterministically unit-testable (`tests/test_raftlite_node.py`) by
+driving a cluster of `RaftNode` objects directly and controlling
+message delivery order, with no real sockets, threads, or clocks
+involved. Implements the core of the Raft paper: randomized election
+timeouts to avoid split votes, a term-based safety check that rejects
+stale leaders, and the log-matching/conflict-truncation rules that
+keep a follower's log consistent with the leader's.
+
+`raftlite/transport.py` and `raftlite/server.py` are the real
+networked "imperative shell" around that core: newline-delimited JSON
+over TCP, one persistent connection per pair of peers (the higher-id
+node always connects out to the lower-id node, so there's never a
+duplicate link), a ticker thread driving elections/heartbeats, and an
+in-memory KV store fed by committed log entries. A client `PUT`/`GET`/
+`DELETE` is a one-shot request/response over its own short-lived
+connection — no handshake needed, unlike the persistent peer links.
+
+This project's first version shipped with a real distributed-systems
+bug, caught only by testing an actual 3-process failover on real
+sockets rather than trusting the in-process unit/integration tests
+alone: `socket.create_connection(addr, timeout=2)` leaves that 2-second
+timeout active on the socket for *all* future operations, not just the
+connection attempt. Any idle gap longer than 2 seconds on a peer link
+(easy to hit mid-election, when nodes are quiet apart from occasional
+RequestVote rounds) silently killed that connection's reader thread —
+swallowed by a bare `except OSError: pass` — leaving a zombie link that
+looked alive but delivered nothing, so a surviving two-node majority
+could get stuck in a split-vote loop with climbing terms forever
+instead of electing a new leader. Fixed with an explicit
+`sock.settimeout(None)` right after connecting, with a regression test
+(`test_peer_link_survives_idle_period_past_connect_timeout`) that
+waits past the old 2-second threshold and confirms the link still
+delivers messages afterward — verified to fail without the fix and
+pass with it before relying on it.
+
+Known limitations, left for a future PR rather than this one: no log
+persistence to disk (a restarted node rejoins with an empty log,
+relying on the other two for a healthy 3-node cluster), no snapshot/
+log-compaction, and reads are served from whichever node you ask
+rather than only from the leader, so a follower's `GET` can be
+momentarily stale during replication.

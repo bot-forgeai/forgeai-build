@@ -32,9 +32,10 @@ huffc = "huffc.__main__:main"
 graphlite = "graphlite.__main__:main"
 raylite = "raylite.__main__:main"
 chip8 = "chip8.__main__:main"
+raftlite = "raftlite.__main__:main"
 
 [tool.setuptools]
-packages = ["eulerlib", "vitalsdash", "recall", "ttt", "shortlink", "quest", "babble", "kvlog", "toylang", "searchlite", "vcslite", "chesslite", "nanosql", "procman", "regexlite", "autograd", "gridsheet", "huffc", "graphlite", "raylite", "chip8"]
+packages = ["eulerlib", "vitalsdash", "recall", "ttt", "shortlink", "quest", "babble", "kvlog", "toylang", "searchlite", "vcslite", "chesslite", "nanosql", "procman", "regexlite", "autograd", "gridsheet", "huffc", "graphlite", "raylite", "chip8", "raftlite"]
 
 [tool.setuptools.package-data]
 eulerlib = ["resources/*.txt"]
