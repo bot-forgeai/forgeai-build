@@ -122,3 +122,53 @@ def test_status_request(cluster):
     response = client_request(("127.0.0.1", ports[leader_id]), {"type": "STATUS"})
     assert response["role"] == "leader"
     assert response["leader_id"] == leader_id
+
+
+def test_server_restart_recovers_persisted_log_and_term(tmp_path):
+    # A single standalone node (no peers), so we can stop and recreate it
+    # without needing a whole cluster to stay alive underneath it.
+    port = free_port()
+    persist_path = str(tmp_path / "raft-0.json")
+    server = RaftServer(0, ("127.0.0.1", port), {}, persist_path=persist_path)
+    server.start()
+    try:
+        wait_for_leader({0: server})
+        response = client_request(("127.0.0.1", port), {"type": "PUT", "key": "k", "value": "v"})
+        assert response["status"] == "OK"
+        term_before = server.node.current_term
+        log_before = [e.to_dict() for e in server.node.log.entries]
+    finally:
+        server.stop()
+
+    # Recreate the server against the same persist path and a fresh port, as
+    # a stand-in for the same node restarting after a process crash/reboot.
+    port2 = free_port()
+    server2 = RaftServer(0, ("127.0.0.1", port2), {}, persist_path=persist_path)
+    assert server2.node.current_term == term_before
+    assert [e.to_dict() for e in server2.node.log.entries] == log_before
+    server2.start()
+    try:
+        # A restarted single-node cluster still needs to win its own
+        # election before the KV store is repopulated from the log.
+        wait_for_leader({0: server2})
+        get_response = client_request(("127.0.0.1", port2), {"type": "GET", "key": "k"})
+        assert get_response["found"] is True
+        assert get_response["value"] == "v"
+    finally:
+        server2.stop()
+
+
+def test_server_without_persist_path_starts_fresh_each_time(tmp_path):
+    port = free_port()
+    server = RaftServer(0, ("127.0.0.1", port), {})
+    server.start()
+    try:
+        wait_for_leader({0: server})
+        client_request(("127.0.0.1", port), {"type": "PUT", "key": "k", "value": "v"})
+    finally:
+        server.stop()
+
+    port2 = free_port()
+    server2 = RaftServer(0, ("127.0.0.1", port2), {})
+    assert server2.node.current_term == 0
+    assert server2.node.log.entries == []
