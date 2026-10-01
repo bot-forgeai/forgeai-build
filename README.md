@@ -1693,9 +1693,41 @@ waits past the old 2-second threshold and confirms the link still
 delivers messages afterward — verified to fail without the fix and
 pass with it before relying on it.
 
-Known limitations, left for a future PR rather than this one: no log
-persistence to disk (a restarted node rejoins with an empty log,
-relying on the other two for a healthy 3-node cluster), no snapshot/
-log-compaction, and reads are served from whichever node you ask
-rather than only from the leader, so a follower's `GET` can be
-momentarily stale during replication.
+`raftlite/storage.py` adds log persistence to disk: pass `--data-dir
+DIR` to `raftlite node` and `RaftServer` writes its `current_term`,
+`voted_for`, and log entries to `DIR/raft-<id>.json` after every
+state-changing step (on receipt of a peer RPC, before the reply goes
+out; on every client write) via a temp-file + fsync + `os.replace`
+atomic write — the same durability guarantee the Raft paper requires
+before a node may respond to a `RequestVote`/`AppendEntries` or
+acknowledge a client write. On restart, a node with `--data-dir` set
+reloads this file and resumes with its prior term/vote/log intact
+instead of starting blank. Omit `--data-dir` to keep the old
+in-memory-only behavior (the current default, and what every test not
+specifically about persistence still uses).
+
+A single-node cluster restarting from a persisted log needed one more
+fix: `commit_index`/`last_applied` are *not* persisted (per the paper
+— they're meant to be re-derived), so a restarted node's restored log
+entries would otherwise sit on disk correctly but never get re-applied
+to the in-memory KV store, since nothing re-triggers commit advancement
+on its own. `RaftNode._become_leader` now special-cases the no-peers
+case: winning its own (trivial, uncontested) election immediately
+commits and applies every entry already in its log. A real multi-node
+cluster restarting together doesn't hit this specific gap — the usual
+commit-advancement path naturally re-commits old entries as soon as any
+new write lands in the new leader's current term — but a cluster that
+restarts and receives no new writes at all leaves its pre-crash
+committed state durably on disk yet un-re-applied until one does. A
+full fix (the standard Raft technique: a leader appends a no-op entry
+in its own term immediately on election, anchoring the commit of
+everything before it) is possible but changes what gets committed on
+every election, not just a restart — left as a known follow-up rather
+than bundled into this PR, since it'd ripple into every existing
+election-related test's exact-output assertions.
+
+Known limitations, left for a future PR rather than this one: no
+snapshot/log-compaction (the persisted log grows forever), no no-op
+commit-anchor on election (see above), and reads are served from
+whichever node you ask rather than only from the leader, so a
+follower's `GET` can be momentarily stale during replication.

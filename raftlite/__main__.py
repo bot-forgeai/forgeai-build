@@ -22,10 +22,17 @@ def parse_peers(peers_arg):
 
 
 def cmd_node(args):
+    import os
+
     peers = parse_peers(args.peers)
-    server = RaftServer(args.id, (args.host, args.port), peers)
+    persist_path = None
+    if args.data_dir:
+        os.makedirs(args.data_dir, exist_ok=True)
+        persist_path = os.path.join(args.data_dir, f"raft-{args.id}.json")
+    server = RaftServer(args.id, (args.host, args.port), peers, persist_path=persist_path)
     server.start()
-    print(f"raftlite node {args.id} listening on {args.host}:{args.port}, peers={peers}")
+    persist_note = f", persisting to {persist_path}" if persist_path else " (in-memory only, no --data-dir)"
+    print(f"raftlite node {args.id} listening on {args.host}:{args.port}, peers={peers}{persist_note}")
     try:
         while True:
             time.sleep(1)
@@ -86,6 +93,9 @@ def main(argv=None):
     p_node.add_argument("--host", default="127.0.0.1")
     p_node.add_argument("--port", type=int, required=True)
     p_node.add_argument("--peers", default="", help="comma-separated id=host:port list of other nodes")
+    p_node.add_argument("--data-dir", default=None,
+                         help="directory to persist this node's term/vote/log to; "
+                              "omit for in-memory-only (state lost on restart)")
     p_node.set_defaults(func=cmd_node)
 
     p_put = sub.add_parser("put", help="write a key/value pair via a running node")

@@ -94,6 +94,16 @@ class RaftNode:
         self.elapsed = 0
         self.next_index = {p: self.log.last_index() + 1 for p in self.peers}
         self.match_index = {p: 0 for p in self.peers}
+        if not self.peers:
+            # A single-node cluster has no other replica to coordinate
+            # commit safety with, so every entry already in the log --
+            # including ones restored from disk after a restart, whose
+            # commit_index was never persisted -- is trivially committed
+            # the instant this node becomes its own leader. Without this,
+            # a restarted single-node server would durably keep its old
+            # entries but never re-apply them to the KV store.
+            self.commit_index = self.log.last_index()
+            self._apply_committed()
         return self._send_append_entries_all()
 
     def _send_append_entries_all(self):

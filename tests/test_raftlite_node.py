@@ -1,6 +1,7 @@
 import random
 
 from raftlite.node import RaftNode, FOLLOWER, CANDIDATE, LEADER
+from raftlite.log import LogEntry
 
 
 def make_cluster(n, rng_seed=0, **kwargs):
@@ -88,6 +89,27 @@ def test_single_node_cluster_self_elects():
             break
         msgs = nodes[0].tick()
     assert nodes[0].role == LEADER
+
+
+def test_single_node_cluster_reapplies_preexisting_log_on_election():
+    # Simulates a single-node cluster restarting with a log already restored
+    # from disk (e.g. via raftlite.storage.load_state): the entries are
+    # present before any election happens, unlike the normal case where
+    # propose() appends them live.
+    node = RaftNode(0, [])
+    node.log.append(LogEntry(1, {"op": "put", "key": "a", "value": 1}))
+    node.log.append(LogEntry(1, {"op": "put", "key": "b", "value": 2}))
+    assert node.commit_index == 0
+    assert node.applied_commands == []
+
+    node._start_election()
+
+    assert node.role == LEADER
+    assert node.commit_index == 2
+    assert node.applied_commands == [
+        {"op": "put", "key": "a", "value": 1},
+        {"op": "put", "key": "b", "value": 2},
+    ]
 
 
 def test_log_replication_commits_on_majority():
