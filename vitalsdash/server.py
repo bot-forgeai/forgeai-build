@@ -49,12 +49,16 @@ async function main() {{
   const W = 700, H = 140, PAD = 20;
   const HIST_W = 260, HIST_H = 140, HIST_PAD = 20, HIST_BINS = 10;
 
-  function chartRow(label, values, threshold, group) {{
+  function chartRow(label, values, threshold, group, times) {{
     const min = Math.min(...values, ...(threshold !== undefined ? [threshold] : []));
     const max = Math.max(...values, ...(threshold !== undefined ? [threshold] : []));
     const range = (max - min) || 1;
+    // x by wall-clock time so logging gaps show as gaps; falls back to row index
+    const t0 = times ? times[0] : 0;
+    const tSpan = times ? times[times.length - 1] - t0 : 0;
     const toXY = (v, i) => {{
-      const x = PAD + (i / Math.max(values.length - 1, 1)) * (W - 2 * PAD);
+      const frac = tSpan > 0 ? (times[i] - t0) / tSpan : i / Math.max(values.length - 1, 1);
+      const x = PAD + frac * (W - 2 * PAD);
       const y = H - PAD - ((v - min) / range) * (H - 2 * PAD);
       return [x, y];
     }};
@@ -160,7 +164,8 @@ async function main() {{
       const threshold = thresholds[metric];
       const label = comparing ? s.label : `${{s.records[0] ? s.records[0].timestamp : ''}} — ${{s.records.length ? s.records[s.records.length - 1].timestamp : ''}}`;
       const group = (s.group && s.group.values[metric]) ? {{labels: s.group.labels, values: s.group.values[metric], column: s.group.column}} : null;
-      inner += chartRow(label, values, threshold, group);
+      const times = s.records.map(r => Date.parse(r.timestamp));
+      inner += chartRow(label, values, threshold, group, times.every(t => !isNaN(t)) ? times : null);
     }}
     div.innerHTML = inner;
     container.appendChild(div);
