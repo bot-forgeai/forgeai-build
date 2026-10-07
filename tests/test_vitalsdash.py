@@ -315,3 +315,11 @@ def test_version():
     )
     assert result.returncode == 0
     assert "0.1.0" in result.stdout or "0.1" in result.stdout
+
+
+def test_dashboard_page_plots_x_by_timestamp(running_server):
+    port = running_server.server_address[1]
+    with urllib.request.urlopen(f"http://127.0.0.1:{port}/") as resp:
+        html = resp.read().decode()
+    assert "Date.parse(r.timestamp)" in html
+    assert "(times[i] - t0) / tSpan" in html
