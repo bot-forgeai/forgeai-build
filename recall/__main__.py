@@ -48,6 +48,13 @@ def build_arg_parser():
     add_p.add_argument("back", help="the answer side")
 
     sub.add_parser("review", help="review all cards currently due")
+    show_p = sub.add_parser(
+        "show", help="print due cards (front and back) without prompting; for non-interactive use"
+    )
+    show_p.add_argument(
+        "--rate", type=int, choices=range(6), metavar="0-5", default=None,
+        help="also record this recall quality for every card shown",
+    )
     sub.add_parser("stats", help="show deck size and how many cards are due")
     sub.add_parser("list", help="preview all cards sorted by due date, without reviewing them")
     sub.add_parser("decks", help="list every deck registered so far, with its card counts")
@@ -102,6 +109,22 @@ def run_review(args, input_fn=input, print_fn=print):
         apply_review(card, quality)
     save_deck(args.deck, cards)
     print_fn(f"\nReviewed {len(due)} card(s).")
+
+
+def run_show(args, print_fn=print):
+    cards = load_deck(args.deck)
+    due = due_cards(cards)
+    if not due:
+        print_fn("Nothing due for review.")
+        return
+    for card in due:
+        print_fn(f"Q: {card['front']}")
+        print_fn(f"A: {card['back']}\n")
+        if args.rate is not None:
+            apply_review(card, args.rate)
+    if args.rate is not None:
+        save_deck(args.deck, cards)
+        print_fn(f"Rated {len(due)} card(s) {args.rate}.")
 
 
 def run_list(args, print_fn=print, today=None):
@@ -183,6 +206,10 @@ def main(argv=None):
     elif args.command == "review":
         run_review(args)
         register_current_deck(args)
+    elif args.command == "show":
+        run_show(args)
+        if args.rate is not None:
+            register_current_deck(args)
     elif args.command == "stats":
         run_stats(args)
     elif args.command == "list":
