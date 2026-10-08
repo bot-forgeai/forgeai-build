@@ -13,6 +13,7 @@ from recall.__main__ import (
     run_leeches,
     run_list,
     run_review,
+    run_show,
     run_stats,
 )
 from recall.storage import (
@@ -339,3 +340,26 @@ def test_version():
     )
     assert result.returncode == 0
     assert "0.1.0" in result.stdout or "0.1" in result.stdout
+
+
+def test_cli_show_prints_due_backs_without_changing_deck(tmp_path):
+    deck = str(tmp_path / "deck.json")
+    cards = []
+    add_card(cards, "capital of France?", "Paris")
+    save_deck(deck, cards)
+    args = build_arg_parser().parse_args(["--deck", deck, "show"])
+    outputs = []
+    run_show(args, print_fn=outputs.append)
+    assert "Q: capital of France?" in outputs
+    assert "A: Paris\n" in outputs
+    assert load_deck(deck) == cards
+
+
+def test_cli_show_rate_reschedules_due_cards(tmp_path):
+    deck = str(tmp_path / "deck.json")
+    cards = []
+    add_card(cards, "q", "a")
+    save_deck(deck, cards)
+    args = build_arg_parser().parse_args(["--deck", deck, "show", "--rate", "5"])
+    run_show(args, print_fn=lambda *_: None)
+    assert due_cards(load_deck(deck)) == []
