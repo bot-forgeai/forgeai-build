@@ -30,7 +30,8 @@ def cmd_add(args):
 def cmd_add_dir(args):
     index = load_or_new_index(args.index)
     extensions = tuple(e if e.startswith(".") else f".{e}" for e in args.ext.split(","))
-    count = 0
+    count = unchanged = 0
+    seen = set()
     for root, _dirs, files in os.walk(args.directory):
         for name in sorted(files):
             if not name.endswith(extensions):
@@ -39,10 +40,25 @@ def cmd_add_dir(args):
             with open(path, "r", encoding="utf-8", errors="replace") as f:
                 text = f.read()
             doc_id = os.path.relpath(path)
+            seen.add(doc_id)
+            if index.doc_texts.get(doc_id) == text:
+                unchanged += 1
+                continue
             index.add_document(doc_id, text)
             count += 1
+    pruned = 0
+    if args.prune:
+        prefix = os.path.relpath(args.directory).rstrip(os.sep) + os.sep
+        for doc_id in [d for d in index.doc_lengths if d.startswith(prefix) and d not in seen]:
+            index.remove_document(doc_id)
+            pruned += 1
     save_index(index, args.index)
-    print(f"indexed {count} file(s)")
+    msg = f"indexed {count} file(s)"
+    if unchanged:
+        msg += f", {unchanged} unchanged"
+    if args.prune:
+        msg += f", {pruned} pruned"
+    print(msg)
 
 
 def cmd_remove(args):
@@ -90,6 +106,7 @@ def build_parser():
     p_add_dir = sub.add_parser("add-dir", help="index every matching file under a directory")
     p_add_dir.add_argument("directory")
     p_add_dir.add_argument("--ext", default=".txt,.md", help="comma-separated extensions to index (default: .txt,.md)")
+    p_add_dir.add_argument("--prune", action="store_true", help="remove indexed docs under the directory whose files no longer exist")
     p_add_dir.set_defaults(func=cmd_add_dir)
 
     p_remove = sub.add_parser("remove", help="remove a document from the index by its doc id (path)")

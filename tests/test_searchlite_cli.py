@@ -138,3 +138,23 @@ def test_version():
     )
     assert result.returncode == 0
     assert "0.1.0" in result.stdout or "0.1" in result.stdout
+
+
+def test_add_dir_skips_unchanged_and_prunes_deleted(tmp_path, capsys, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "a.md").write_text("alpha text")
+    (docs / "b.md").write_text("beta text")
+    main(["--index", "i.json", "add-dir", "docs"])
+    capsys.readouterr()
+    (docs / "b.md").unlink()
+    (docs / "a.md").write_text("alpha changed")
+    main(["--index", "i.json", "add-dir", "docs"])
+    assert "indexed 1 file(s)" in capsys.readouterr().out
+    main(["--index", "i.json", "add-dir", "docs"])
+    assert "indexed 0 file(s), 1 unchanged" in capsys.readouterr().out
+    main(["--index", "i.json", "add-dir", "docs", "--prune"])
+    assert "1 pruned" in capsys.readouterr().out
+    main(["--index", "i.json", "stats"])
+    assert "documents: 1" in capsys.readouterr().out
