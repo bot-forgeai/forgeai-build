@@ -328,9 +328,9 @@ def test_dashboard_page_plots_x_by_timestamp(running_server):
 def test_find_gaps_flags_stalled_logging():
     recs = [{"timestamp": t} for t in (
         "2026-10-09T00:00:00", "2026-10-09T03:00:00", "2026-10-09T06:00:00",
-        "2026-10-09T09:00:00", "2026-10-09T18:00:00", "2026-10-09T21:00:00")]
+        "2026-10-09T09:00:00", "2026-10-09T20:00:00", "2026-10-09T23:00:00")]
     assert find_gaps(recs) == [
-        {"start": "2026-10-09T09:00:00", "end": "2026-10-09T18:00:00", "hours": 9.0}
+        {"start": "2026-10-09T09:00:00", "end": "2026-10-09T20:00:00", "hours": 11.0}
     ]
 
 
