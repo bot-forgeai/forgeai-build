@@ -10,6 +10,8 @@ log files occasionally pick up a stray malformed line.
 """
 
 import csv
+import statistics
+from datetime import datetime
 
 
 def _is_float(value):
@@ -114,3 +116,30 @@ def load_groups(csv_path, group_by=None):
         name: [maxima[g].get(name) for g in order] for name in metric_names
     }
     return group_column, order, per_metric
+
+
+def find_gaps(records, factor=3.0):
+    """Find stretches where logging stalled.
+
+    A gap is a pair of consecutive records whose timestamps are more than
+    `factor` times the median interval apart. Returns a list of
+    {"start": str, "end": str, "hours": float}. Needs at least 3 parseable
+    ISO timestamps (to have a meaningful median); otherwise returns [].
+    """
+    stamps = []
+    for r in records:
+        try:
+            stamps.append((r["timestamp"], datetime.fromisoformat(r["timestamp"])))
+        except ValueError:
+            continue
+    if len(stamps) < 3:
+        return []
+    deltas = [(b[1] - a[1]).total_seconds() for a, b in zip(stamps, stamps[1:])]
+    median = statistics.median(deltas)
+    if median <= 0:
+        return []
+    return [
+        {"start": a[0], "end": b[0], "hours": round(d / 3600, 2)}
+        for (a, b), d in zip(zip(stamps, stamps[1:]), deltas)
+        if d > factor * median
+    ]

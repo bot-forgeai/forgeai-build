@@ -5,7 +5,7 @@ import urllib.request
 import pytest
 
 from vitalsdash.__main__ import build_arg_parser, parse_thresholds
-from vitalsdash.data import load_groups, load_vitals
+from vitalsdash.data import find_gaps, load_groups, load_vitals
 from vitalsdash.server import make_server
 
 SAMPLE_CSV = os.path.join(os.path.dirname(__file__), "..", "vitalsdash", "sample", "demo.csv")
@@ -323,3 +323,26 @@ def test_dashboard_page_plots_x_by_timestamp(running_server):
         html = resp.read().decode()
     assert "Date.parse(r.timestamp)" in html
     assert "(times[i] - t0) / tSpan" in html
+
+
+def test_find_gaps_flags_stalled_logging():
+    recs = [{"timestamp": t} for t in (
+        "2026-10-09T00:00:00", "2026-10-09T03:00:00", "2026-10-09T06:00:00",
+        "2026-10-09T09:00:00", "2026-10-09T18:00:00", "2026-10-09T21:00:00")]
+    assert find_gaps(recs) == [
+        {"start": "2026-10-09T09:00:00", "end": "2026-10-09T18:00:00", "hours": 9.0}
+    ]
+
+
+def test_find_gaps_empty_for_even_or_unparseable_data():
+    even = [{"timestamp": f"2026-10-09T0{h}:00:00"} for h in range(5)]
+    assert find_gaps(even) == []
+    assert find_gaps([{"timestamp": "x"}] * 5) == []
+    assert find_gaps(even[:2]) == []
+
+
+def test_api_vitals_series_includes_gaps(running_server):
+    port = running_server.server_address[1]
+    with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/vitals") as resp:
+        payload = json.loads(resp.read())
+    assert payload["series"][0]["gaps"] == []
