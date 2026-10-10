@@ -10,7 +10,7 @@ import json
 import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from .data import load_groups, load_vitals
+from .data import find_gaps, load_groups, load_vitals
 
 PAGE_TEMPLATE = """<!DOCTYPE html>
 <html>
@@ -34,6 +34,7 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
   .charts-row {{ display: flex; flex-wrap: wrap; align-items: flex-end; }}
   .series-block {{ margin-bottom: 0.5rem; }}
   .series-label {{ font-size: 0.8rem; color: #888; margin: 0 0 0.2rem 0; }}
+  .gap-note {{ color: #fa0; font-size: 0.8rem; margin: 0.2rem 0; }}
   .series-label.breached {{ color: #f66; }}
 </style>
 </head>
@@ -154,6 +155,15 @@ async function main() {{
     }}
   }}
 
+  for (const s of series) {{
+    for (const g of (s.gaps || [])) {{
+      const note = document.createElement('p');
+      note.className = 'gap-note';
+      note.textContent = `logging gap in ${{s.label}}: ${{g.start}} → ${{g.end}} (${{g.hours}}h)`;
+      container.appendChild(note);
+    }}
+  }}
+
   for (const metric of metricOrder) {{
     const div = document.createElement('div');
     div.className = 'chart';
@@ -192,6 +202,7 @@ def _make_handler(csv_path, thresholds, compare_path, group_by):
                         "label": os.path.basename(csv_path),
                         "metrics": metric_names,
                         "records": records,
+                        "gaps": find_gaps(records),
                         "group": {
                             "column": group_column,
                             "labels": group_labels,
@@ -207,6 +218,7 @@ def _make_handler(csv_path, thresholds, compare_path, group_by):
                             "label": os.path.basename(compare_path),
                             "metrics": c_metrics,
                             "records": c_records,
+                            "gaps": find_gaps(c_records),
                             "group": {
                                 "column": c_group_column,
                                 "labels": c_group_labels,
