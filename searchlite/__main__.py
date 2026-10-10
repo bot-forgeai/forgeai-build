@@ -21,7 +21,7 @@ def cmd_add(args):
             sys.exit(1)
         with open(path, "r", encoding="utf-8", errors="replace") as f:
             text = f.read()
-        doc_id = os.path.relpath(path)
+        doc_id = os.path.relpath(path, args.base)
         index.add_document(doc_id, text)
         print(f"indexed {doc_id!r}")
     save_index(index, args.index)
@@ -39,7 +39,7 @@ def cmd_add_dir(args):
             path = os.path.join(root, name)
             with open(path, "r", encoding="utf-8", errors="replace") as f:
                 text = f.read()
-            doc_id = os.path.relpath(path)
+            doc_id = os.path.relpath(path, args.base)
             seen.add(doc_id)
             if index.doc_texts.get(doc_id) == text:
                 unchanged += 1
@@ -48,7 +48,7 @@ def cmd_add_dir(args):
             count += 1
     pruned = 0
     if args.prune:
-        prefix = os.path.relpath(args.directory).rstrip(os.sep) + os.sep
+        prefix = os.path.relpath(args.directory, args.base).rstrip(os.sep) + os.sep
         for doc_id in [d for d in index.doc_lengths if d.startswith(prefix) and d not in seen]:
             index.remove_document(doc_id)
             pruned += 1
@@ -97,6 +97,7 @@ def build_parser():
     parser = argparse.ArgumentParser(prog="searchlite", description="tiny full-text search engine (inverted index + TF-IDF)")
     parser.add_argument("--version", action="version", version=_get_package_version())
     parser.add_argument("--index", default="searchlite.json", help="path to the index file (default: searchlite.json)")
+    parser.add_argument("--base", default=None, help="directory doc ids are made relative to (default: current directory), so ids don't depend on where you run from")
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_add = sub.add_parser("add", help="index one or more text files")

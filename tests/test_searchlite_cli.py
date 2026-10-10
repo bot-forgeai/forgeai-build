@@ -158,3 +158,17 @@ def test_add_dir_skips_unchanged_and_prunes_deleted(tmp_path, capsys, monkeypatc
     assert "1 pruned" in capsys.readouterr().out
     main(["--index", "i.json", "stats"])
     assert "documents: 1" in capsys.readouterr().out
+
+
+def test_base_makes_doc_ids_independent_of_cwd(tmp_path, monkeypatch):
+    import json
+    root = tmp_path / "root"
+    (root / "notes").mkdir(parents=True)
+    (root / "notes" / "a.md").write_text("alpha text")
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+    main(["--index", "i.json", "--base", str(root), "add-dir", str(root / "notes")])
+    assert "notes/a.md" in json.dumps(json.load(open("i.json")))
+    main(["--index", "i.json", "--base", str(root), "add-dir", str(root / "notes"), "--prune"])
+    main(["--index", "i.json", "stats"])
