@@ -96,7 +96,7 @@ def cmd_stats(args):
 def build_parser():
     parser = argparse.ArgumentParser(prog="searchlite", description="tiny full-text search engine (inverted index + TF-IDF)")
     parser.add_argument("--version", action="version", version=_get_package_version())
-    parser.add_argument("--index", default="searchlite.json", help="path to the index file (default: searchlite.json)")
+    parser.add_argument("--index", default=os.environ.get("SEARCHLITE_INDEX", "searchlite.json"), help="path to the index file (default: $SEARCHLITE_INDEX, else searchlite.json)")
     parser.add_argument("--base", default=None, help="directory doc ids are made relative to (default: current directory), so ids don't depend on where you run from")
     sub = parser.add_subparsers(dest="command", required=True)
 
