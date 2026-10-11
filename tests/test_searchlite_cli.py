@@ -172,3 +172,12 @@ def test_base_makes_doc_ids_independent_of_cwd(tmp_path, monkeypatch):
     assert "notes/a.md" in json.dumps(json.load(open("i.json")))
     main(["--index", "i.json", "--base", str(root), "add-dir", str(root / "notes"), "--prune"])
     main(["--index", "i.json", "stats"])
+
+
+def test_index_env_var_is_default(tmp_path, monkeypatch, capsys):
+    (tmp_path / "a.txt").write_text("alpha text")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("SEARCHLITE_INDEX", str(tmp_path / "env.json"))
+    main(["add", "a.txt"])
+    assert (tmp_path / "env.json").exists()
+    assert not (tmp_path / "searchlite.json").exists()
