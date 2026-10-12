@@ -5,7 +5,7 @@ import urllib.request
 import pytest
 
 from vitalsdash.__main__ import build_arg_parser, parse_thresholds
-from vitalsdash.data import find_gaps, load_groups, load_vitals
+from vitalsdash.data import filter_last_days, find_gaps, load_groups, load_vitals
 from vitalsdash.server import make_server
 
 SAMPLE_CSV = os.path.join(os.path.dirname(__file__), "..", "vitalsdash", "sample", "demo.csv")
@@ -346,3 +346,26 @@ def test_api_vitals_series_includes_gaps(running_server):
     with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/vitals") as resp:
         payload = json.loads(resp.read())
     assert payload["series"][0]["gaps"] == []
+
+
+def test_filter_last_days_windows_from_newest_record():
+    recs = [{"timestamp": f"2026-10-{d:02d}T00:00:00"} for d in (1, 5, 9, 10)]
+    kept = filter_last_days(recs, 2)
+    assert [r["timestamp"][8:10] for r in kept] == ["09", "10"]
+    assert filter_last_days(recs, None) is recs
+
+
+def test_api_vitals_last_days_filters_records(tmp_path):
+    p = tmp_path / "v.csv"
+    p.write_text("timestamp,temp_c\n2026-10-01T00:00:00,50\n2026-10-10T00:00:00,51\n2026-10-11T00:00:00,52\n")
+    server = make_server(str(p), port=0, last_days=2)
+    import threading
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        port = server.server_address[1]
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/vitals") as resp:
+            data = json.load(resp)
+        assert len(data["records"]) == 2
+    finally:
+        server.shutdown()
+        server.server_close()
