@@ -11,7 +11,7 @@ log files occasionally pick up a stray malformed line.
 
 import csv
 import statistics
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 def _is_float(value):
@@ -143,3 +143,24 @@ def find_gaps(records, factor=3.0):
         for (a, b), d in zip(zip(stamps, stamps[1:]), deltas)
         if d > factor * median
     ]
+
+
+def filter_last_days(records, days):
+    """Keep records within `days` of the newest parseable timestamp.
+
+    Records with unparseable timestamps are kept, so a stray bad row
+    doesn't silently change the window. days=None returns records as-is.
+    """
+    if days is None:
+        return records
+    parsed = []
+    for r in records:
+        try:
+            parsed.append(datetime.fromisoformat(r["timestamp"]))
+        except ValueError:
+            parsed.append(None)
+    stamps = [t for t in parsed if t is not None]
+    if not stamps:
+        return records
+    cutoff = max(stamps) - timedelta(days=days)
+    return [r for r, t in zip(records, parsed) if t is None or t >= cutoff]

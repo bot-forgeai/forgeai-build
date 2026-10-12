@@ -10,7 +10,7 @@ import json
 import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from .data import find_gaps, load_groups, load_vitals
+from .data import filter_last_days, find_gaps, load_groups, load_vitals
 
 PAGE_TEMPLATE = """<!DOCTYPE html>
 <html>
@@ -188,7 +188,7 @@ main();
 """
 
 
-def _make_handler(csv_path, thresholds, compare_path, group_by):
+def _make_handler(csv_path, thresholds, compare_path, group_by, last_days=None):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):
             pass  # keep stdout quiet on a resource-constrained host
@@ -196,6 +196,7 @@ def _make_handler(csv_path, thresholds, compare_path, group_by):
         def do_GET(self):
             if self.path == "/api/vitals":
                 metric_names, records = load_vitals(csv_path)
+                records = filter_last_days(records, last_days)
                 group_column, group_labels, group_values = load_groups(csv_path, group_by=group_by)
                 series = [
                     {
@@ -212,6 +213,7 @@ def _make_handler(csv_path, thresholds, compare_path, group_by):
                 ]
                 if compare_path:
                     c_metrics, c_records = load_vitals(compare_path)
+                    c_records = filter_last_days(c_records, last_days)
                     c_group_column, c_group_labels, c_group_values = load_groups(compare_path, group_by=group_by)
                     series.append(
                         {
@@ -254,7 +256,7 @@ def _make_handler(csv_path, thresholds, compare_path, group_by):
     return Handler
 
 
-def make_server(csv_path, host="127.0.0.1", port=8099, thresholds=None, compare_path=None, group_by=None):
+def make_server(csv_path, host="127.0.0.1", port=8099, thresholds=None, compare_path=None, group_by=None, last_days=None):
     """Build (but do not start) a ThreadingHTTPServer serving csv_path.
 
     thresholds, if given, maps metric name -> a value above which the
@@ -268,5 +270,5 @@ def make_server(csv_path, host="127.0.0.1", port=8099, thresholds=None, compare_
     grouped by it automatically.
     """
     return ThreadingHTTPServer(
-        (host, port), _make_handler(csv_path, thresholds or {}, compare_path, group_by)
+        (host, port), _make_handler(csv_path, thresholds or {}, compare_path, group_by, last_days)
     )

@@ -51,6 +51,13 @@ def build_arg_parser():
         "auto-detecting it; needed when the CSV has more than one "
         "non-numeric column so auto-detect can't pick one unambiguously",
     )
+    parser.add_argument(
+        "--last-days",
+        type=float,
+        metavar="N",
+        help="only chart records within N days of the newest timestamp "
+        "(per-boot bar chart still covers the whole file)",
+    )
     return parser
 
 
@@ -65,6 +72,7 @@ def main():
         thresholds=thresholds,
         compare_path=args.compare,
         group_by=args.bar_by,
+        last_days=args.last_days,
     )
     print(f"vitalsdash serving {args.csv} at http://{args.host}:{args.port}")
     try:
