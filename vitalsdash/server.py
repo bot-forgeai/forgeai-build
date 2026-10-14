@@ -46,11 +46,12 @@ async function main() {{
   const res = await fetch('/api/vitals');
   const data = await res.json();
   const thresholds = data.thresholds || {{}};
+  const below = data.below || [];
   const container = document.getElementById('charts');
   const W = 700, H = 140, PAD = 20;
   const HIST_W = 260, HIST_H = 140, HIST_PAD = 20, HIST_BINS = 10;
 
-  function chartRow(label, values, threshold, group, times) {{
+  function chartRow(metricName, label, values, threshold, group, times) {{
     const min = Math.min(...values, ...(threshold !== undefined ? [threshold] : []));
     const max = Math.max(...values, ...(threshold !== undefined ? [threshold] : []));
     const range = (max - min) || 1;
@@ -66,7 +67,9 @@ async function main() {{
 
     const points = values.map((v, i) => toXY(v, i).map(n => n.toFixed(1)).join(',')).join(' ');
     const latest = values[values.length - 1];
-    const breached = threshold !== undefined && latest > threshold;
+    const isBelow = below.includes(metricName);
+    const isOver = v => isBelow ? v < threshold : v > threshold;
+    const breached = threshold !== undefined && isOver(latest);
 
     let thresholdSvg = '';
     if (threshold !== undefined) {{
@@ -77,13 +80,13 @@ async function main() {{
 
     const circles = values.map((v, i) => {{
       const [x, y] = toXY(v, i);
-      const cls = threshold !== undefined && v > threshold ? 'over' : 'under';
+      const cls = threshold !== undefined && isOver(v) ? 'over' : 'under';
       return `<circle class="${{cls}}" cx="${{x.toFixed(1)}}" cy="${{y.toFixed(1)}}" r="1.8" />`;
     }}).join('');
 
     return `
       <div class="series-block">
-        <h3 class="series-label ${{breached ? 'breached' : ''}}">${{label}} (min ${{min.toFixed(2)}}, max ${{max.toFixed(2)}}, latest ${{latest}}${{breached ? ' — over threshold' : ''}})</h3>
+        <h3 class="series-label ${{breached ? 'breached' : ''}}">${{label}} (min ${{min.toFixed(2)}}, max ${{max.toFixed(2)}}, latest ${{latest}}${{breached ? (isBelow ? ' — under threshold' : ' — over threshold') : ''}})</h3>
         <div class="charts-row">
           <svg width="${{W}}" height="${{H}}">
             ${{thresholdSvg}}
@@ -175,7 +178,7 @@ async function main() {{
       const label = comparing ? s.label : `${{s.records[0] ? s.records[0].timestamp : ''}} — ${{s.records.length ? s.records[s.records.length - 1].timestamp : ''}}`;
       const group = (s.group && s.group.values[metric]) ? {{labels: s.group.labels, values: s.group.values[metric], column: s.group.column}} : null;
       const times = s.records.map(r => Date.parse(r.timestamp));
-      inner += chartRow(label, values, threshold, group, times.every(t => !isNaN(t)) ? times : null);
+      inner += chartRow(metric, label, values, threshold, group, times.every(t => !isNaN(t)) ? times : null);
     }}
     div.innerHTML = inner;
     container.appendChild(div);
@@ -188,7 +191,7 @@ main();
 """
 
 
-def _make_handler(csv_path, thresholds, compare_path, group_by, last_days=None):
+def _make_handler(csv_path, thresholds, compare_path, group_by, last_days=None, below=()):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):
             pass  # keep stdout quiet on a resource-constrained host
@@ -233,6 +236,7 @@ def _make_handler(csv_path, thresholds, compare_path, group_by, last_days=None):
                         "metrics": metric_names,
                         "records": records,
                         "thresholds": thresholds,
+                        "below": list(below),
                         "series": series,
                     }
                 ).encode()
@@ -256,7 +260,7 @@ def _make_handler(csv_path, thresholds, compare_path, group_by, last_days=None):
     return Handler
 
 
-def make_server(csv_path, host="127.0.0.1", port=8099, thresholds=None, compare_path=None, group_by=None, last_days=None):
+def make_server(csv_path, host="127.0.0.1", port=8099, thresholds=None, compare_path=None, group_by=None, last_days=None, below=()):
     """Build (but do not start) a ThreadingHTTPServer serving csv_path.
 
     thresholds, if given, maps metric name -> a value above which the
@@ -267,8 +271,9 @@ def make_server(csv_path, host="127.0.0.1", port=8099, thresholds=None, compare_
     given, names the column to bar-chart metrics by (needed when a CSV
     has more than one non-numeric column, so auto-detect can't pick
     one); otherwise a CSV with exactly one non-numeric column is
-    grouped by it automatically.
+    grouped by it automatically. below names metrics in thresholds that
+    breach when the value falls under the threshold (e.g. free memory).
     """
     return ThreadingHTTPServer(
-        (host, port), _make_handler(csv_path, thresholds or {}, compare_path, group_by, last_days)
+        (host, port), _make_handler(csv_path, thresholds or {}, compare_path, group_by, last_days, below)
     )
