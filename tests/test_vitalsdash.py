@@ -369,3 +369,11 @@ def test_api_vitals_last_days_filters_records(tmp_path):
     finally:
         server.shutdown()
         server.server_close()
+
+
+def test_parse_thresholds_accepts_below_syntax():
+    from vitalsdash.__main__ import parse_below_metrics
+
+    specs = ["mem_available_mb<100", "temp_c=70"]
+    assert parse_thresholds(specs) == {"mem_available_mb": 100.0, "temp_c": 70.0}
+    assert parse_below_metrics(specs) == ["mem_available_mb"]

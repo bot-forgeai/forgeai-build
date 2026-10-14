@@ -12,14 +12,29 @@ def _get_package_version():
 
 
 def parse_thresholds(specs):
-    """Turn ["temp_c=70", "load1=4"] into {"temp_c": 70.0, "load1": 4.0}."""
+    """Turn ["temp_c=70", "load1=4"] into {"temp_c": 70.0, "load1": 4.0}.
+
+    "metric<value" is accepted too (breach when the value falls below);
+    the value lands in the same dict, and parse_below_metrics names it.
+    """
     thresholds = {}
     for spec in specs or []:
-        if "=" not in spec:
-            raise ValueError(f"--threshold expects metric=value, got {spec!r}")
-        name, _, value = spec.partition("=")
+        name, _, value = _split_spec(spec)
         thresholds[name] = float(value)
     return thresholds
+
+
+def parse_below_metrics(specs):
+    """Names of metrics whose threshold was given as "metric<value"."""
+    return [_split_spec(spec)[0] for spec in specs or [] if _split_spec(spec)[1] == "<"]
+
+
+def _split_spec(spec):
+    for op in ("<", "="):
+        if op in spec:
+            name, _, value = spec.partition(op)
+            return name, op, value
+    raise ValueError(f"--threshold expects metric=value or metric<value, got {spec!r}")
 
 
 def build_arg_parser():
@@ -36,7 +51,9 @@ def build_arg_parser():
         action="append",
         metavar="METRIC=VALUE",
         help="highlight a metric's chart when its latest value exceeds VALUE "
-        "(repeatable, e.g. --threshold temp_c=70 --threshold load1=4)",
+        "(repeatable, e.g. --threshold temp_c=70 --threshold load1=4); "
+        "use METRIC<VALUE to flag a value falling below it "
+        "(e.g. --threshold mem_available_mb<100)",
     )
     parser.add_argument(
         "--compare",
@@ -70,6 +87,7 @@ def main():
         host=args.host,
         port=args.port,
         thresholds=thresholds,
+        below=parse_below_metrics(args.threshold),
         compare_path=args.compare,
         group_by=args.bar_by,
         last_days=args.last_days,
