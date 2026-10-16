@@ -363,3 +363,16 @@ def test_cli_show_rate_reschedules_due_cards(tmp_path):
     args = build_arg_parser().parse_args(["--deck", deck, "show", "--rate", "5"])
     run_show(args, print_fn=lambda *_: None)
     assert due_cards(load_deck(deck)) == []
+
+
+def test_cli_show_limit_caps_cards_shown_and_rated(tmp_path):
+    deck = str(tmp_path / "deck.json")
+    cards = []
+    for n in range(3):
+        add_card(cards, f"q{n}", f"a{n}")
+    save_deck(deck, cards)
+    args = build_arg_parser().parse_args(["--deck", deck, "show", "--limit", "1", "--rate", "5"])
+    outputs = []
+    run_show(args, print_fn=outputs.append)
+    assert sum(o.startswith("Q: ") for o in outputs) == 1
+    assert len(due_cards(load_deck(deck))) == 2
