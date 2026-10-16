@@ -55,6 +55,10 @@ def build_arg_parser():
         "--rate", type=int, choices=range(6), metavar="0-5", default=None,
         help="also record this recall quality for every card shown",
     )
+    show_p.add_argument(
+        "--limit", type=int, default=None, metavar="N",
+        help="show (and rate) at most N due cards, so --rate doesn't grade cards you haven't seen",
+    )
     sub.add_parser("stats", help="show deck size and how many cards are due")
     sub.add_parser("list", help="preview all cards sorted by due date, without reviewing them")
     sub.add_parser("decks", help="list every deck registered so far, with its card counts")
@@ -117,6 +121,8 @@ def run_show(args, print_fn=print):
     if not due:
         print_fn("Nothing due for review.")
         return
+    if args.limit is not None:
+        due = due[:max(args.limit, 0)]
     for card in due:
         print_fn(f"Q: {card['front']}")
         print_fn(f"A: {card['back']}\n")
