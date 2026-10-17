@@ -181,3 +181,27 @@ def test_index_env_var_is_default(tmp_path, monkeypatch, capsys):
     main(["add", "a.txt"])
     assert (tmp_path / "env.json").exists()
     assert not (tmp_path / "searchlite.json").exists()
+
+
+def test_watch_picks_up_changes_between_scans(tmp_path, capsys, monkeypatch):
+    import searchlite.__main__ as cli
+    monkeypatch.chdir(tmp_path)
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "a.md").write_text("alpha text")
+    (docs / "b.md").write_text("beta text")
+
+    def fake_sleep(_seconds):
+        # runs between scan 1 and scan 2: add one file, delete another
+        (docs / "c.md").write_text("gamma text")
+        (docs / "b.md").unlink()
+
+    monkeypatch.setattr(cli.time, "sleep", fake_sleep)
+    main(["--index", "i.json", "watch", "docs", "--max-runs", "2"])
+    out = capsys.readouterr().out
+    assert "synced: 2 indexed, 0 pruned" in out
+    assert "synced: 1 indexed, 1 pruned" in out
+    main(["--index", "i.json", "search", "gamma"])
+    assert "docs/c.md" in capsys.readouterr().out
+    main(["--index", "i.json", "search", "beta"])
+    assert "no results" in capsys.readouterr().out

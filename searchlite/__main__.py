@@ -1,6 +1,7 @@
 import argparse
 import os
 import sys
+import time
 from importlib.metadata import version as _get_version, PackageNotFoundError
 
 from searchlite.storage import load_or_new_index, save_index
@@ -27,31 +28,39 @@ def cmd_add(args):
     save_index(index, args.index)
 
 
-def cmd_add_dir(args):
-    index = load_or_new_index(args.index)
-    extensions = tuple(e if e.startswith(".") else f".{e}" for e in args.ext.split(","))
-    count = unchanged = 0
+def _sync_dir(index, directory, base, extensions, prune):
+    """Bring the index in line with directory; returns (indexed, unchanged, pruned)."""
+    count = unchanged = pruned = 0
     seen = set()
-    for root, _dirs, files in os.walk(args.directory):
+    for root, _dirs, files in os.walk(directory):
         for name in sorted(files):
             if not name.endswith(extensions):
                 continue
             path = os.path.join(root, name)
             with open(path, "r", encoding="utf-8", errors="replace") as f:
                 text = f.read()
-            doc_id = os.path.relpath(path, args.base)
+            doc_id = os.path.relpath(path, base)
             seen.add(doc_id)
             if index.doc_texts.get(doc_id) == text:
                 unchanged += 1
                 continue
             index.add_document(doc_id, text)
             count += 1
-    pruned = 0
-    if args.prune:
-        prefix = os.path.relpath(args.directory, args.base).rstrip(os.sep) + os.sep
+    if prune:
+        prefix = os.path.relpath(directory, base).rstrip(os.sep) + os.sep
         for doc_id in [d for d in index.doc_lengths if d.startswith(prefix) and d not in seen]:
             index.remove_document(doc_id)
             pruned += 1
+    return count, unchanged, pruned
+
+
+def _parse_exts(ext):
+    return tuple(e if e.startswith(".") else f".{e}" for e in ext.split(","))
+
+
+def cmd_add_dir(args):
+    index = load_or_new_index(args.index)
+    count, unchanged, pruned = _sync_dir(index, args.directory, args.base, _parse_exts(args.ext), args.prune)
     save_index(index, args.index)
     msg = f"indexed {count} file(s)"
     if unchanged:
@@ -59,6 +68,21 @@ def cmd_add_dir(args):
     if args.prune:
         msg += f", {pruned} pruned"
     print(msg)
+
+
+def cmd_watch(args):
+    extensions = _parse_exts(args.ext)
+    runs = 0
+    while True:
+        index = load_or_new_index(args.index)
+        count, _unchanged, pruned = _sync_dir(index, args.directory, args.base, extensions, not args.no_prune)
+        if count or pruned:
+            save_index(index, args.index)
+            print(f"synced: {count} indexed, {pruned} pruned", flush=True)
+        runs += 1
+        if args.max_runs and runs >= args.max_runs:
+            return
+        time.sleep(args.interval)
 
 
 def cmd_remove(args):
@@ -109,6 +133,14 @@ def build_parser():
     p_add_dir.add_argument("--ext", default=".txt,.md", help="comma-separated extensions to index (default: .txt,.md)")
     p_add_dir.add_argument("--prune", action="store_true", help="remove indexed docs under the directory whose files no longer exist")
     p_add_dir.set_defaults(func=cmd_add_dir)
+
+    p_watch = sub.add_parser("watch", help="poll a directory and reindex whenever files change, are added or deleted")
+    p_watch.add_argument("directory")
+    p_watch.add_argument("--ext", default=".txt,.md", help="comma-separated extensions to index (default: .txt,.md)")
+    p_watch.add_argument("--interval", type=float, default=5.0, help="seconds between scans (default: 5)")
+    p_watch.add_argument("--max-runs", type=int, default=0, help="stop after this many scans (default: 0 = run until interrupted)")
+    p_watch.add_argument("--no-prune", action="store_true", help="keep docs whose files were deleted")
+    p_watch.set_defaults(func=cmd_watch)
 
     p_remove = sub.add_parser("remove", help="remove a document from the index by its doc id (path)")
     p_remove.add_argument("doc_id")
