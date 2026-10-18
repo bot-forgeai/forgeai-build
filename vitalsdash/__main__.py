@@ -75,6 +75,14 @@ def build_arg_parser():
         help="only chart records within N days of the newest timestamp "
         "(per-boot bar chart still covers the whole file)",
     )
+    parser.add_argument(
+        "--rate",
+        action="append",
+        default=[],
+        metavar="METRIC",
+        help="chart a cumulative counter (e.g. sectors_written) as a per-hour "
+        "rate instead of a raw sawtooth; counter resets are dropped (repeatable)",
+    )
     return parser
 
 
@@ -91,6 +99,7 @@ def main():
         compare_path=args.compare,
         group_by=args.bar_by,
         last_days=args.last_days,
+        rate=args.rate,
     )
     print(f"vitalsdash serving {args.csv} at http://{args.host}:{args.port}")
     try:

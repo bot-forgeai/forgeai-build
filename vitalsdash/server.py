@@ -10,7 +10,7 @@ import json
 import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from .data import filter_last_days, find_gaps, load_groups, load_vitals
+from .data import filter_last_days, find_gaps, load_groups, load_vitals, to_rate
 
 PAGE_TEMPLATE = """<!DOCTYPE html>
 <html>
@@ -191,15 +191,23 @@ main();
 """
 
 
-def _make_handler(csv_path, thresholds, compare_path, group_by, last_days=None, below=()):
+def _load(path, rate, last_days):
+    metric_names, records = load_vitals(path)
+    rated = [m for m in rate if m in metric_names]
+    if rated:
+        records = to_rate(records, rated)
+        metric_names = [m + "/h" if m in rated else m for m in metric_names]
+    return metric_names, filter_last_days(records, last_days)
+
+
+def _make_handler(csv_path, thresholds, compare_path, group_by, last_days=None, below=(), rate=()):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):
             pass  # keep stdout quiet on a resource-constrained host
 
         def do_GET(self):
             if self.path == "/api/vitals":
-                metric_names, records = load_vitals(csv_path)
-                records = filter_last_days(records, last_days)
+                metric_names, records = _load(csv_path, rate, last_days)
                 group_column, group_labels, group_values = load_groups(csv_path, group_by=group_by)
                 series = [
                     {
@@ -215,8 +223,7 @@ def _make_handler(csv_path, thresholds, compare_path, group_by, last_days=None, 
                     }
                 ]
                 if compare_path:
-                    c_metrics, c_records = load_vitals(compare_path)
-                    c_records = filter_last_days(c_records, last_days)
+                    c_metrics, c_records = _load(compare_path, rate, last_days)
                     c_group_column, c_group_labels, c_group_values = load_groups(compare_path, group_by=group_by)
                     series.append(
                         {
@@ -260,7 +267,7 @@ def _make_handler(csv_path, thresholds, compare_path, group_by, last_days=None, 
     return Handler
 
 
-def make_server(csv_path, host="127.0.0.1", port=8099, thresholds=None, compare_path=None, group_by=None, last_days=None, below=()):
+def make_server(csv_path, host="127.0.0.1", port=8099, thresholds=None, compare_path=None, group_by=None, last_days=None, below=(), rate=()):
     """Build (but do not start) a ThreadingHTTPServer serving csv_path.
 
     thresholds, if given, maps metric name -> a value above which the
@@ -273,7 +280,9 @@ def make_server(csv_path, host="127.0.0.1", port=8099, thresholds=None, compare_
     one); otherwise a CSV with exactly one non-numeric column is
     grouped by it automatically. below names metrics in thresholds that
     breach when the value falls under the threshold (e.g. free memory).
+    rate names cumulative-counter metrics to chart as per-hour deltas
+    (`<metric>/h`), dropping counter resets.
     """
     return ThreadingHTTPServer(
-        (host, port), _make_handler(csv_path, thresholds or {}, compare_path, group_by, last_days, below)
+        (host, port), _make_handler(csv_path, thresholds or {}, compare_path, group_by, last_days, below, rate)
     )

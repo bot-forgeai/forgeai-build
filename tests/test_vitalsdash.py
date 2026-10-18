@@ -377,3 +377,34 @@ def test_parse_thresholds_accepts_below_syntax():
     specs = ["mem_available_mb<100", "temp_c=70"]
     assert parse_thresholds(specs) == {"mem_available_mb": 100.0, "temp_c": 70.0}
     assert parse_below_metrics(specs) == ["mem_available_mb"]
+
+
+def test_to_rate_per_hour_and_drops_counter_reset():
+    from vitalsdash.data import to_rate
+    recs = [
+        {"timestamp": "2026-01-01T00:00:00", "w": 100.0, "t": 50.0},
+        {"timestamp": "2026-01-01T01:00:00", "w": 300.0, "t": 51.0},
+        {"timestamp": "2026-01-01T01:30:00", "w": 10.0, "t": 52.0},  # reboot
+        {"timestamp": "2026-01-01T02:30:00", "w": 70.0, "t": 53.0},
+    ]
+    out = to_rate(recs, ["w"])
+    assert out == [
+        {"timestamp": "2026-01-01T01:00:00", "w/h": 200.0, "t": 51.0},
+        {"timestamp": "2026-01-01T02:30:00", "w/h": 60.0, "t": 53.0},
+    ]
+    assert to_rate(recs, []) is recs
+
+
+def test_api_vitals_rate_renames_metric(tmp_path):
+    import json, threading, urllib.request
+    from vitalsdash.server import make_server
+    p = tmp_path / "c.csv"
+    p.write_text("timestamp,w\n2026-01-01T00:00:00,0\n2026-01-01T02:00:00,50\n")
+    srv = make_server(str(p), port=0, rate=["w"])
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        d = json.load(urllib.request.urlopen(f"http://127.0.0.1:{srv.server_address[1]}/api/vitals"))
+    finally:
+        srv.shutdown(); srv.server_close()
+    assert d["metrics"] == ["w/h"]
+    assert d["records"][0]["w/h"] == 25.0
