@@ -164,3 +164,40 @@ def filter_last_days(records, days):
         return records
     cutoff = max(stamps) - timedelta(days=days)
     return [r for r, t in zip(records, parsed) if t is None or t >= cutoff]
+
+
+def to_rate(records, metrics):
+    """Turn cumulative counters into per-hour rates.
+
+    For each metric in `metrics`, the value becomes (delta / hours since
+    the previous record) and the key is renamed `<metric>/h`. A counter
+    that reset (negative delta, e.g. across a reboot) or two records
+    with no time between them produce no point, so the record is
+    dropped rather than charted as a spike. The first record has no
+    predecessor and is dropped too.
+    """
+    if not metrics:
+        return records
+    out = []
+    prev = None
+    for rec in records:
+        t = datetime.fromisoformat(rec["timestamp"])
+        if prev is not None:
+            hours = (t - prev[0]).total_seconds() / 3600
+            new = {"timestamp": rec["timestamp"]}
+            ok = hours > 0
+            for k, v in rec.items():
+                if k == "timestamp":
+                    continue
+                if k in metrics:
+                    d = v - prev[1][k]
+                    if d < 0:
+                        ok = False
+                    elif ok:
+                        new[k + "/h"] = d / hours
+                else:
+                    new[k] = v
+            if ok:
+                out.append(new)
+        prev = (t, rec)
+    return out
