@@ -34,6 +34,12 @@ def add_card(cards, front, back, today=None):
     return cards
 
 
+def has_front(cards, front):
+    """True if some card already has this front (case/whitespace-insensitive)."""
+    key = " ".join(front.split()).casefold()
+    return any(" ".join(c["front"].split()).casefold() == key for c in cards)
+
+
 def due_cards(cards, today=None):
     today = today or date.today()
     return [c for c in cards if date.fromisoformat(c["due_date"]) <= today]
@@ -43,7 +49,8 @@ def import_cards(cards, lines, today=None):
     """Add cards from an iterable of 'front\\tback' lines.
 
     Blank lines and lines starting with '#' are skipped. Lines without a
-    tab separator are skipped. Returns the number of cards added.
+    tab separator are skipped, as are lines whose front matches an existing
+    card. Returns the number of cards added.
     """
     added = 0
     for line in lines:
@@ -55,6 +62,8 @@ def import_cards(cards, lines, today=None):
         front, back = line.split("\t", 1)
         front, back = front.strip(), back.strip()
         if not front or not back:
+            continue
+        if has_front(cards, front):
             continue
         add_card(cards, front, back, today=today)
         added += 1
