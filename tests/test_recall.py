@@ -376,3 +376,21 @@ def test_cli_show_limit_caps_cards_shown_and_rated(tmp_path):
     run_show(args, print_fn=outputs.append)
     assert sum(o.startswith("Q: ") for o in outputs) == 1
     assert len(due_cards(load_deck(deck))) == 2
+
+
+def test_import_skips_fronts_already_in_deck():
+    cards = []
+    add_card(cards, "What is SM-2?", "an algorithm")
+    added = import_cards(cards, ["what is  sm-2?\tdup\n", "New\tcard\n", "New\tagain\n"])
+    assert added == 1
+    assert [c["front"] for c in cards] == ["What is SM-2?", "New"]
+
+
+def test_cli_add_skips_duplicate_front(tmp_path, capsys):
+    deck = str(tmp_path / "d.json")
+    reg = str(tmp_path / "r.json")
+    main(["--deck", deck, "--registry", reg, "add", "Q", "A"])
+    main(["--deck", deck, "--registry", reg, "add", "q", "B"])
+    assert "Skipped" in capsys.readouterr().out
+    main(["--deck", deck, "--registry", reg, "stats"])
+    assert "Total cards: 1" in capsys.readouterr().out

@@ -7,6 +7,7 @@ from importlib.metadata import version as _get_version, PackageNotFoundError
 
 from .storage import (
     add_card,
+    has_front,
     apply_review,
     due_cards,
     export_lines,
@@ -86,6 +87,9 @@ def build_arg_parser():
 
 def run_add(args):
     cards = load_deck(args.deck)
+    if has_front(cards, args.front):
+        print(f"Skipped: a card with this front already exists: {args.front}")
+        return
     add_card(cards, args.front, args.back)
     save_deck(args.deck, cards)
     print(f"Added card. Deck now has {len(cards)} card(s).")
