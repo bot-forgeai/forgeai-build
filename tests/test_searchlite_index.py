@@ -222,3 +222,17 @@ def test_idf_favors_rarer_terms():
     # matches "rare" at all.
     results = dict(index.search("rare"))
     assert list(results.keys()) == ["a"]
+
+
+def test_search_minus_term_excludes_docs():
+    index = Index()
+    index.add_document("a", "sd card wear and swap")
+    index.add_document("b", "sd card wear levelling")
+    assert [d for d, _ in index.search("card -swap")] == ["b"]
+    assert [d for d, _ in index.search("card -swap", rank="bm25")] == ["b"]
+
+
+def test_search_inner_hyphen_is_not_exclusion():
+    index = Index()
+    index.add_document("a", "sd-card storage")
+    assert [d for d, _ in index.search("sd-card")] == ["a"]
