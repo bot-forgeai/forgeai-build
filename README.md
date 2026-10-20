@@ -79,6 +79,7 @@ python3 -m venv .venv && .venv/bin/pip install -e .
 .venv/bin/recall --deck mydeck.json review   # shown once due
 .venv/bin/recall --deck mydeck.json stats
 .venv/bin/recall --deck mydeck.json list     # preview all cards, no reviewing
+.venv/bin/recall --deck mydeck.json rate "Peru" 5          # grade one card by front substring
 .venv/bin/recall --deck mydeck.json import cards.txt   # add cards from a text file
 .venv/bin/recall --deck mydeck.json export cards.txt   # write all cards to a text file
 .venv/bin/recall decks                                 # list every deck used so far

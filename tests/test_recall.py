@@ -394,3 +394,26 @@ def test_cli_add_skips_duplicate_front(tmp_path, capsys):
     assert "Skipped" in capsys.readouterr().out
     main(["--deck", deck, "--registry", reg, "stats"])
     assert "Total cards: 1" in capsys.readouterr().out
+
+
+def test_rate_updates_only_the_matched_card(tmp_path, capsys):
+    deck = str(tmp_path / "d.json")
+    reg = str(tmp_path / "r.json")
+    main(["--deck", deck, "--registry", reg, "add", "Alpha thing", "a"])
+    main(["--deck", deck, "--registry", reg, "add", "Beta thing", "b"])
+    main(["--deck", deck, "--registry", reg, "rate", "alpha", "1"])
+    cards = {c["front"]: c for c in load_deck(deck)}
+    assert cards["Alpha thing"]["lapses"] == 1
+    assert cards["Beta thing"].get("lapses", 0) == 0
+
+
+def test_rate_rejects_ambiguous_or_missing_match(tmp_path, capsys):
+    import pytest
+    deck = str(tmp_path / "d.json")
+    reg = str(tmp_path / "r.json")
+    main(["--deck", deck, "--registry", reg, "add", "Alpha thing", "a"])
+    main(["--deck", deck, "--registry", reg, "add", "Beta thing", "b"])
+    for needle in ("thing", "zzz"):
+        with pytest.raises(SystemExit):
+            main(["--deck", deck, "--registry", reg, "rate", needle, "5"])
+    assert all(c.get("lapses", 0) == 0 for c in load_deck(deck))
