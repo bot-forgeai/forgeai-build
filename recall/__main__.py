@@ -60,6 +60,11 @@ def build_arg_parser():
         "--limit", type=int, default=None, metavar="N",
         help="show (and rate) at most N due cards, so --rate doesn't grade cards you haven't seen",
     )
+    rate_p = sub.add_parser(
+        "rate", help="record a recall quality for one card, picked by a substring of its front"
+    )
+    rate_p.add_argument("text", help="substring of the card's front (case-insensitive); must match exactly one card")
+    rate_p.add_argument("quality", type=int, choices=range(6), metavar="0-5", help="recall quality")
     sub.add_parser("stats", help="show deck size and how many cards are due")
     sub.add_parser("list", help="preview all cards sorted by due date, without reviewing them")
     sub.add_parser("decks", help="list every deck registered so far, with its card counts")
@@ -135,6 +140,21 @@ def run_show(args, print_fn=print):
     if args.rate is not None:
         save_deck(args.deck, cards)
         print_fn(f"Rated {len(due)} card(s) {args.rate}.")
+
+
+def run_rate(args, print_fn=print):
+    cards = load_deck(args.deck)
+    needle = args.text.casefold()
+    matches = [c for c in cards if needle in c["front"].casefold()]
+    if len(matches) != 1:
+        print_fn(f"{len(matches)} cards match {args.text!r}; need exactly 1.")
+        for c in matches:
+            print_fn(f"  {c['front']}")
+        return False
+    apply_review(matches[0], args.quality)
+    save_deck(args.deck, cards)
+    print_fn(f"Rated {matches[0]['front']!r} {args.quality}; next due {matches[0]['due_date']}.")
+    return True
 
 
 def run_list(args, print_fn=print, today=None):
@@ -220,6 +240,11 @@ def main(argv=None):
         run_show(args)
         if args.rate is not None:
             register_current_deck(args)
+    elif args.command == "rate":
+        if run_rate(args):
+            register_current_deck(args)
+        else:
+            sys.exit(1)
     elif args.command == "stats":
         run_stats(args)
     elif args.command == "list":
