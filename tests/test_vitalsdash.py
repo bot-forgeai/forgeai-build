@@ -4,7 +4,7 @@ import urllib.request
 
 import pytest
 
-from vitalsdash.__main__ import build_arg_parser, parse_thresholds
+from vitalsdash.__main__ import build_arg_parser, parse_thresholds, unknown_metrics
 from vitalsdash.data import filter_last_days, find_gaps, load_groups, load_vitals
 from vitalsdash.server import make_server
 
@@ -414,3 +414,8 @@ def test_page_rounds_latest_value_in_series_label():
     from vitalsdash.server import PAGE_TEMPLATE
     assert "latest ${{fmt(latest)}}" in PAGE_TEMPLATE
     assert "toPrecision(6)" in PAGE_TEMPLATE
+
+
+def test_unknown_metrics_lists_names_missing_from_columns():
+    assert unknown_metrics(["tmp_c", "load1", "nosuch"], ["temp_c", "load1"]) == ["tmp_c", "nosuch"]
+    assert unknown_metrics([], ["temp_c"]) == []
