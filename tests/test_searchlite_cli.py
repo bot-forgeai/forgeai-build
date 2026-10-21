@@ -205,3 +205,17 @@ def test_watch_picks_up_changes_between_scans(tmp_path, capsys, monkeypatch):
     assert "docs/c.md" in capsys.readouterr().out
     main(["--index", "i.json", "search", "beta"])
     assert "no results" in capsys.readouterr().out
+
+
+def test_add_lines_indexes_each_line_separately(tmp_path, capsys):
+    index_path = str(tmp_path / "idx.json")
+    doc_path = tmp_path / "cards.txt"
+    doc_path.write_text("apples are red\n\nbananas are yellow\n")
+
+    main(["--index", index_path, "--base", str(tmp_path), "add", "--lines", str(doc_path)])
+    capsys.readouterr()
+
+    main(["--index", index_path, "search", "bananas"])
+    out = capsys.readouterr().out
+    assert "cards.txt:3" in out
+    assert "apples" not in out

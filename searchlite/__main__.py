@@ -23,6 +23,14 @@ def cmd_add(args):
         with open(path, "r", encoding="utf-8", errors="replace") as f:
             text = f.read()
         doc_id = os.path.relpath(path, args.base)
+        if args.lines:
+            n = 0
+            for lineno, line in enumerate(text.splitlines(), 1):
+                if line.strip():
+                    index.add_document(f"{doc_id}:{lineno}", line)
+                    n += 1
+            print(f"indexed {n} lines of {doc_id!r}")
+            continue
         index.add_document(doc_id, text)
         print(f"indexed {doc_id!r}")
     save_index(index, args.index)
@@ -126,6 +134,7 @@ def build_parser():
 
     p_add = sub.add_parser("add", help="index one or more text files")
     p_add.add_argument("paths", nargs="+")
+    p_add.add_argument("--lines", action="store_true", help="index each non-blank line as its own document (id path:LINE), e.g. one recall card per line")
     p_add.set_defaults(func=cmd_add)
 
     p_add_dir = sub.add_parser("add-dir", help="index every matching file under a directory")
