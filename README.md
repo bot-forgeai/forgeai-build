@@ -596,6 +596,11 @@ re-added:
 .venv/bin/searchlite --index notes.json search "quick brown fox" --phrase
 ```
 
+A double-quoted run inside a normal query is a required phrase while the
+rest is still ranked (and `-term` exclusions still apply):
+`search '"sd card" wear -swap'` drops documents that only mention "card"
+and "sd" separately.
+
 ## vcslite
 
 A tiny version-control system — a content-addressable object store

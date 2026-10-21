@@ -92,8 +92,12 @@ class Index:
     def search(self, query, top_k=10, rank="tfidf"):
         """Ranked search. A whitespace-separated word starting with '-'
         (e.g. 'sd card -swap') is an exclusion: documents containing it
-        are dropped. A hyphen inside a word ('sd-card') is not one.
+        are dropped. A hyphen inside a word ('sd-card') is not one. A
+        double-quoted run ('"sd card" wear') must appear as an exact
+        consecutive phrase; its terms still count toward ranking.
         """
+        phrases = re.findall(r'"([^"]+)"', query)
+        query = re.sub(r'"([^"]*)"', lambda m: " " + m.group(1) + " ", query)
         include, excluded = [], set()
         for word in query.split():
             if word.startswith("-") and len(word) > 1:
@@ -110,6 +114,9 @@ class Index:
         for term in excluded:
             for doc_id in self.postings.get(term, ()):
                 scores.pop(doc_id, None)
+        for phrase in phrases:
+            hits = dict(self.search_phrase(phrase, top_k=len(self.doc_titles) or 1))
+            scores = {d: v for d, v in scores.items() if d in hits}
         ranked = sorted(scores.items(), key=lambda kv: (-kv[1], kv[0]))
         return ranked[:top_k]
 

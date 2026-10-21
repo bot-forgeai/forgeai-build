@@ -236,3 +236,12 @@ def test_search_inner_hyphen_is_not_exclusion():
     index = Index()
     index.add_document("a", "sd-card storage")
     assert [d for d, _ in index.search("sd-card")] == ["a"]
+
+
+def test_search_quoted_phrase_requires_consecutive_terms():
+    index = Index()
+    index.add_document("a", "sd card wear")
+    index.add_document("b", "credit card and sd reader")
+    assert [d for d, _ in index.search('"sd card"')] == ["a"]
+    assert [d for d, _ in index.search('"sd card" -wear')] == []
+    assert len(index.search("card")) == 2
