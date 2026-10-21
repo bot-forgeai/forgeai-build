@@ -1,6 +1,8 @@
 import argparse
+import sys
 from importlib.metadata import version as _get_version, PackageNotFoundError
 
+from .data import load_vitals
 from .server import make_server
 
 
@@ -86,10 +88,20 @@ def build_arg_parser():
     return parser
 
 
+def unknown_metrics(names, known):
+    """Names not among the CSV's metric columns, in the order given."""
+    return [n for n in names if n not in known]
+
+
 def main():
     args = build_arg_parser().parse_args()
 
     thresholds = parse_thresholds(args.threshold)
+    known, _ = load_vitals(args.csv)
+    for flag, names in (("--threshold", thresholds), ("--rate", args.rate)):
+        for name in unknown_metrics(names, known):
+            print(f"vitalsdash: warning: {flag} {name!r} matches no column in {args.csv} "
+                  f"(columns: {', '.join(known)})", file=sys.stderr)
     server = make_server(
         args.csv,
         host=args.host,
