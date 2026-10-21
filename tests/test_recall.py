@@ -417,3 +417,22 @@ def test_rate_rejects_ambiguous_or_missing_match(tmp_path, capsys):
         with pytest.raises(SystemExit):
             main(["--deck", deck, "--registry", reg, "rate", needle, "5"])
     assert all(c.get("lapses", 0) == 0 for c in load_deck(deck))
+
+
+def test_cli_list_due_hides_upcoming_cards(tmp_path):
+    deck_path = str(tmp_path / "deck.json")
+    today = date(2026, 1, 10)
+    cards = add_card([], "later", "back", today=today)
+    cards = add_card(cards, "sooner", "back", today=today)
+    cards[0]["due_date"] = (today + timedelta(days=5)).isoformat()
+    cards[1]["due_date"] = today.isoformat()
+    save_deck(deck_path, cards)
+    args = build_arg_parser().parse_args(["--deck", deck_path, "list", "--due"])
+    outputs = []
+    run_list(args, print_fn=outputs.append, today=today)
+    assert len(outputs) == 1 and "sooner" in outputs[0]
+    cards[1]["due_date"] = (today + timedelta(days=1)).isoformat()
+    save_deck(deck_path, cards)
+    outputs = []
+    run_list(args, print_fn=outputs.append, today=today)
+    assert outputs == ["No cards due."]

@@ -66,7 +66,8 @@ def build_arg_parser():
     rate_p.add_argument("text", help="substring of the card's front (case-insensitive); must match exactly one card")
     rate_p.add_argument("quality", type=int, choices=range(6), metavar="0-5", help="recall quality")
     sub.add_parser("stats", help="show deck size and how many cards are due")
-    sub.add_parser("list", help="preview all cards sorted by due date, without reviewing them")
+    p_list = sub.add_parser("list", help="preview all cards sorted by due date, without reviewing them")
+    p_list.add_argument("--due", action="store_true", help="only list cards that are due today or overdue")
     sub.add_parser("decks", help="list every deck registered so far, with its card counts")
 
     leeches_p = sub.add_parser(
@@ -163,9 +164,16 @@ def run_list(args, print_fn=print, today=None):
         print_fn("Deck is empty.")
         return
     today = today or date.today()
+    shown = 0
     for card in sorted(cards, key=lambda c: c["due_date"]):
-        status = "due" if date.fromisoformat(card["due_date"]) <= today else "upcoming"
+        is_due = date.fromisoformat(card["due_date"]) <= today
+        if getattr(args, "due", False) and not is_due:
+            continue
+        shown += 1
+        status = "due" if is_due else "upcoming"
         print_fn(f"[{status:>8}] {card['due_date']}  {card['front']}")
+    if not shown:
+        print_fn("No cards due.")
 
 
 def run_import(args, print_fn=print):
