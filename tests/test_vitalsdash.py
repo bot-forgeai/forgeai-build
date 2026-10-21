@@ -408,3 +408,9 @@ def test_api_vitals_rate_renames_metric(tmp_path):
         srv.shutdown(); srv.server_close()
     assert d["metrics"] == ["w/h"]
     assert d["records"][0]["w/h"] == 25.0
+
+
+def test_page_rounds_latest_value_in_series_label():
+    from vitalsdash.server import PAGE_TEMPLATE
+    assert "latest ${{fmt(latest)}}" in PAGE_TEMPLATE
+    assert "toPrecision(6)" in PAGE_TEMPLATE

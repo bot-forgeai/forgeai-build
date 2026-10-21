@@ -67,6 +67,7 @@ async function main() {{
 
     const points = values.map((v, i) => toXY(v, i).map(n => n.toFixed(1)).join(',')).join(' ');
     const latest = values[values.length - 1];
+    const fmt = n => Number.isInteger(n) ? String(n) : Number(n.toPrecision(6)).toString();
     const isBelow = below.includes(metricName);
     const isOver = v => isBelow ? v < threshold : v > threshold;
     const breached = threshold !== undefined && isOver(latest);
@@ -86,7 +87,7 @@ async function main() {{
 
     return `
       <div class="series-block">
-        <h3 class="series-label ${{breached ? 'breached' : ''}}">${{label}} (min ${{min.toFixed(2)}}, max ${{max.toFixed(2)}}, latest ${{latest}}${{breached ? (isBelow ? ' — under threshold' : ' — over threshold') : ''}})</h3>
+        <h3 class="series-label ${{breached ? 'breached' : ''}}">${{label}} (min ${{min.toFixed(2)}}, max ${{max.toFixed(2)}}, latest ${{fmt(latest)}}${{breached ? (isBelow ? ' — under threshold' : ' — over threshold') : ''}})</h3>
         <div class="charts-row">
           <svg width="${{W}}" height="${{H}}">
             ${{thresholdSvg}}
