@@ -419,3 +419,11 @@ def test_page_rounds_latest_value_in_series_label():
 def test_unknown_metrics_lists_names_missing_from_columns():
     assert unknown_metrics(["tmp_c", "load1", "nosuch"], ["temp_c", "load1"]) == ["tmp_c", "nosuch"]
     assert unknown_metrics([], ["temp_c"]) == []
+
+
+@pytest.mark.parametrize("bad", ["0", "-3", "nan", "abc"])
+def test_last_days_rejects_non_positive(bad, capsys):
+    with pytest.raises(SystemExit):
+        build_arg_parser().parse_args(["--last-days", bad, "x.csv"])
+    assert "--last-days" in capsys.readouterr().err
+    assert build_arg_parser().parse_args(["--last-days", "0.5", "x.csv"]).last_days == 0.5
