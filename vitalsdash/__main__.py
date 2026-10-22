@@ -72,7 +72,7 @@ def build_arg_parser():
     )
     parser.add_argument(
         "--last-days",
-        type=float,
+        type=positive_days,
         metavar="N",
         help="only chart records within N days of the newest timestamp "
         "(per-boot bar chart still covers the whole file)",
@@ -86,6 +86,17 @@ def build_arg_parser():
         "rate instead of a raw sawtooth; counter resets are dropped (repeatable)",
     )
     return parser
+
+
+def positive_days(text):
+    """argparse type for --last-days: a number of days greater than zero."""
+    try:
+        days = float(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"invalid number of days: {text!r}")
+    if not days > 0:
+        raise argparse.ArgumentTypeError(f"must be greater than 0, got {text}")
+    return days
 
 
 def unknown_metrics(names, known):
