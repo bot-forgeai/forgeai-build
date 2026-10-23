@@ -201,3 +201,38 @@ def to_rate(records, metrics):
                 out.append(new)
         prev = (t, rec)
     return out
+
+
+def summarize(metric_names, records, thresholds=None, below=()):
+    """Per-metric stats for a one-shot text report.
+
+    Returns a list of dicts: {"metric", "n", "min", "mean", "max",
+    "latest", "breached"}. A metric breaches when its latest value is
+    above its threshold, or below it if the metric is listed in `below`
+    (same rule the dashboard uses to highlight a chart). Metrics with no
+    records are skipped.
+    """
+    thresholds = thresholds or {}
+    rows = []
+    for name in metric_names:
+        values = [r[name] for r in records if name in r]
+        if not values:
+            continue
+        latest = values[-1]
+        limit = thresholds.get(name)
+        if limit is None:
+            breached = False
+        elif name in below:
+            breached = latest < limit
+        else:
+            breached = latest > limit
+        rows.append({
+            "metric": name,
+            "n": len(values),
+            "min": min(values),
+            "mean": sum(values) / len(values),
+            "max": max(values),
+            "latest": latest,
+            "breached": breached,
+        })
+    return rows

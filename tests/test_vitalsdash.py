@@ -483,3 +483,26 @@ def test_unknown_bar_by_warns(tmp_path):
         proc.kill()
         proc.communicate()
     assert "--bar-by 'nosuch'" in line
+
+
+def test_summarize_stats_and_breach_directions():
+    from vitalsdash.data import summarize
+    recs = [{"timestamp": "t1", "a": 1.0, "b": 10.0}, {"timestamp": "t2", "a": 3.0, "b": 5.0}]
+    rows = {r["metric"]: r for r in summarize(["a", "b"], recs, {"a": 2.0, "b": 8.0}, below=["b"])}
+    assert (rows["a"]["min"], rows["a"]["mean"], rows["a"]["max"], rows["a"]["latest"]) == (1.0, 2.0, 3.0, 3.0)
+    assert rows["a"]["breached"] is True   # 3 > 2
+    assert rows["b"]["breached"] is True   # 5 < 8, below-threshold
+    assert summarize(["a"], recs, {"a": 5.0})[0]["breached"] is False
+
+
+def test_summary_flag_prints_table_and_exits_by_breach(capsys, monkeypatch):
+    from vitalsdash.__main__ import main
+    monkeypatch.setattr("sys.argv", ["vitalsdash", SAMPLE_CSV, "--summary"])
+    with pytest.raises(SystemExit) as e:
+        main()
+    assert e.value.code == 0
+    assert "temp_c" in capsys.readouterr().out
+    monkeypatch.setattr("sys.argv", ["vitalsdash", SAMPLE_CSV, "--summary", "--threshold", "temp_c=0"])
+    with pytest.raises(SystemExit) as e:
+        main()
+    assert e.value.code == 1
