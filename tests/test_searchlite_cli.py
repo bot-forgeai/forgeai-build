@@ -219,3 +219,14 @@ def test_add_lines_indexes_each_line_separately(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "cards.txt:3" in out
     assert "apples" not in out
+
+
+def test_search_query_without_terms_errors(tmp_path, capsys):
+    import pytest
+
+    index_path = str(tmp_path / "idx.json")
+    for query in ("", "   ", "the of"):
+        with pytest.raises(SystemExit) as exc:
+            main(["--index", index_path, "search", query])
+        assert exc.value.code == 2
+        assert "no searchable terms" in capsys.readouterr().err
