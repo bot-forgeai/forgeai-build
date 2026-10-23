@@ -245,3 +245,18 @@ def test_search_quoted_phrase_requires_consecutive_terms():
     assert [d for d, _ in index.search('"sd card"')] == ["a"]
     assert [d for d, _ in index.search('"sd card" -wear')] == []
     assert len(index.search("card")) == 2
+
+
+def test_search_trailing_star_matches_term_prefix():
+    index = Index()
+    index.add_document("a", "compressor tuning")
+    index.add_document("b", "compression ratio")
+    index.add_document("c", "unrelated text")
+    ids = [d for d, _ in index.search("compress*")]
+    assert sorted(ids) == ["a", "b"]
+
+
+def test_search_prefix_without_match_returns_nothing():
+    index = Index()
+    index.add_document("a", "hello world")
+    assert index.search("zzz*") == []

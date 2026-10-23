@@ -560,6 +560,9 @@ document's score is its raw frequency in that document times
 and `df` is how many documents contain the term — so rarer terms
 that appear across fewer documents count for more than common ones.
 
+A trailing `*` is a prefix wildcard: `search "compress*"` matches every
+indexed term starting with `compress` (compressor, compression, ...).
+
 `search --snippet` swaps the plain leading preview for a short excerpt
 built around the first place a query term actually appears in the
 document, with each matched term wrapped in `**asterisks**` — useful
