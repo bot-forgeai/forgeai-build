@@ -3,8 +3,8 @@ import csv
 import sys
 from importlib.metadata import version as _get_version, PackageNotFoundError
 
-from .data import load_vitals
-from .server import make_server
+from .data import load_vitals, summarize
+from .server import _load, make_server
 
 
 def _get_package_version():
@@ -87,7 +87,28 @@ def build_arg_parser():
         help="chart a cumulative counter (e.g. sectors_written) as a per-hour "
         "rate instead of a raw sawtooth; counter resets are dropped (repeatable)",
     )
+    parser.add_argument(
+        "--summary",
+        action="store_true",
+        help="print a per-metric text table (n, min, mean, max, latest) and "
+        "exit instead of serving; exits 1 if any --threshold is breached, "
+        "so it can gate a script",
+    )
     return parser
+
+
+def format_summary(rows):
+    """Render summarize() rows as an aligned text table; '!' marks a breach."""
+    header = ("metric", "n", "min", "mean", "max", "latest")
+    body = [
+        (r["metric"], str(r["n"]), f"{r['min']:.4g}", f"{r['mean']:.4g}",
+         f"{r['max']:.4g}", f"{r['latest']:.4g}" + (" !" if r["breached"] else ""))
+        for r in rows
+    ]
+    widths = [max(len(row[i]) for row in [header] + body) for i in range(len(header))]
+    lines = ["  ".join(c.ljust(w) if i == 0 else c.rjust(w) for i, (c, w) in enumerate(zip(row, widths)))
+             for row in [header] + body]
+    return "\n".join(lines)
 
 
 def positive_days(text):
@@ -144,6 +165,11 @@ def main():
         for name in unknown_metrics(names, known):
             print(f"vitalsdash: warning: {flag} {name!r} matches no column in {args.csv} "
                   f"(columns: {', '.join(known)})", file=sys.stderr)
+    if args.summary:
+        metric_names, records = _load(args.csv, args.rate, args.last_days)
+        rows = summarize(metric_names, records, thresholds, parse_below_metrics(args.threshold))
+        print(format_summary(rows))
+        sys.exit(1 if any(r["breached"] for r in rows) else 0)
     server = make_server(
         args.csv,
         host=args.host,
