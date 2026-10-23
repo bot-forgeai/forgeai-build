@@ -1,4 +1,5 @@
 import argparse
+import csv
 import sys
 from importlib.metadata import version as _get_version, PackageNotFoundError
 
@@ -117,6 +118,12 @@ def unknown_metrics(names, known):
     return [n for n in names if n not in known]
 
 
+def csv_columns(path):
+    """Header names of a CSV (empty if there is no header)."""
+    with open(path, newline="") as f:
+        return next(csv.reader(f), [])
+
+
 def main():
     args = build_arg_parser().parse_args()
 
@@ -125,6 +132,14 @@ def main():
         known, _ = load_vitals(args.csv)
     except (OSError, ValueError) as e:
         sys.exit(f"vitalsdash: cannot read {args.csv}: {e}")
+    if args.compare:
+        try:
+            load_vitals(args.compare)
+        except (OSError, ValueError) as e:
+            sys.exit(f"vitalsdash: cannot read --compare {args.compare}: {e}")
+    if args.bar_by is not None and args.bar_by not in csv_columns(args.csv):
+        print(f"vitalsdash: warning: --bar-by {args.bar_by!r} matches no column in {args.csv} "
+              f"(bar chart will not be drawn)", file=sys.stderr)
     for flag, names in (("--threshold", thresholds), ("--rate", args.rate)):
         for name in unknown_metrics(names, known):
             print(f"vitalsdash: warning: {flag} {name!r} matches no column in {args.csv} "

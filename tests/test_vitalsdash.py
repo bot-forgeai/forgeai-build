@@ -449,3 +449,37 @@ def test_missing_csv_exits_cleanly(tmp_path):
     assert result.returncode == 1
     assert "cannot read" in result.stderr
     assert "Traceback" not in result.stderr
+
+
+def test_missing_compare_csv_exits_cleanly(tmp_path):
+    import subprocess
+    import sys
+
+    good = tmp_path / "v.csv"
+    good.write_text("timestamp,temp_c\n2026-01-01T00:00:00,50\n")
+    result = subprocess.run(
+        [sys.executable, "-m", "vitalsdash", "--compare", str(tmp_path / "nope.csv"), str(good)],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 1
+    assert "--compare" in result.stderr
+    assert "Traceback" not in result.stderr
+
+
+def test_unknown_bar_by_warns(tmp_path):
+    import subprocess
+    import sys
+
+    good = tmp_path / "v.csv"
+    good.write_text("timestamp,temp_c\n2026-01-01T00:00:00,50\n")
+    proc = subprocess.Popen(
+        [sys.executable, "-m", "vitalsdash", "--port", "0", "--bar-by", "nosuch", str(good)],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+    )
+    try:
+        line = proc.stderr.readline()
+    finally:
+        proc.kill()
+        proc.communicate()
+    assert "--bar-by 'nosuch'" in line
