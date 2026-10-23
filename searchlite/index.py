@@ -93,7 +93,8 @@ class Index:
         """Ranked search. A whitespace-separated word starting with '-'
         (e.g. 'sd card -swap') is an exclusion: documents containing it
         are dropped. A hyphen inside a word ('sd-card') is not one. A
-        double-quoted run ('"sd card" wear') must appear as an exact
+        trailing '*' ('compress*') matches every indexed term with that
+        prefix. A double-quoted run ('"sd card" wear') must appear as an exact
         consecutive phrase; its terms still count toward ranking.
         """
         phrases = re.findall(r'"([^"]+)"', query)
@@ -102,6 +103,10 @@ class Index:
         for word in query.split():
             if word.startswith("-") and len(word) > 1:
                 excluded.update(tokenize(word[1:]))
+            elif word.endswith("*") and word.strip("*"):
+                # prefix wildcard: expand to every indexed term it matches
+                for prefix in tokenize(word):
+                    include.extend(t for t in self.postings if t.startswith(prefix))
             else:
                 include.append(word)
         query = " ".join(include)
