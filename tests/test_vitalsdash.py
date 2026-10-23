@@ -427,3 +427,25 @@ def test_last_days_rejects_non_positive(bad, capsys):
         build_arg_parser().parse_args(["--last-days", bad, "x.csv"])
     assert "--last-days" in capsys.readouterr().err
     assert build_arg_parser().parse_args(["--last-days", "0.5", "x.csv"]).last_days == 0.5
+
+
+@pytest.mark.parametrize("bad", ["temp_c=abc", "temp_c", "=70"])
+def test_threshold_rejects_malformed_spec(bad, capsys):
+    with pytest.raises(SystemExit):
+        build_arg_parser().parse_args(["--threshold", bad, "x.csv"])
+    assert "--threshold" in capsys.readouterr().err
+    assert build_arg_parser().parse_args(["--threshold", "mem<100", "x.csv"]).threshold == ["mem<100"]
+
+
+def test_missing_csv_exits_cleanly(tmp_path):
+    import subprocess
+    import sys
+
+    result = subprocess.run(
+        [sys.executable, "-m", "vitalsdash", str(tmp_path / "nope.csv")],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 1
+    assert "cannot read" in result.stderr
+    assert "Traceback" not in result.stderr

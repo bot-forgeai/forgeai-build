@@ -51,6 +51,7 @@ def build_arg_parser():
     parser.add_argument(
         "--threshold",
         action="append",
+        type=threshold_spec,
         metavar="METRIC=VALUE",
         help="highlight a metric's chart when its latest value exceeds VALUE "
         "(repeatable, e.g. --threshold temp_c=70 --threshold load1=4); "
@@ -99,6 +100,18 @@ def positive_days(text):
     return days
 
 
+def threshold_spec(text):
+    """argparse type for --threshold: METRIC=VALUE or METRIC<VALUE, VALUE numeric."""
+    try:
+        name, _, value = _split_spec(text)
+        float(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"expected METRIC=VALUE or METRIC<VALUE with a numeric VALUE, got {text!r}")
+    if not name:
+        raise argparse.ArgumentTypeError(f"missing metric name in {text!r}")
+    return text
+
+
 def unknown_metrics(names, known):
     """Names not among the CSV's metric columns, in the order given."""
     return [n for n in names if n not in known]
@@ -108,7 +121,10 @@ def main():
     args = build_arg_parser().parse_args()
 
     thresholds = parse_thresholds(args.threshold)
-    known, _ = load_vitals(args.csv)
+    try:
+        known, _ = load_vitals(args.csv)
+    except (OSError, ValueError) as e:
+        sys.exit(f"vitalsdash: cannot read {args.csv}: {e}")
     for flag, names in (("--threshold", thresholds), ("--rate", args.rate)):
         for name in unknown_metrics(names, known):
             print(f"vitalsdash: warning: {flag} {name!r} matches no column in {args.csv} "
