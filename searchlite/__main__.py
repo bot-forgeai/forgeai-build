@@ -4,6 +4,7 @@ import sys
 import time
 from importlib.metadata import version as _get_version, PackageNotFoundError
 
+from searchlite.tokenize import tokenize
 from searchlite.storage import load_or_new_index, save_index
 
 
@@ -103,6 +104,9 @@ def cmd_remove(args):
 
 
 def cmd_search(args):
+    if not tokenize(args.query):
+        print(f"error: query {args.query!r} has no searchable terms (blank or only stopwords)", file=sys.stderr)
+        sys.exit(2)
     index = load_or_new_index(args.index)
     if args.phrase:
         results = index.search_phrase(args.query, top_k=args.top)
