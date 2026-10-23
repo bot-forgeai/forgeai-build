@@ -1,3 +1,4 @@
 {
-  "lessons.deck": "../forgeai/data/lessons.deck.json"
+  "lessons.deck": "../forgeai/data/lessons.deck.json",
+  "d": "/tmp/d.json"
 }

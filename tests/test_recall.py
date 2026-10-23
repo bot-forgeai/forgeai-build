@@ -436,3 +436,23 @@ def test_cli_list_due_hides_upcoming_cards(tmp_path):
     outputs = []
     run_list(args, print_fn=outputs.append, today=today)
     assert outputs == ["No cards due."]
+
+
+def test_delete_removes_only_the_matched_card(tmp_path):
+    deck = str(tmp_path / "d.json")
+    reg = str(tmp_path / "r.json")
+    main(["--deck", deck, "--registry", reg, "add", "Alpha thing", "a"])
+    main(["--deck", deck, "--registry", reg, "add", "Beta thing", "b"])
+    main(["--deck", deck, "--registry", reg, "delete", "alpha"])
+    assert [c["front"] for c in load_deck(deck)] == ["Beta thing"]
+
+
+def test_delete_rejects_ambiguous_or_missing_match(tmp_path):
+    deck = str(tmp_path / "d.json")
+    reg = str(tmp_path / "r.json")
+    main(["--deck", deck, "--registry", reg, "add", "Alpha thing", "a"])
+    main(["--deck", deck, "--registry", reg, "add", "Beta thing", "b"])
+    for needle in ("thing", "zzz"):
+        with pytest.raises(SystemExit):
+            main(["--deck", deck, "--registry", reg, "delete", needle])
+    assert len(load_deck(deck)) == 2
