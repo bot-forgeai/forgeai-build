@@ -45,6 +45,27 @@ def due_cards(cards, today=None):
     return [c for c in cards if date.fromisoformat(c["due_date"]) <= today]
 
 
+_ESC = {"\\": "\\", "t": "\t", "n": "\n", "r": "\r", "#": "#"}
+
+
+def _escape(text):
+    out = text.replace("\\", "\\\\").replace("\t", "\\t")
+    out = out.replace("\n", "\\n").replace("\r", "\\r")
+    return "\\" + out if out.startswith("#") else out
+
+
+def _unescape(text):
+    out, i = [], 0
+    while i < len(text):
+        if text[i] == "\\" and i + 1 < len(text) and text[i + 1] in _ESC:
+            out.append(_ESC[text[i + 1]])
+            i += 2
+        else:
+            out.append(text[i])
+            i += 1
+    return "".join(out)
+
+
 def import_cards(cards, lines, today=None, malformed=None):
     """Add cards from an iterable of 'front\\tback' lines.
 
@@ -65,6 +86,7 @@ def import_cards(cards, lines, today=None, malformed=None):
             if malformed is not None:
                 malformed.append(lineno)
             continue
+        front, back = _unescape(front), _unescape(back)
         if has_front(cards, front):
             continue
         add_card(cards, front, back, today=today)
@@ -73,8 +95,12 @@ def import_cards(cards, lines, today=None, malformed=None):
 
 
 def export_lines(cards):
-    """Return a list of 'front\\tback' lines, one per card."""
-    return [f"{c['front']}\t{c['back']}" for c in cards]
+    """Return a list of 'front\\tback' lines, one per card.
+
+    Tabs, newlines and backslashes inside a card are written as \\t, \\n
+    and \\\\ (and a leading '#' as \\#) so the line survives import.
+    """
+    return [f"{_escape(c['front'])}\t{_escape(c['back'])}" for c in cards]
 
 
 def load_registry(path):
