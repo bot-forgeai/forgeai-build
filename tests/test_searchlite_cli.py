@@ -230,3 +230,14 @@ def test_search_query_without_terms_errors(tmp_path, capsys):
             main(["--index", index_path, "search", query])
         assert exc.value.code == 2
         assert "no searchable terms" in capsys.readouterr().err
+
+
+def test_search_top_must_be_positive(tmp_path, capsys):
+    import pytest
+
+    index_path = str(tmp_path / "idx.json")
+    for top in ("0", "-2"):
+        with pytest.raises(SystemExit) as exc:
+            main(["--index", index_path, "search", "apples", "--top", top])
+        assert exc.value.code == 2
+        assert "--top must be" in capsys.readouterr().err
