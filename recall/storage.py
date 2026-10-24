@@ -45,23 +45,25 @@ def due_cards(cards, today=None):
     return [c for c in cards if date.fromisoformat(c["due_date"]) <= today]
 
 
-def import_cards(cards, lines, today=None):
+def import_cards(cards, lines, today=None, malformed=None):
     """Add cards from an iterable of 'front\\tback' lines.
 
     Blank lines and lines starting with '#' are skipped. Lines without a
     tab separator are skipped, as are lines whose front matches an existing
-    card. Returns the number of cards added.
+    card. Returns the number of cards added. If `malformed` is a list, the
+    1-based line numbers of lines that were skipped for lacking a tab or a
+    front/back are appended to it (duplicates and comments are not).
     """
     added = 0
-    for line in lines:
+    for lineno, line in enumerate(lines, 1):
         line = line.rstrip("\n")
         if not line.strip() or line.startswith("#"):
             continue
-        if "\t" not in line:
-            continue
-        front, back = line.split("\t", 1)
+        front, sep, back = line.partition("\t")
         front, back = front.strip(), back.strip()
-        if not front or not back:
+        if not sep or not front or not back:
+            if malformed is not None:
+                malformed.append(lineno)
             continue
         if has_front(cards, front):
             continue

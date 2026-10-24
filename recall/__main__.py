@@ -200,10 +200,18 @@ def run_list(args, print_fn=print, today=None):
 
 def run_import(args, print_fn=print):
     cards = load_deck(args.deck)
-    with open(args.path) as f:
-        added = import_cards(cards, f)
+    try:
+        with open(args.path) as f:
+            malformed = []
+            added = import_cards(cards, f, malformed=malformed)
+    except OSError as e:
+        print(f"error: cannot read {args.path}: {e.strerror}", file=sys.stderr)
+        sys.exit(1)
     save_deck(args.deck, cards)
     print_fn(f"Imported {added} card(s). Deck now has {len(cards)} card(s).")
+    if malformed:
+        shown = ", ".join(map(str, malformed[:10])) + (", ..." if len(malformed) > 10 else "")
+        print(f"warning: skipped {len(malformed)} malformed line(s) (need 'front<TAB>back'): {shown}", file=sys.stderr)
 
 
 def run_export(args, print_fn=print):

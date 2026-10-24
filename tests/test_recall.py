@@ -467,3 +467,17 @@ def test_delete_rejects_ambiguous_or_missing_match(tmp_path):
         with pytest.raises(SystemExit):
             main(["--deck", deck, "--registry", reg, "delete", needle])
     assert len(load_deck(deck)) == 2
+
+
+def test_import_reports_malformed_line_numbers_and_missing_file(tmp_path, capsys):
+    deck = str(tmp_path / "d.json")
+    src = tmp_path / "in.txt"
+    src.write_text("q1\ta1\nnotab\n# c\n\tback only\nfront only\t\n")
+    parser = build_arg_parser()
+    run_import(parser.parse_args(["--deck", deck, "import", str(src)]), print_fn=lambda m: None)
+    err = capsys.readouterr().err
+    assert "skipped 3 malformed line(s)" in err and "2, 4, 5" in err
+    with pytest.raises(SystemExit) as exc:
+        run_import(parser.parse_args(["--deck", deck, "import", str(tmp_path / "nope.txt")]))
+    assert exc.value.code == 1
+    assert "cannot read" in capsys.readouterr().err
