@@ -481,3 +481,14 @@ def test_import_reports_malformed_line_numbers_and_missing_file(tmp_path, capsys
         run_import(parser.parse_args(["--deck", deck, "import", str(tmp_path / "nope.txt")]))
     assert exc.value.code == 1
     assert "cannot read" in capsys.readouterr().err
+
+
+def test_export_import_roundtrips_tabs_newlines_backslashes_and_hash():
+    from recall.storage import add_card, export_lines, import_cards
+    src = []
+    add_card(src, "#1 q\\n", "a\tb\nc\\")
+    lines = export_lines(src)
+    assert len(lines) == 1 and "\n" not in lines[0] and lines[0].count("\t") == 1
+    dst = []
+    assert import_cards(dst, lines) == 1
+    assert (dst[0]["front"], dst[0]["back"]) == ("#1 q\\n", "a\tb\nc\\")
