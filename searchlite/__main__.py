@@ -104,6 +104,9 @@ def cmd_remove(args):
 
 
 def cmd_search(args):
+    if args.top < 1:
+        print(f"error: --top must be a positive number, got {args.top}", file=sys.stderr)
+        sys.exit(2)
     if not tokenize(args.query):
         print(f"error: query {args.query!r} has no searchable terms (blank or only stopwords)", file=sys.stderr)
         sys.exit(2)
