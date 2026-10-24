@@ -96,6 +96,9 @@ def build_arg_parser():
 
 
 def run_add(args):
+    if not args.front.strip() or not args.back.strip():
+        print("error: card front and back must not be blank", file=sys.stderr)
+        sys.exit(1)
     cards = load_deck(args.deck)
     if has_front(cards, args.front):
         print(f"Skipped: a card with this front already exists: {args.front}")
