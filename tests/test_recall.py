@@ -396,6 +396,17 @@ def test_cli_add_skips_duplicate_front(tmp_path, capsys):
     assert "Total cards: 1" in capsys.readouterr().out
 
 
+def test_cli_add_rejects_blank_front_or_back(tmp_path, capsys):
+    deck = str(tmp_path / "d.json")
+    reg = str(tmp_path / "r.json")
+    for front, back in [("", "A"), ("   ", "A"), ("Q", " ")]:
+        with pytest.raises(SystemExit) as exc:
+            main(["--deck", deck, "--registry", reg, "add", front, back])
+        assert exc.value.code == 1
+        assert "must not be blank" in capsys.readouterr().err
+    assert load_deck(deck) == []
+
+
 def test_rate_updates_only_the_matched_card(tmp_path, capsys):
     deck = str(tmp_path / "d.json")
     reg = str(tmp_path / "r.json")
