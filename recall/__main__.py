@@ -69,6 +69,12 @@ def build_arg_parser():
         "delete", help="remove one card, picked by a substring of its front"
     )
     del_p.add_argument("text", help="substring of the card's front (case-insensitive); must match exactly one card")
+    edit_p = sub.add_parser(
+        "edit", help="rewrite one card's front and/or back, keeping its review schedule"
+    )
+    edit_p.add_argument("text", help="substring of the card's front (case-insensitive); must match exactly one card")
+    edit_p.add_argument("--front", default=None, help="new front text")
+    edit_p.add_argument("--back", default=None, help="new back text")
     sub.add_parser("stats", help="show deck size and how many cards are due")
     p_list = sub.add_parser("list", help="preview all cards sorted by due date, without reviewing them")
     p_list.add_argument("--due", action="store_true", help="only list cards that are due today or overdue")
@@ -180,6 +186,36 @@ def run_delete(args, print_fn=print):
     return True
 
 
+def run_edit(args, print_fn=print):
+    if args.front is None and args.back is None:
+        print("error: edit needs --front and/or --back", file=sys.stderr)
+        sys.exit(1)
+    for val in (args.front, args.back):
+        if val is not None and not val.strip():
+            print("error: card front and back must not be blank", file=sys.stderr)
+            sys.exit(1)
+    cards = load_deck(args.deck)
+    needle = args.text.casefold()
+    matches = [c for c in cards if needle in c["front"].casefold()]
+    if len(matches) != 1:
+        print_fn(f"{len(matches)} cards match {args.text!r}; need exactly 1.")
+        for c in matches:
+            print_fn(f"  {c['front']}")
+        return False
+    card = matches[0]
+    if args.front is not None and has_front([c for c in cards if c is not card], args.front):
+        print(f"error: another card already has the front {args.front!r}", file=sys.stderr)
+        sys.exit(1)
+    old = card["front"]
+    if args.front is not None:
+        card["front"] = args.front
+    if args.back is not None:
+        card["back"] = args.back
+    save_deck(args.deck, cards)
+    print_fn(f"Edited {old!r}; schedule unchanged (due {card['due_date']}).")
+    return True
+
+
 def run_list(args, print_fn=print, today=None):
     cards = load_deck(args.deck)
     if not cards:
@@ -285,6 +321,11 @@ def main(argv=None):
             sys.exit(1)
     elif args.command == "delete":
         if run_delete(args):
+            register_current_deck(args)
+        else:
+            sys.exit(1)
+    elif args.command == "edit":
+        if run_edit(args):
             register_current_deck(args)
         else:
             sys.exit(1)

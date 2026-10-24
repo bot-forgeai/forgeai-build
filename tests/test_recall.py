@@ -469,6 +469,34 @@ def test_delete_rejects_ambiguous_or_missing_match(tmp_path):
     assert len(load_deck(deck)) == 2
 
 
+def test_edit_rewrites_text_but_keeps_schedule(tmp_path):
+    deck = str(tmp_path / "d.json")
+    reg = str(tmp_path / "r.json")
+    main(["--deck", deck, "--registry", reg, "add", "Alpha thing", "a"])
+    main(["--deck", deck, "--registry", reg, "add", "Beta thing", "b"])
+    main(["--deck", deck, "--registry", reg, "rate", "alpha", "5"])
+    before = load_deck(deck)[0]
+    main(["--deck", deck, "--registry", reg, "edit", "alpha", "--back", "A2", "--front", "Alpha v2"])
+    after = load_deck(deck)[0]
+    assert (after["front"], after["back"]) == ("Alpha v2", "A2")
+    for k in ("id", "due_date", "interval_days", "repetitions", "ease_factor"):
+        assert after[k] == before[k]
+
+
+def test_edit_rejects_bad_input_and_leaves_deck_alone(tmp_path):
+    deck = str(tmp_path / "d.json")
+    reg = str(tmp_path / "r.json")
+    main(["--deck", deck, "--registry", reg, "add", "Alpha thing", "a"])
+    main(["--deck", deck, "--registry", reg, "add", "Beta thing", "b"])
+    orig = load_deck(deck)
+    for argv in (["edit", "alpha"], ["edit", "alpha", "--back", "  "],
+                 ["edit", "thing", "--back", "x"], ["edit", "zzz", "--back", "x"],
+                 ["edit", "alpha", "--front", "beta THING"]):
+        with pytest.raises(SystemExit):
+            main(["--deck", deck, "--registry", reg] + argv)
+    assert load_deck(deck) == orig
+
+
 def test_import_reports_malformed_line_numbers_and_missing_file(tmp_path, capsys):
     deck = str(tmp_path / "d.json")
     src = tmp_path / "in.txt"
