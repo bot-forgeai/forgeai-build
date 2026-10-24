@@ -165,13 +165,17 @@ class Index:
         text = self.doc_texts.get(doc_id)
         if text is None:
             return self.doc_titles.get(doc_id, "")
-        terms = tokenize(query)
-        if not terms:
+        # mirror search(): '-word' is an exclusion (never highlighted) and
+        # 'pre*' highlights any word starting with the prefix
+        patterns = []
+        for word in query.replace('"', " ").split():
+            if word.startswith("-") and len(word) > 1:
+                continue
+            for t in tokenize(word):
+                patterns.append(re.escape(t) + (r"\w*" if word.endswith("*") else ""))
+        if not patterns:
             return text.strip().replace("\n", " ")[:2 * radius]
-        term_re = re.compile(
-            r"\b(" + "|".join(re.escape(t) for t in terms) + r")\b",
-            re.IGNORECASE,
-        )
+        term_re = re.compile(r"\b(" + "|".join(patterns) + r")\b", re.IGNORECASE)
         match = term_re.search(text)
         if not match:
             return text.strip().replace("\n", " ")[:2 * radius]
