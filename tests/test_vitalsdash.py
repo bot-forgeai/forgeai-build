@@ -506,3 +506,19 @@ def test_summary_flag_prints_table_and_exits_by_breach(capsys, monkeypatch):
     with pytest.raises(SystemExit) as e:
         main()
     assert e.value.code == 1
+
+
+def test_summary_compare_adds_mean_and_diff_columns(capsys, monkeypatch):
+    from vitalsdash.__main__ import main
+    monkeypatch.setattr("sys.argv", ["vitalsdash", SAMPLE_CSV, "--summary", "--compare", SAMPLE_CSV])
+    with pytest.raises(SystemExit) as e:
+        main()
+    assert e.value.code == 0
+    out = capsys.readouterr().out
+    assert "mean2" in out and "diff" in out and "+0" in out
+
+
+def test_format_summary_compare_missing_metric_shows_dash():
+    from vitalsdash.__main__ import add_compare_means, format_summary
+    rows = [{"metric": "a", "n": 1, "min": 1, "mean": 1.0, "max": 1, "latest": 1, "breached": False}]
+    assert format_summary(add_compare_means(rows, [])).splitlines()[1].split()[-2:] == ["-", "-"]

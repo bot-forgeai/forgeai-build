@@ -97,14 +97,30 @@ def build_arg_parser():
     return parser
 
 
+def add_compare_means(rows, other_rows):
+    """Set r["cmp_mean"] to the same metric's mean in other_rows (None if absent)."""
+    other = {r["metric"]: r["mean"] for r in other_rows}
+    for r in rows:
+        r["cmp_mean"] = other.get(r["metric"])
+    return rows
+
+
 def format_summary(rows):
-    """Render summarize() rows as an aligned text table; '!' marks a breach."""
-    header = ("metric", "n", "min", "mean", "max", "latest")
-    body = [
-        (r["metric"], str(r["n"]), f"{r['min']:.4g}", f"{r['mean']:.4g}",
-         f"{r['max']:.4g}", f"{r['latest']:.4g}" + (" !" if r["breached"] else ""))
-        for r in rows
-    ]
+    """Render summarize() rows as an aligned text table; '!' marks a breach.
+
+    Rows carrying "cmp_mean" (see add_compare_means) get two extra columns:
+    the --compare file's mean and the difference (this minus that).
+    """
+    compare = any("cmp_mean" in r for r in rows)
+    header = ("metric", "n", "min", "mean", "max", "latest") + (("mean2", "diff") if compare else ())
+    body = []
+    for r in rows:
+        row = (r["metric"], str(r["n"]), f"{r['min']:.4g}", f"{r['mean']:.4g}",
+               f"{r['max']:.4g}", f"{r['latest']:.4g}" + (" !" if r["breached"] else ""))
+        if compare:
+            c = r.get("cmp_mean")
+            row += ("-", "-") if c is None else (f"{c:.4g}", f"{r['mean'] - c:+.4g}")
+        body.append(row)
     widths = [max(len(row[i]) for row in [header] + body) for i in range(len(header))]
     lines = ["  ".join(c.ljust(w) if i == 0 else c.rjust(w) for i, (c, w) in enumerate(zip(row, widths)))
              for row in [header] + body]
@@ -168,6 +184,9 @@ def main():
     if args.summary:
         metric_names, records = _load(args.csv, args.rate, args.last_days)
         rows = summarize(metric_names, records, thresholds, parse_below_metrics(args.threshold))
+        if args.compare:
+            names2, records2 = _load(args.compare, args.rate, args.last_days)
+            add_compare_means(rows, summarize(names2, records2))
         print(format_summary(rows))
         sys.exit(1 if any(r["breached"] for r in rows) else 0)
     server = make_server(
