@@ -260,3 +260,17 @@ def test_search_prefix_without_match_returns_nothing():
     index = Index()
     index.add_document("a", "hello world")
     assert index.search("zzz*") == []
+
+
+def test_snippet_expands_wildcard_and_skips_exclusion():
+    index = Index()
+    index.add_document("a", "the swap device handles compression of pages quickly")
+    snippet = index.snippet("a", "compress* -swap", radius=60)
+    assert "**compression**" in snippet
+    assert "**swap**" not in snippet
+
+
+def test_snippet_ignores_quote_characters():
+    index = Index()
+    index.add_document("a", "wear on the sd card grows over time")
+    assert "**card**" in index.snippet("a", '"sd card"', radius=30)
