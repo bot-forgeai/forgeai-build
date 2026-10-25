@@ -16,3 +16,23 @@ def test_load_or_new_index_missing_file_returns_empty(tmp_path):
     path = str(tmp_path / "missing.json")
     index = load_or_new_index(path)
     assert index.doc_count == 0
+
+
+def test_save_index_is_atomic_and_leaves_no_temp_file(tmp_path, monkeypatch):
+    import json
+    path = tmp_path / "i.json"
+    idx = Index()
+    idx.add_document("a", "alpha text")
+    save_index(idx, str(path))
+    before = path.read_text()
+
+    def boom(*a, **kw):
+        raise RuntimeError("disk full")
+
+    monkeypatch.setattr(json, "dump", boom)
+    try:
+        save_index(idx, str(path))
+    except RuntimeError:
+        pass
+    assert path.read_text() == before  # old index intact
+    assert [p.name for p in tmp_path.iterdir()] == ["i.json"]
