@@ -10,16 +10,17 @@ log files occasionally pick up a stray malformed line.
 """
 
 import csv
+import math
 import statistics
 from datetime import datetime, timedelta
 
 
 def _is_float(value):
     try:
-        float(value)
+        number = float(value)
     except (TypeError, ValueError):
         return False
-    return True
+    return math.isfinite(number)
 
 
 def load_vitals(csv_path):
