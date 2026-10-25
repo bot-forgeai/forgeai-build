@@ -545,3 +545,16 @@ def test_json_without_summary_is_a_usage_error(monkeypatch):
     with pytest.raises(SystemExit) as e:
         main()
     assert e.value.code == 2
+
+
+def test_load_vitals_skips_nan_and_inf(tmp_path):
+    path = tmp_path / "v.csv"
+    path.write_text(
+        "timestamp,a,b\n"
+        "2026-01-01T00:00:00,1,2\n"
+        "2026-01-01T01:00:00,nan,3\n"
+        "2026-01-01T02:00:00,inf,4\n"
+        "2026-01-01T03:00:00,5,6\n"
+    )
+    metrics, records = load_vitals(str(path))
+    assert [r["a"] for r in records] == [1.0, 5.0]
