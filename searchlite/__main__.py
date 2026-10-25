@@ -37,7 +37,7 @@ def cmd_add(args):
     save_index(index, args.index)
 
 
-def _sync_dir(index, directory, base, extensions, prune):
+def _sync_dir(index, directory, base, extensions, prune, stat_cache=None):
     """Bring the index in line with directory; returns (indexed, unchanged, pruned)."""
     count = unchanged = pruned = 0
     seen = set()
@@ -46,10 +46,17 @@ def _sync_dir(index, directory, base, extensions, prune):
             if not name.endswith(extensions):
                 continue
             path = os.path.join(root, name)
-            with open(path, "r", encoding="utf-8", errors="replace") as f:
-                text = f.read()
             doc_id = os.path.relpath(path, base)
             seen.add(doc_id)
+            if stat_cache is not None:
+                st = os.stat(path)
+                sig = (st.st_mtime_ns, st.st_size)
+                if stat_cache.get(doc_id) == sig and doc_id in index.doc_texts:
+                    unchanged += 1
+                    continue
+                stat_cache[doc_id] = sig
+            with open(path, "r", encoding="utf-8", errors="replace") as f:
+                text = f.read()
             if index.doc_texts.get(doc_id) == text:
                 unchanged += 1
                 continue
@@ -79,14 +86,27 @@ def cmd_add_dir(args):
     print(msg)
 
 
+def _file_sig(path):
+    try:
+        st = os.stat(path)
+    except FileNotFoundError:
+        return None
+    return (st.st_mtime_ns, st.st_size)
+
+
 def cmd_watch(args):
     extensions = _parse_exts(args.ext)
     runs = 0
+    index = load_or_new_index(args.index)
+    index_sig = _file_sig(args.index)
+    stat_cache = {}  # doc_id -> (mtime_ns, size): unchanged files aren't re-read on later scans
     while True:
-        index = load_or_new_index(args.index)
-        count, _unchanged, pruned = _sync_dir(index, args.directory, args.base, extensions, not args.no_prune)
+        if _file_sig(args.index) != index_sig:  # someone else (add, remove) rewrote the index
+            index = load_or_new_index(args.index)
+        count, _unchanged, pruned = _sync_dir(index, args.directory, args.base, extensions, not args.no_prune, stat_cache)
         if count or pruned:
             save_index(index, args.index)
+            index_sig = _file_sig(args.index)
             print(f"synced: {count} indexed, {pruned} pruned", flush=True)
         runs += 1
         if args.max_runs and runs >= args.max_runs:

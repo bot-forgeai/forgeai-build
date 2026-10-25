@@ -241,3 +241,46 @@ def test_search_top_must_be_positive(tmp_path, capsys):
             main(["--index", index_path, "search", "apples", "--top", top])
         assert exc.value.code == 2
         assert "--top must be" in capsys.readouterr().err
+
+
+def test_watch_does_not_reread_unchanged_files(tmp_path, capsys, monkeypatch):
+    import searchlite.__main__ as cli
+    monkeypatch.chdir(tmp_path)
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "a.md").write_text("alpha text")
+    (docs / "b.md").write_text("beta text")
+    reads = []
+    real_open = open
+
+    def spy_open(path, *a, **kw):
+        if str(path).endswith(".md"):
+            reads.append(os.path.basename(str(path)))
+        return real_open(path, *a, **kw)
+
+    def fake_sleep(_seconds):
+        (docs / "b.md").write_text("beta text changed")
+
+    monkeypatch.setattr(cli.time, "sleep", fake_sleep)
+    monkeypatch.setattr("builtins.open", spy_open)
+    main(["--index", "i.json", "watch", "docs", "--max-runs", "2"])
+    assert reads == ["a.md", "b.md", "b.md"]  # a.md read once, not on scan 2
+
+
+def test_watch_reloads_index_rewritten_by_another_process(tmp_path, capsys, monkeypatch):
+    import searchlite.__main__ as cli
+    monkeypatch.chdir(tmp_path)
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "a.md").write_text("alpha text")
+    (tmp_path / "extra.txt").write_text("zebra text")
+
+    def fake_sleep(_seconds):
+        main(["--index", "i.json", "add", "extra.txt"])
+        (docs / "b.md").write_text("beta text")
+
+    monkeypatch.setattr(cli.time, "sleep", fake_sleep)
+    main(["--index", "i.json", "watch", "docs", "--max-runs", "2"])
+    capsys.readouterr()
+    main(["--index", "i.json", "search", "zebra"])
+    assert "extra.txt" in capsys.readouterr().out
