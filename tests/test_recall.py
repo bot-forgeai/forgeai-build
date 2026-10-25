@@ -536,3 +536,18 @@ def test_export_import_roundtrips_tabs_newlines_backslashes_and_hash():
     dst = []
     assert import_cards(dst, lines) == 1
     assert (dst[0]["front"], dst[0]["back"]) == ("#1 q\\n", "a\tb\nc\\")
+
+
+def test_cli_show_negative_limit_is_an_error(tmp_path, capsys):
+    deck = str(tmp_path / "deck.json")
+    cards = []
+    add_card(cards, "q", "a")
+    save_deck(deck, cards)
+    args = build_arg_parser().parse_args(["--deck", deck, "show", "--limit", "-1"])
+    try:
+        run_show(args, print_fn=lambda *_: None)
+        raised = False
+    except SystemExit as e:
+        raised = e.code == 1
+    assert raised
+    assert "--limit" in capsys.readouterr().err
