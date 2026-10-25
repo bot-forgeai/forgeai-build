@@ -285,3 +285,11 @@ def test_search_plus_term_is_required():
     assert [d for d, _ in idx.search("+zram swap")] == ["a", "b"]
     assert [d for d, _ in idx.search("+zram +swap")] == ["a"]
     assert idx.search("+nosuchword zram") == []
+
+
+def test_snippet_anchors_on_quoted_phrase():
+    index = Index()
+    index.add_document("a", "swap is used rarely. " * 6 + "x" * 60 + " the wear leveling story starts here")
+    snippet = index.snippet("a", '"wear leveling" swap', radius=20)
+    assert "**wear** **leveling**" in snippet
+    assert "rarely" not in snippet
