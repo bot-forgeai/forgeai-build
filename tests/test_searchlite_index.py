@@ -274,3 +274,14 @@ def test_snippet_ignores_quote_characters():
     index = Index()
     index.add_document("a", "wear on the sd card grows over time")
     assert "**card**" in index.snippet("a", '"sd card"', radius=30)
+
+
+def test_search_plus_term_is_required():
+    idx = Index()
+    idx.add_document("a", "zram swap compression")
+    idx.add_document("b", "zram only here")
+    idx.add_document("c", "swap swap swap file")
+    assert {d for d, _ in idx.search("zram swap")} == {"a", "b", "c"}
+    assert [d for d, _ in idx.search("+zram swap")] == ["a", "b"]
+    assert [d for d, _ in idx.search("+zram +swap")] == ["a"]
+    assert idx.search("+nosuchword zram") == []
