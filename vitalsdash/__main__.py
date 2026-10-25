@@ -1,5 +1,6 @@
 import argparse
 import csv
+import json
 import sys
 from importlib.metadata import version as _get_version, PackageNotFoundError
 
@@ -94,6 +95,12 @@ def build_arg_parser():
         "exit instead of serving; exits 1 if any --threshold is breached, "
         "so it can gate a script",
     )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="with --summary, print the rows as a JSON array instead of a text "
+        "table (same exit code), for scripts that parse the output",
+    )
     return parser
 
 
@@ -162,7 +169,10 @@ def csv_columns(path):
 
 
 def main():
-    args = build_arg_parser().parse_args()
+    parser = build_arg_parser()
+    args = parser.parse_args()
+    if args.json and not args.summary:
+        parser.error("--json only applies together with --summary")
 
     thresholds = parse_thresholds(args.threshold)
     try:
@@ -187,7 +197,7 @@ def main():
         if args.compare:
             names2, records2 = _load(args.compare, args.rate, args.last_days)
             add_compare_means(rows, summarize(names2, records2))
-        print(format_summary(rows))
+        print(json.dumps(rows, indent=2) if args.json else format_summary(rows))
         sys.exit(1 if any(r["breached"] for r in rows) else 0)
     server = make_server(
         args.csv,

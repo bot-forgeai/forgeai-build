@@ -522,3 +522,26 @@ def test_format_summary_compare_missing_metric_shows_dash():
     from vitalsdash.__main__ import add_compare_means, format_summary
     rows = [{"metric": "a", "n": 1, "min": 1, "mean": 1.0, "max": 1, "latest": 1, "breached": False}]
     assert format_summary(add_compare_means(rows, [])).splitlines()[1].split()[-2:] == ["-", "-"]
+
+
+def test_summary_json_prints_rows_and_keeps_exit_code(capsys, monkeypatch):
+    import json
+    import pytest
+    from vitalsdash.__main__ import main
+
+    monkeypatch.setattr("sys.argv", ["vitalsdash", SAMPLE_CSV, "--summary", "--json", "--threshold", "temp_c=0"])
+    with pytest.raises(SystemExit) as e:
+        main()
+    rows = json.loads(capsys.readouterr().out)
+    assert e.value.code == 1
+    assert any(r["metric"] == "temp_c" and r["breached"] for r in rows)
+
+
+def test_json_without_summary_is_a_usage_error(monkeypatch):
+    import pytest
+    from vitalsdash.__main__ import main
+
+    monkeypatch.setattr("sys.argv", ["vitalsdash", SAMPLE_CSV, "--json"])
+    with pytest.raises(SystemExit) as e:
+        main()
+    assert e.value.code == 2
