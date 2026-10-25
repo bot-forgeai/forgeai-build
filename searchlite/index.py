@@ -95,13 +95,18 @@ class Index:
         are dropped. A hyphen inside a word ('sd-card') is not one. A
         trailing '*' ('compress*') matches every indexed term with that
         prefix. A double-quoted run ('"sd card" wear') must appear as an exact
-        consecutive phrase; its terms still count toward ranking.
+        consecutive phrase; its terms still count toward ranking. A leading
+        '+' ('+zram swap') makes a word required: documents lacking it are
+        dropped (unlike plain words, which just add to the score).
         """
         phrases = re.findall(r'"([^"]+)"', query)
         query = re.sub(r'"([^"]*)"', lambda m: " " + m.group(1) + " ", query)
-        include, excluded = [], set()
+        include, excluded, required = [], set(), []
         for word in query.split():
-            if word.startswith("-") and len(word) > 1:
+            if word.startswith("+") and len(word.strip("+*")) > 0 and not word.endswith("*"):
+                required.extend(tokenize(word))
+                include.append(word[1:])
+            elif word.startswith("-") and len(word) > 1:
                 excluded.update(tokenize(word[1:]))
             elif word.endswith("*") and word.strip("*"):
                 # prefix wildcard: expand to every indexed term it matches
@@ -119,6 +124,9 @@ class Index:
         for term in excluded:
             for doc_id in self.postings.get(term, ()):
                 scores.pop(doc_id, None)
+        for term in required:
+            have = self.postings.get(term, ())
+            scores = {d: v for d, v in scores.items() if d in have}
         for phrase in phrases:
             hits = dict(self.search_phrase(phrase, top_k=len(self.doc_titles) or 1))
             scores = {d: v for d, v in scores.items() if d in hits}
