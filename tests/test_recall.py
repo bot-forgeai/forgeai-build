@@ -155,6 +155,22 @@ def test_cli_list_sorts_by_due_date_and_marks_status(tmp_path):
     assert "later" in outputs[1] and "upcoming" in outputs[1]
 
 
+def test_cli_list_match_filters_front_or_back_case_insensitively(tmp_path):
+    deck_path = str(tmp_path / "deck.json")
+    today = date(2026, 1, 10)
+    cards = add_card([], "Alpha", "needle inside", today=today)
+    cards = add_card(cards, "Beta", "other", today=today)
+    save_deck(deck_path, cards)
+    args = build_arg_parser().parse_args(["--deck", deck_path, "list", "--match", "NEEDLE"])
+    outputs = []
+    run_list(args, print_fn=outputs.append, today=today)
+    assert len(outputs) == 1 and "Alpha" in outputs[0]
+    args = build_arg_parser().parse_args(["--deck", deck_path, "list", "--match", "zzz"])
+    outputs = []
+    run_list(args, print_fn=outputs.append, today=today)
+    assert outputs == ["No matching cards."]
+
+
 def test_import_cards_adds_valid_lines_and_skips_bad_ones():
     lines = [
         "2+2\t4",
