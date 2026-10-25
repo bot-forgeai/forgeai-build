@@ -184,7 +184,17 @@ class Index:
         if not patterns:
             return text.strip().replace("\n", " ")[:2 * radius]
         term_re = re.compile(r"\b(" + "|".join(patterns) + r")\b", re.IGNORECASE)
-        match = term_re.search(text)
+        # a quoted phrase anchors the excerpt where the whole phrase occurs
+        match = None
+        for phrase in re.findall(r'"([^"]+)"', query):
+            words = tokenize(phrase)
+            if words:
+                m = re.search(r"(?<![a-z0-9])" + r"[^a-z0-9]+".join(map(re.escape, words)) + "(?![a-z0-9])",
+                              text, re.IGNORECASE)
+                if m and (match is None or m.start() < match.start()):
+                    match = m
+        if match is None:
+            match = term_re.search(text)
         if not match:
             return text.strip().replace("\n", " ")[:2 * radius]
         start = max(0, match.start() - radius)
