@@ -140,13 +140,16 @@ def run_review(args, input_fn=input, print_fn=print):
 
 
 def run_show(args, print_fn=print):
+    if args.limit is not None and args.limit < 0:
+        print("error: --limit must be 0 or more", file=sys.stderr)
+        sys.exit(1)
     cards = load_deck(args.deck)
     due = due_cards(cards)
     if not due:
         print_fn("Nothing due for review.")
         return
     if args.limit is not None:
-        due = due[:max(args.limit, 0)]
+        due = due[:args.limit]
     for card in due:
         print_fn(f"Q: {card['front']}")
         print_fn(f"A: {card['back']}\n")
