@@ -69,6 +69,10 @@ def test_search_with_phrase_flag(tmp_path, capsys):
 
 def test_search_no_results(tmp_path, capsys):
     index_path = str(tmp_path / "idx.json")
+    doc = tmp_path / "d.txt"
+    doc.write_text("something else")
+    main(["--index", index_path, "add", str(doc)])
+    capsys.readouterr()
     main(["--index", index_path, "search", "nothing"])
     out = capsys.readouterr().out
     assert "no results" in out
@@ -100,6 +104,9 @@ def test_remove(tmp_path, capsys):
 
 def test_remove_missing_exits_nonzero(tmp_path, capsys):
     index_path = str(tmp_path / "idx.json")
+    doc = tmp_path / "d.txt"
+    doc.write_text("something")
+    main(["--index", index_path, "add", str(doc)])
     try:
         main(["--index", index_path, "remove", "nope.txt"])
         assert False, "expected SystemExit"
@@ -341,3 +348,14 @@ def test_search_json(tmp_path, capsys):
 
     main(["--index", index_path, "search", "zebra", "--json"])
     assert json.loads(capsys.readouterr().out) == []
+
+
+def test_read_commands_error_on_missing_index(tmp_path, capsys):
+    import pytest
+    missing = str(tmp_path / "typo.json")
+    for argv in (["search", "alpha"], ["stats"], ["remove", "x.txt"]):
+        with pytest.raises(SystemExit) as exc:
+            main(["--index", missing] + argv)
+        assert exc.value.code == 2
+        assert "no index at" in capsys.readouterr().err
+    assert not (tmp_path / "typo.json").exists()

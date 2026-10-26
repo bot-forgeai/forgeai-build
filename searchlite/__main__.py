@@ -115,8 +115,16 @@ def cmd_watch(args):
         time.sleep(args.interval)
 
 
+def _load_existing(path):
+    """Load an index that must already exist (read/remove commands)."""
+    if not os.path.exists(path):
+        print(f"error: no index at {path!r} (check --index / $SEARCHLITE_INDEX, or run add/add-dir first)", file=sys.stderr)
+        sys.exit(2)
+    return load_or_new_index(path)
+
+
 def cmd_remove(args):
-    index = load_or_new_index(args.index)
+    index = _load_existing(args.index)
     if not index.remove_document(args.doc_id):
         print(f"error: no such document {args.doc_id!r}", file=sys.stderr)
         sys.exit(1)
@@ -131,7 +139,7 @@ def cmd_search(args):
     if not tokenize(args.query):
         print(f"error: query {args.query!r} has no searchable terms (blank or only stopwords)", file=sys.stderr)
         sys.exit(2)
-    index = load_or_new_index(args.index)
+    index = _load_existing(args.index)
     if args.phrase:
         results = index.search_phrase(args.query, top_k=args.top)
     else:
@@ -154,7 +162,7 @@ def cmd_search(args):
 
 
 def cmd_stats(args):
-    index = load_or_new_index(args.index)
+    index = _load_existing(args.index)
     print(f"documents: {index.doc_count}")
     print(f"terms: {len(index.postings)}")
 
