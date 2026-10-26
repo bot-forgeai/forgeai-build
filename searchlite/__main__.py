@@ -1,4 +1,5 @@
 import argparse
+import json
 import os
 import sys
 import time
@@ -135,14 +136,20 @@ def cmd_search(args):
         results = index.search_phrase(args.query, top_k=args.top)
     else:
         results = index.search(args.query, top_k=args.top, rank=args.rank)
-    if not results:
+    if not results and not args.json:
         print("no results")
         return
+    rows = []
     for doc_id, score in results:
         if args.snippet:
             preview = index.snippet(doc_id, args.query)
         else:
             preview = index.doc_titles.get(doc_id, "")
+        rows.append((doc_id, score, preview))
+    if args.json:
+        print(json.dumps([{"doc_id": d, "score": round(s, 4), "preview": p} for d, s, p in rows]))
+        return
+    for doc_id, score, preview in rows:
         print(f"{score:.4f}\t{doc_id}\t{preview}")
 
 
@@ -190,6 +197,7 @@ def build_parser():
     p_search.add_argument("--snippet", action="store_true", help="show a query-term-highlighted excerpt instead of the leading preview")
     p_search.add_argument("--rank", choices=["tfidf", "bm25"], default="tfidf", help="ranking method (default: tfidf)")
     p_search.add_argument("--phrase", action="store_true", help="require query terms to appear as an exact consecutive phrase, ranked by occurrence count instead of tfidf/bm25")
+    p_search.add_argument("--json", action="store_true", help="print results as a JSON array of {doc_id, score, preview} ('[]' when nothing matches)")
     p_search.set_defaults(func=cmd_search)
 
     p_stats = sub.add_parser("stats", help="print index size stats")
