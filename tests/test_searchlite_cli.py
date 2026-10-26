@@ -284,3 +284,40 @@ def test_watch_reloads_index_rewritten_by_another_process(tmp_path, capsys, monk
     capsys.readouterr()
     main(["--index", "i.json", "search", "zebra"])
     assert "extra.txt" in capsys.readouterr().out
+
+
+def test_corrupt_index_exits_2_with_hint(tmp_path, capsys):
+    import pytest
+    index_path = tmp_path / "idx.json"
+    index_path.write_text('{"postings": {"a": ')  # truncated
+    with pytest.raises(SystemExit) as exc:
+        main(["--index", str(index_path), "search", "alpha"])
+    assert exc.value.code == 2
+    err = capsys.readouterr().err
+    assert "corrupt" in err and "--rebuild" in err
+    assert index_path.read_text() == '{"postings": {"a": '  # untouched
+
+
+def test_add_dir_rebuild_sets_corrupt_index_aside(tmp_path, capsys):
+    import pytest
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "n.md").write_text("zram swap notes")
+    index_path = tmp_path / "idx.json"
+    index_path.write_text("not json")
+    with pytest.raises(SystemExit):
+        main(["--index", str(index_path), "add-dir", str(docs)])
+    main(["--index", str(index_path), "--base", str(docs), "add-dir", str(docs), "--rebuild"])
+    assert (tmp_path / "idx.json.corrupt").read_text() == "not json"
+    capsys.readouterr()
+    main(["--index", str(index_path), "search", "zram"])
+    assert "n.md" in capsys.readouterr().out
+
+
+def test_wrong_shape_index_is_corrupt(tmp_path):
+    import pytest
+    from searchlite.storage import IndexCorruptError, load_index
+    p = tmp_path / "i.json"
+    p.write_text("[1, 2]")
+    with pytest.raises(IndexCorruptError):
+        load_index(str(p))

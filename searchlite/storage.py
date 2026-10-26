@@ -17,14 +17,34 @@ def save_index(index, path):
         raise
 
 
+class IndexCorruptError(Exception):
+    """The index file exists but isn't a readable searchlite index."""
+
+
 def load_index(path):
     with open(path, "r", encoding="utf-8") as f:
-        data = json.load(f)
-    return Index.from_dict(data)
+        try:
+            data = json.load(f)
+        except (ValueError, UnicodeDecodeError) as e:
+            raise IndexCorruptError(f"{path}: not valid JSON ({e})") from e
+    try:
+        return Index.from_dict(data)
+    except (AttributeError, TypeError, ValueError) as e:
+        raise IndexCorruptError(f"{path}: unexpected structure ({e})") from e
 
 
-def load_or_new_index(path):
+def load_or_new_index(path, rebuild=False):
+    """Load the index, or an empty one if the file is missing.
+
+    With rebuild=True a corrupt file is renamed to PATH.corrupt (kept for
+    inspection) and an empty index is returned instead of raising.
+    """
     try:
         return load_index(path)
     except FileNotFoundError:
+        return Index()
+    except IndexCorruptError:
+        if not rebuild:
+            raise
+        os.replace(path, f"{path}.corrupt")
         return Index()
