@@ -233,6 +233,26 @@ def test_cli_stats_reports_counts(tmp_path):
     assert any("Leeches (4+ lapses): 0" in line for line in outputs)
 
 
+def test_cli_stats_breaks_down_maturity_and_forecast(tmp_path):
+    from datetime import date, timedelta
+    deck_path = str(tmp_path / "deck.json")
+    cards = add_card([], "new", "b")
+    cards = add_card(cards, "young", "b")
+    cards = add_card(cards, "old", "b")
+    today = date.today()
+    cards[1].update(repetitions=2, interval_days=6, ease_factor=2.0,
+                    due_date=(today + timedelta(days=3)).isoformat())
+    cards[2].update(repetitions=5, interval_days=30, ease_factor=3.0,
+                    due_date=(today + timedelta(days=20)).isoformat())
+    save_deck(deck_path, cards)
+    args = build_arg_parser().parse_args(["--deck", deck_path, "stats"])
+    outputs = []
+    run_stats(args, print_fn=outputs.append)
+    assert "New: 1, learning: 1, mature (21+ day interval): 1" in outputs
+    assert "Average ease: 2.50" in outputs
+    assert "Due in the next 7 days: 1" in outputs
+
+
 def test_apply_review_failure_increments_lapses():
     cards = add_card([], "front", "back")
     apply_review(cards[0], quality=1)
