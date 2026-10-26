@@ -303,6 +303,9 @@ def run_decks(args, print_fn=print):
         return
     today = date.today()
     for name, path in sorted(registry.items()):
+        if not os.path.exists(path):
+            print_fn(f"{name}: deck file missing  ({path})")
+            continue
         cards = load_deck(path)
         due = due_cards(cards, today=today)
         print_fn(f"{name}: {len(cards)} card(s), {len(due)} due  ({path})")
