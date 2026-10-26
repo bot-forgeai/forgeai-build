@@ -5,7 +5,7 @@ import time
 from importlib.metadata import version as _get_version, PackageNotFoundError
 
 from searchlite.tokenize import tokenize
-from searchlite.storage import load_or_new_index, save_index
+from searchlite.storage import IndexCorruptError, load_or_new_index, save_index
 
 
 def _get_package_version():
@@ -75,7 +75,7 @@ def _parse_exts(ext):
 
 
 def cmd_add_dir(args):
-    index = load_or_new_index(args.index)
+    index = load_or_new_index(args.index, rebuild=args.rebuild)
     count, unchanged, pruned = _sync_dir(index, args.directory, args.base, _parse_exts(args.ext), args.prune)
     save_index(index, args.index)
     msg = f"indexed {count} file(s)"
@@ -97,7 +97,7 @@ def _file_sig(path):
 def cmd_watch(args):
     extensions = _parse_exts(args.ext)
     runs = 0
-    index = load_or_new_index(args.index)
+    index = load_or_new_index(args.index, rebuild=args.rebuild)
     index_sig = _file_sig(args.index)
     stat_cache = {}  # doc_id -> (mtime_ns, size): unchanged files aren't re-read on later scans
     while True:
@@ -168,6 +168,7 @@ def build_parser():
     p_add_dir.add_argument("directory")
     p_add_dir.add_argument("--ext", default=".txt,.md", help="comma-separated extensions to index (default: .txt,.md)")
     p_add_dir.add_argument("--prune", action="store_true", help="remove indexed docs under the directory whose files no longer exist")
+    p_add_dir.add_argument("--rebuild", action="store_true", help="if the index file is corrupt, move it to INDEX.corrupt and rebuild from the directory")
     p_add_dir.set_defaults(func=cmd_add_dir)
 
     p_watch = sub.add_parser("watch", help="poll a directory and reindex whenever files change, are added or deleted")
@@ -176,6 +177,7 @@ def build_parser():
     p_watch.add_argument("--interval", type=float, default=5.0, help="seconds between scans (default: 5)")
     p_watch.add_argument("--max-runs", type=int, default=0, help="stop after this many scans (default: 0 = run until interrupted)")
     p_watch.add_argument("--no-prune", action="store_true", help="keep docs whose files were deleted")
+    p_watch.add_argument("--rebuild", action="store_true", help="if the index file is corrupt, move it to INDEX.corrupt and rebuild from the directory")
     p_watch.set_defaults(func=cmd_watch)
 
     p_remove = sub.add_parser("remove", help="remove a document from the index by its doc id (path)")
@@ -199,7 +201,12 @@ def build_parser():
 def main(argv=None):
     parser = build_parser()
     args = parser.parse_args(argv)
-    args.func(args)
+    try:
+        args.func(args)
+    except IndexCorruptError as e:
+        print(f"error: index is corrupt: {e}", file=sys.stderr)
+        print("hint: restore a copy, or run 'add-dir DIR --rebuild' to set it aside as .corrupt and reindex", file=sys.stderr)
+        sys.exit(2)
 
 
 if __name__ == "__main__":
