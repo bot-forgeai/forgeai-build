@@ -2,7 +2,7 @@
 import argparse
 import os
 import sys
-from datetime import date
+from datetime import date, timedelta
 from importlib.metadata import version as _get_version, PackageNotFoundError
 
 from .storage import (
@@ -273,6 +273,16 @@ def run_stats(args, print_fn=print):
     print_fn(f"Total cards: {len(cards)}")
     print_fn(f"Due today ({date.today().isoformat()}): {len(due)}")
     print_fn(f"Leeches (4+ lapses): {len(leeches)}")
+    if not cards:
+        return
+    new = sum(1 for c in cards if c["repetitions"] == 0 and c.get("lapses", 0) == 0)
+    mature = sum(1 for c in cards if c["interval_days"] >= 21)
+    print_fn(f"New: {new}, learning: {len(cards) - new - mature}, mature (21+ day interval): {mature}")
+    ease = sum(c["ease_factor"] for c in cards) / len(cards)
+    print_fn(f"Average ease: {ease:.2f}")
+    today = date.today()
+    soon = sum(1 for c in cards if today < date.fromisoformat(c["due_date"]) <= today + timedelta(days=7))
+    print_fn(f"Due in the next 7 days: {soon}")
 
 
 def run_leeches(args, print_fn=print):
