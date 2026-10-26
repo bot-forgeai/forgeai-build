@@ -1,4 +1,4 @@
 {
-  "lessons.deck": "../forgeai/data/lessons.deck.json",
+  "lessons.deck": "/home/agent/projects/forgeai/data/lessons.deck.json",
   "d": "/tmp/d.json"
 }

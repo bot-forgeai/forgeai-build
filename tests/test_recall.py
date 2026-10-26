@@ -337,6 +337,16 @@ def test_cli_decks_lists_registered_decks_with_counts(tmp_path):
     assert any(line.startswith("spanish: 1 card(s)") for line in outputs)
 
 
+def test_cli_decks_flags_missing_deck_file(tmp_path):
+    gone = str(tmp_path / "gone.json")
+    registry_path = str(tmp_path / "registry.json")
+    save_registry(registry_path, register_deck({}, "gone", gone))
+    args = build_arg_parser().parse_args(["--registry", registry_path, "decks"])
+    outputs = []
+    run_decks(args, print_fn=outputs.append)
+    assert outputs == [f"gone: deck file missing  ({gone})"]
+
+
 def test_cli_decks_reports_when_nothing_registered(tmp_path):
     parser = build_arg_parser()
     args = parser.parse_args(["--registry", str(tmp_path / "missing.json"), "decks"])
