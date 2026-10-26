@@ -321,3 +321,23 @@ def test_wrong_shape_index_is_corrupt(tmp_path):
     p.write_text("[1, 2]")
     with pytest.raises(IndexCorruptError):
         load_index(str(p))
+
+
+def test_search_json(tmp_path, capsys):
+    import json
+    index_path = str(tmp_path / "idx.json")
+    doc_path = tmp_path / "note.txt"
+    doc_path.write_text("the quick brown fox\tjumps over the lazy dog")
+
+    main(["--index", index_path, "add", str(doc_path)])
+    capsys.readouterr()
+
+    main(["--index", index_path, "search", "fox", "--json", "--snippet"])
+    rows = json.loads(capsys.readouterr().out)
+    assert len(rows) == 1
+    assert rows[0]["doc_id"].endswith("note.txt")
+    assert "**fox**" in rows[0]["preview"]
+    assert isinstance(rows[0]["score"], float)
+
+    main(["--index", index_path, "search", "zebra", "--json"])
+    assert json.loads(capsys.readouterr().out) == []
