@@ -171,6 +171,23 @@ def test_cli_list_match_filters_front_or_back_case_insensitively(tmp_path):
     assert outputs == ["No matching cards."]
 
 
+def test_cli_list_json_outputs_rows_and_empty_array(tmp_path):
+    import json
+
+    deck_path = str(tmp_path / "deck.json")
+    today = date(2026, 1, 10)
+    save_deck(deck_path, add_card(add_card([], "A", "x\ty", today=today), "B", "z", today=today))
+    args = build_arg_parser().parse_args(["--deck", deck_path, "list", "--json", "--match", "x"])
+    outputs = []
+    run_list(args, print_fn=outputs.append, today=today)
+    rows = json.loads(outputs[0])
+    assert rows == [{"front": "A", "back": "x\ty", "due_date": rows[0]["due_date"], "due": True}]
+    args = build_arg_parser().parse_args(["--deck", deck_path, "list", "--json", "--match", "zzz"])
+    outputs = []
+    run_list(args, print_fn=outputs.append, today=today)
+    assert outputs == ["[]"]
+
+
 def test_import_cards_adds_valid_lines_and_skips_bad_ones():
     lines = [
         "2+2\t4",

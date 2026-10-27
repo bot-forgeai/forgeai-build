@@ -1,5 +1,6 @@
 """Command-line interface for recall: add flashcards, review due ones, see stats."""
 import argparse
+import json
 import os
 import sys
 from datetime import date, timedelta
@@ -79,6 +80,7 @@ def build_arg_parser():
     p_list = sub.add_parser("list", help="preview all cards sorted by due date, without reviewing them")
     p_list.add_argument("--due", action="store_true", help="only list cards that are due today or overdue")
     p_list.add_argument("--match", default=None, metavar="TEXT", help="only list cards whose front or back contains TEXT")
+    p_list.add_argument("--json", action="store_true", help="print matching cards as a JSON array (front, back, due_date, due)")
     sub.add_parser("decks", help="list every deck registered so far, with its card counts")
 
     leeches_p = sub.add_parser(
@@ -222,11 +224,13 @@ def run_edit(args, print_fn=print):
 
 def run_list(args, print_fn=print, today=None):
     cards = load_deck(args.deck)
+    as_json = getattr(args, "json", False)
     if not cards:
-        print_fn("Deck is empty.")
+        print_fn("[]" if as_json else "Deck is empty.")
         return
     today = today or date.today()
     shown = 0
+    rows = []
     for card in sorted(cards, key=lambda c: c["due_date"]):
         is_due = date.fromisoformat(card["due_date"]) <= today
         if getattr(args, "due", False) and not is_due:
@@ -235,9 +239,14 @@ def run_list(args, print_fn=print, today=None):
         if match and match.casefold() not in (card["front"] + "\n" + card["back"]).casefold():
             continue
         shown += 1
+        if as_json:
+            rows.append({"front": card["front"], "back": card["back"], "due_date": card["due_date"], "due": is_due})
+            continue
         status = "due" if is_due else "upcoming"
         print_fn(f"[{status:>8}] {card['due_date']}  {card['front']}")
-    if not shown:
+    if as_json:
+        print_fn(json.dumps(rows))
+    elif not shown:
         print_fn("No matching cards." if getattr(args, "match", None) or not getattr(args, "due", False) else "No cards due.")
 
 
