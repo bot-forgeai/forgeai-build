@@ -204,11 +204,39 @@ def to_rate(records, metrics):
     return out
 
 
+def percentile(values, pct):
+    """Linear-interpolated percentile (pct in 0..100) of a non-empty list."""
+    ordered = sorted(values)
+    pos = (len(ordered) - 1) * pct / 100
+    lo = int(pos)
+    hi = min(lo + 1, len(ordered) - 1)
+    return ordered[lo] + (ordered[hi] - ordered[lo]) * (pos - lo)
+
+
+def trend_per_day(stamped):
+    """Least-squares slope, in value units per day, of (datetime, value) pairs.
+
+    None when there are fewer than two points or all share one timestamp.
+    """
+    if len(stamped) < 2:
+        return None
+    t0 = stamped[0][0]
+    xs = [(t - t0).total_seconds() / 86400 for t, _ in stamped]
+    ys = [v for _, v in stamped]
+    mx, my = sum(xs) / len(xs), sum(ys) / len(ys)
+    var = sum((x - mx) ** 2 for x in xs)
+    if var == 0:
+        return None
+    return sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / var
+
+
 def summarize(metric_names, records, thresholds=None, below=()):
     """Per-metric stats for a one-shot text report.
 
     Returns a list of dicts: {"metric", "n", "min", "mean", "max",
-    "latest", "breached"}. A metric breaches when its latest value is
+    "p95", "trend_per_day", "latest", "breached"}. p95 is the 95th
+    percentile; trend_per_day is the least-squares slope per day over
+    records with parseable timestamps (None if under two points). A metric breaches when its latest value is
     above its threshold, or below it if the metric is listed in `below`
     (same rule the dashboard uses to highlight a chart). Metrics with no
     records are skipped.
@@ -227,12 +255,21 @@ def summarize(metric_names, records, thresholds=None, below=()):
             breached = latest < limit
         else:
             breached = latest > limit
+        stamped = []
+        for r in records:
+            if name in r:
+                try:
+                    stamped.append((datetime.fromisoformat(r["timestamp"]), r[name]))
+                except ValueError:
+                    pass
         rows.append({
             "metric": name,
             "n": len(values),
             "min": min(values),
             "mean": sum(values) / len(values),
             "max": max(values),
+            "p95": percentile(values, 95),
+            "trend_per_day": trend_per_day(stamped),
             "latest": latest,
             "breached": breached,
         })

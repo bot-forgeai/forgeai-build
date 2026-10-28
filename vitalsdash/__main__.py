@@ -91,7 +91,7 @@ def build_arg_parser():
     parser.add_argument(
         "--summary",
         action="store_true",
-        help="print a per-metric text table (n, min, mean, max, latest) and "
+        help="print a per-metric text table (n, min, mean, max, p95, trend/day, latest) and "
         "exit instead of serving; exits 1 if any --threshold is breached, "
         "so it can gate a script",
     )
@@ -119,11 +119,13 @@ def format_summary(rows):
     the --compare file's mean and the difference (this minus that).
     """
     compare = any("cmp_mean" in r for r in rows)
-    header = ("metric", "n", "min", "mean", "max", "latest") + (("mean2", "diff") if compare else ())
+    header = ("metric", "n", "min", "mean", "max", "p95", "trend/d", "latest") + (("mean2", "diff") if compare else ())
     body = []
     for r in rows:
         row = (r["metric"], str(r["n"]), f"{r['min']:.4g}", f"{r['mean']:.4g}",
-               f"{r['max']:.4g}", f"{r['latest']:.4g}" + (" !" if r["breached"] else ""))
+               f"{r['max']:.4g}", f"{r['p95']:.4g}",
+               "-" if r["trend_per_day"] is None else f"{r['trend_per_day']:+.3g}",
+               f"{r['latest']:.4g}" + (" !" if r["breached"] else ""))
         if compare:
             c = r.get("cmp_mean")
             row += ("-", "-") if c is None else (f"{c:.4g}", f"{r['mean'] - c:+.4g}")
