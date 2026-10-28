@@ -2,7 +2,7 @@ import math
 import re
 from collections import Counter, defaultdict
 
-from searchlite.tokenize import tokenize
+from searchlite.tokenize import stem, tokenize
 
 
 class Index:
@@ -133,8 +133,21 @@ class Index:
         ranked = sorted(scores.items(), key=lambda kv: (-kv[1], kv[0]))
         return ranked[:top_k]
 
+    def _expand(self, tokens):
+        """Replace each query term the index lacks with the indexed terms
+        sharing its stem, so 'compressing' finds 'compression'."""
+        if all(t in self.postings for t in tokens):
+            return tokens
+        by_stem = defaultdict(list)
+        for term in self.postings:
+            by_stem[stem(term)].append(term)
+        out = []
+        for t in tokens:
+            out.extend([t] if t in self.postings else by_stem.get(stem(t), [t]))
+        return out
+
     def _score_tfidf(self, query):
-        tokens = tokenize(query)
+        tokens = self._expand(tokenize(query))
         scores = defaultdict(float)
         n = self.doc_count
         for term in tokens:
@@ -147,7 +160,7 @@ class Index:
         return scores
 
     def _score_bm25(self, query, k1=1.5, b=0.75):
-        tokens = tokenize(query)
+        tokens = self._expand(tokenize(query))
         scores = defaultdict(float)
         n = self.doc_count
         if n == 0:
