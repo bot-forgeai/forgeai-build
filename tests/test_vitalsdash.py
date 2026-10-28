@@ -520,7 +520,7 @@ def test_summary_compare_adds_mean_and_diff_columns(capsys, monkeypatch):
 
 def test_format_summary_compare_missing_metric_shows_dash():
     from vitalsdash.__main__ import add_compare_means, format_summary
-    rows = [{"metric": "a", "n": 1, "min": 1, "mean": 1.0, "max": 1, "latest": 1, "breached": False}]
+    rows = [{"metric": "a", "n": 1, "min": 1, "mean": 1.0, "max": 1, "p95": 1, "trend_per_day": None, "latest": 1, "breached": False}]
     assert format_summary(add_compare_means(rows, [])).splitlines()[1].split()[-2:] == ["-", "-"]
 
 
@@ -558,3 +558,38 @@ def test_load_vitals_skips_nan_and_inf(tmp_path):
     )
     metrics, records = load_vitals(str(path))
     assert [r["a"] for r in records] == [1.0, 5.0]
+
+
+def test_percentile_interpolates():
+    from vitalsdash.data import percentile
+
+    assert percentile([1, 2, 3, 4, 5], 50) == 3
+    assert percentile([0, 10], 95) == 9.5
+    assert percentile([7], 95) == 7
+
+
+def test_summarize_p95_and_trend_per_day():
+    from vitalsdash.data import summarize
+
+    recs = [{"timestamp": f"2026-01-0{d}T00:00:00", "a": 10.0 + 2 * (d - 1)} for d in (1, 2, 3)]
+    row = summarize(["a"], recs)[0]
+    assert abs(row["trend_per_day"] - 2.0) < 1e-9
+    assert abs(row["p95"] - 13.8) < 1e-9
+
+
+def test_summarize_trend_none_without_usable_timestamps():
+    from vitalsdash.data import summarize
+
+    one = summarize(["a"], [{"timestamp": "2026-01-01T00:00:00", "a": 1.0}])[0]
+    bad = summarize(["a"], [{"timestamp": "x", "a": 1.0}, {"timestamp": "y", "a": 2.0}])[0]
+    assert one["trend_per_day"] is None and bad["trend_per_day"] is None
+
+
+def test_format_summary_shows_p95_and_trend_columns():
+    from vitalsdash.__main__ import format_summary
+    from vitalsdash.data import summarize
+
+    recs = [{"timestamp": f"2026-01-0{d}T00:00:00", "a": float(d)} for d in (1, 2)]
+    out = format_summary(summarize(["a"], recs)).splitlines()
+    assert out[0].split()[-3:] == ["p95", "trend/d", "latest"]
+    assert out[1].split()[-2] == "+1"
