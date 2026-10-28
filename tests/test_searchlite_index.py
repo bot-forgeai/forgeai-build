@@ -293,3 +293,19 @@ def test_snippet_anchors_on_quoted_phrase():
     snippet = index.snippet("a", '"wear leveling" swap', radius=20)
     assert "**wear** **leveling**" in snippet
     assert "rarely" not in snippet
+
+
+def test_stem_fallback_matches_word_forms():
+    from searchlite.index import Index
+    idx = Index()
+    idx.add_document("a", "lossless compression of data")
+    idx.add_document("b", "unrelated gardening notes")
+    assert [d for d, _ in idx.search("compressing")] == ["a"]
+    assert [d for d, _ in idx.search("compressing", rank="bm25")] == ["a"]
+    assert idx.search("zzzz") == []
+
+
+def test_stem_only_applies_to_missing_terms():
+    from searchlite.tokenize import stem
+    assert stem("compressing") == stem("compression") == "compress"
+    assert stem("cat") == "cat"
