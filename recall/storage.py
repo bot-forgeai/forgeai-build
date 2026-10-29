@@ -45,6 +45,20 @@ def due_cards(cards, today=None):
     return [c for c in cards if date.fromisoformat(c["due_date"]) <= today]
 
 
+def forecast_counts(cards, days=7, today=None):
+    """Return [(date, count)] for today and the next `days` days.
+
+    Today's entry also counts overdue cards, since those are reviewed today.
+    """
+    today = today or date.today()
+    counts = [0] * (days + 1)
+    for c in cards:
+        offset = (date.fromisoformat(c["due_date"]) - today).days
+        if offset <= days:
+            counts[max(offset, 0)] += 1
+    return [(today + timedelta(days=i), n) for i, n in enumerate(counts)]
+
+
 _ESC = {"\\": "\\", "t": "\t", "n": "\n", "r": "\r", "#": "#"}
 
 

@@ -78,6 +78,8 @@ python3 -m venv .venv && .venv/bin/pip install -e .
 .venv/bin/recall --deck mydeck.json add "capital of Peru" "Lima"
 .venv/bin/recall --deck mydeck.json review   # shown once due
 .venv/bin/recall --deck mydeck.json stats
+.venv/bin/recall --deck mydeck.json forecast --days 14   # cards due per day, with a bar
+.venv/bin/recall --deck mydeck.json stats --json        # counts as JSON for scripts
 .venv/bin/recall --deck mydeck.json list     # preview all cards, no reviewing
 .venv/bin/recall --deck mydeck.json rate "Peru" 5          # grade one card by front substring
 .venv/bin/recall --deck mydeck.json import cards.txt   # add cards from a text file
