@@ -11,6 +11,7 @@ from .storage import (
     has_front,
     apply_review,
     due_cards,
+    forecast_counts,
     export_lines,
     import_cards,
     leech_cards,
@@ -76,7 +77,11 @@ def build_arg_parser():
     edit_p.add_argument("text", help="substring of the card's front (case-insensitive); must match exactly one card")
     edit_p.add_argument("--front", default=None, help="new front text")
     edit_p.add_argument("--back", default=None, help="new back text")
-    sub.add_parser("stats", help="show deck size and how many cards are due")
+    stats_p = sub.add_parser("stats", help="show deck size and how many cards are due")
+    stats_p.add_argument("--json", action="store_true", help="print the counts as a JSON object")
+    fc_p = sub.add_parser("forecast", help="show how many cards fall due on each of the next N days")
+    fc_p.add_argument("--days", type=int, default=7, help="days ahead to show (default 7)")
+    fc_p.add_argument("--json", action="store_true", help="print [{date, due}] as JSON")
     p_list = sub.add_parser("list", help="preview all cards sorted by due date, without reviewing them")
     p_list.add_argument("--due", action="store_true", help="only list cards that are due today or overdue")
     p_list.add_argument("--match", default=None, metavar="TEXT", help="only list cards whose front or back contains TEXT")
@@ -278,6 +283,17 @@ def run_stats(args, print_fn=print):
     cards = load_deck(args.deck)
     due = due_cards(cards)
     leeches = leech_cards(cards)
+    if args.json:
+        new = sum(1 for c in cards if c["repetitions"] == 0 and c.get("lapses", 0) == 0)
+        mature = sum(1 for c in cards if c["interval_days"] >= 21)
+        today = date.today()
+        print_fn(json.dumps({
+            "deck": args.deck, "total": len(cards), "due": len(due), "leeches": len(leeches),
+            "new": new, "mature": mature, "learning": len(cards) - new - mature,
+            "average_ease": round(sum(c["ease_factor"] for c in cards) / len(cards), 2) if cards else None,
+            "due_next_7_days": sum(1 for c in cards if today < date.fromisoformat(c["due_date"]) <= today + timedelta(days=7)),
+        }))
+        return
     print_fn(f"Deck: {args.deck}")
     print_fn(f"Total cards: {len(cards)}")
     print_fn(f"Due today ({date.today().isoformat()}): {len(due)}")
@@ -292,6 +308,18 @@ def run_stats(args, print_fn=print):
     today = date.today()
     soon = sum(1 for c in cards if today < date.fromisoformat(c["due_date"]) <= today + timedelta(days=7))
     print_fn(f"Due in the next 7 days: {soon}")
+
+
+def run_forecast(args, print_fn=print, today=None):
+    if args.days < 0:
+        print("--days must be 0 or more", file=sys.stderr)
+        sys.exit(2)
+    rows = forecast_counts(load_deck(args.deck), days=args.days, today=today)
+    if args.json:
+        print_fn(json.dumps([{"date": d.isoformat(), "due": n} for d, n in rows]))
+        return
+    for d, n in rows:
+        print_fn(f"{d.isoformat()} {d.strftime('%a')}  {n:3d} {'#' * min(n, 40)}")
 
 
 def run_leeches(args, print_fn=print):
@@ -360,6 +388,8 @@ def main(argv=None):
             sys.exit(1)
     elif args.command == "stats":
         run_stats(args)
+    elif args.command == "forecast":
+        run_forecast(args)
     elif args.command == "list":
         run_list(args)
     elif args.command == "import":

@@ -9,6 +9,7 @@ from recall.__main__ import (
     run_add,
     run_decks,
     run_export,
+    run_forecast,
     run_import,
     run_leeches,
     run_list,
@@ -598,3 +599,44 @@ def test_cli_show_negative_limit_is_an_error(tmp_path, capsys):
         raised = e.code == 1
     assert raised
     assert "--limit" in capsys.readouterr().err
+
+
+def test_forecast_counts_overdue_into_today_and_ignores_beyond(tmp_path):
+    from recall.storage import forecast_counts
+    today = date(2026, 1, 10)
+    cards = [{"due_date": d} for d in ("2026-01-01", "2026-01-10", "2026-01-12", "2026-01-12", "2026-02-01")]
+    rows = forecast_counts(cards, days=3, today=today)
+    assert [n for _, n in rows] == [2, 0, 2, 0]
+    assert rows[0][0] == today and rows[-1][0] == date(2026, 1, 13)
+
+
+def test_cli_forecast_text_and_json(tmp_path):
+    import json
+    deck_path = str(tmp_path / "deck.json")
+    save_deck(deck_path, add_card([], "f", "b"))
+    parser = build_arg_parser()
+    out = []
+    run_forecast(parser.parse_args(["--deck", deck_path, "forecast", "--days", "2"]), print_fn=out.append)
+    assert len(out) == 3 and out[0].split()[2] == "1"
+    out = []
+    run_forecast(parser.parse_args(["--deck", deck_path, "forecast", "--days", "1", "--json"]), print_fn=out.append)
+    data = json.loads(out[0])
+    assert [r["due"] for r in data] == [1, 0]
+
+
+def test_cli_forecast_rejects_negative_days(tmp_path):
+    with pytest.raises(SystemExit) as e:
+        run_forecast(build_arg_parser().parse_args(["--deck", str(tmp_path / "d.json"), "forecast", "--days", "-1"]))
+    assert e.value.code == 2
+
+
+def test_cli_stats_json(tmp_path, capsys):
+    import json
+    deck_path = str(tmp_path / "deck.json")
+    save_deck(deck_path, add_card([], "f", "b"))
+    main(["--deck", deck_path, "stats", "--json"])
+    data = json.loads(capsys.readouterr().out)
+    assert data["total"] == 1 and data["due"] == 1 and data["new"] == 1
+    save_deck(deck_path, [])
+    main(["--deck", deck_path, "stats", "--json"])
+    assert json.loads(capsys.readouterr().out)["average_ease"] is None
