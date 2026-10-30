@@ -375,3 +375,23 @@ def test_similar_command(tmp_path, capsys):
     with pytest.raises(SystemExit) as e:
         main(["--index", index_path, "similar", "zzz.txt"])
     assert e.value.code == 1
+
+
+def test_boost_path_floats_filename_match_to_top(tmp_path, capsys):
+    index_path = str(tmp_path / "idx.json")
+    a = tmp_path / "misc.txt"
+    b = tmp_path / "fox-notes.txt"
+    a.write_text("fox fox")
+    b.write_text("a fox")
+    c = tmp_path / "other.txt"
+    c.write_text("dog cat")
+    main(["--index", index_path, "add", str(a), str(b), str(c)])
+    capsys.readouterr()
+
+    main(["--index", index_path, "search", "fox"])
+    plain = capsys.readouterr().out.splitlines()
+    assert "misc.txt" in plain[0]
+
+    main(["--index", index_path, "search", "fox", "--boost-path"])
+    boosted = capsys.readouterr().out.splitlines()
+    assert "fox-notes.txt" in boosted[0]

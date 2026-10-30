@@ -575,6 +575,8 @@ document:
 .venv/bin/searchlite --index notes.json search "quick fox" --snippet
 ```
 
+`search --boost-path` triples the score of any hit whose file name contains a query term (e.g. `frontier` surfaces `frontier-notes.md`), re-ranking the top 5x candidates.
+
 `search --rank {tfidf,bm25}` (default `tfidf`) switches the scoring
 method. BM25 adds two things TF-IDF lacks: term-frequency saturation
 (a term matching 100 times in a document scores only a little higher
