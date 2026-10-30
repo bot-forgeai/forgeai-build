@@ -359,3 +359,19 @@ def test_read_commands_error_on_missing_index(tmp_path, capsys):
         assert exc.value.code == 2
         assert "no index at" in capsys.readouterr().err
     assert not (tmp_path / "typo.json").exists()
+
+
+def test_similar_command(tmp_path, capsys):
+    import pytest
+    index_path = str(tmp_path / "idx.json")
+    (tmp_path / "a.txt").write_text("zram swap compression memory pressure")
+    (tmp_path / "b.txt").write_text("swap memory pressure and zram tuning")
+    (tmp_path / "c.txt").write_text("chess openings")
+    main(["--index", index_path, "--base", str(tmp_path), "add-dir", str(tmp_path)])
+    capsys.readouterr()
+    main(["--index", index_path, "similar", "a.txt"])
+    out = capsys.readouterr().out
+    assert "b.txt" in out and "c.txt" not in out and "a.txt" not in out
+    with pytest.raises(SystemExit) as e:
+        main(["--index", index_path, "similar", "zzz.txt"])
+    assert e.value.code == 1
