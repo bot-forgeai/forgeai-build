@@ -4,7 +4,7 @@ import json
 import sys
 from importlib.metadata import version as _get_version, PackageNotFoundError
 
-from .data import load_vitals, summarize
+from .data import freshness, load_vitals, summarize
 from .server import _load, make_server
 
 
@@ -101,6 +101,13 @@ def build_arg_parser():
         help="with --summary, print the rows as a JSON array instead of a text "
         "table (same exit code), for scripts that parse the output",
     )
+    parser.add_argument(
+        "--stale-after",
+        type=positive_days,
+        metavar="HOURS",
+        help="with --summary, exit 1 (and warn on stderr) if the newest sample "
+        "is more than HOURS old, so a stalled logger fails a script",
+    )
     return parser
 
 
@@ -183,6 +190,8 @@ def main():
     args = parser.parse_args()
     if args.json and not args.summary:
         parser.error("--json only applies together with --summary")
+    if args.stale_after is not None and not args.summary:
+        parser.error("--stale-after only applies together with --summary")
 
     thresholds = parse_thresholds(args.threshold)
     try:
@@ -207,8 +216,16 @@ def main():
         if args.compare:
             names2, records2 = _load(args.compare, args.rate, args.last_days)
             add_compare_means(rows, summarize(names2, records2))
+        fresh = freshness(records)
         print(json.dumps(rows, indent=2) if args.json else format_summary(rows))
-        sys.exit(1 if any(r["breached"] for r in rows) else 0)
+        stale = bool(fresh and args.stale_after is not None and fresh["age_hours"] > args.stale_after)
+        if fresh and not args.json:
+            print(f"newest sample {fresh['newest']} ({fresh['age_hours']:.1f}h ago); "
+                  f"{fresh['gaps']} logging gap(s), longest {fresh['longest_gap_hours']}h")
+        if stale:
+            print(f"vitalsdash: stale: newest sample is {fresh['age_hours']:.1f}h old "
+                  f"(limit {args.stale_after}h)", file=sys.stderr)
+        sys.exit(1 if stale or any(r["breached"] for r in rows) else 0)
     server = make_server(
         args.csv,
         host=args.host,
