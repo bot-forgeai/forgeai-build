@@ -50,7 +50,8 @@ def build_arg_parser():
     add_p.add_argument("front", help="the question / prompt side")
     add_p.add_argument("back", help="the answer side")
 
-    sub.add_parser("review", help="review all cards currently due")
+    review_p = sub.add_parser("review", help="review all cards currently due")
+    review_p.add_argument("--limit", type=int, default=None, help="review at most N due cards this session")
     show_p = sub.add_parser(
         "show", help="print due cards (front and back) without prompting; for non-interactive use"
     )
@@ -123,27 +124,50 @@ def run_add(args):
 
 
 def run_review(args, input_fn=input, print_fn=print):
+    """Walk due cards, saving after each rating so an interrupted session keeps its progress.
+
+    A card rated below 3 is asked again at the end of the session (its schedule is
+    only set by the first rating). Ctrl-C or end of input stops cleanly.
+    """
+    limit = getattr(args, "limit", None)
+    if limit is not None and limit < 0:
+        print("error: --limit must be 0 or more", file=sys.stderr)
+        sys.exit(2)
     cards = load_deck(args.deck)
     due = due_cards(cards)
     if not due:
         print_fn("Nothing due for review.")
         return
-    for card in due:
-        print_fn(f"\nQ: {card['front']}")
-        input_fn("(press enter to reveal) ")
-        print_fn(f"A: {card['back']}")
-        while True:
-            raw = input_fn("Quality of recall 0-5 (0=blackout, 5=perfect): ")
-            try:
-                quality = int(raw)
-                if 0 <= quality <= 5:
-                    break
-            except ValueError:
-                pass
-            print_fn("Enter a number from 0 to 5.")
-        apply_review(card, quality)
-    save_deck(args.deck, cards)
-    print_fn(f"\nReviewed {len(due)} card(s).")
+    if limit is not None:
+        due = due[:limit]
+    queue = list(due)
+    rated = set()
+    done = 0
+    try:
+        while queue:
+            card = queue.pop(0)
+            print_fn(f"\nQ: {card['front']}")
+            input_fn("(press enter to reveal) ")
+            print_fn(f"A: {card['back']}")
+            while True:
+                raw = input_fn("Quality of recall 0-5 (0=blackout, 5=perfect): ")
+                try:
+                    quality = int(raw)
+                    if 0 <= quality <= 5:
+                        break
+                except ValueError:
+                    pass
+                print_fn("Enter a number from 0 to 5.")
+            if card["id"] not in rated:
+                apply_review(card, quality)
+                rated.add(card["id"])
+                done += 1
+                save_deck(args.deck, cards)
+            if quality < 3:
+                queue.append(card)
+    except (EOFError, KeyboardInterrupt):
+        print_fn("\nInterrupted; ratings so far are saved.")
+    print_fn(f"\nReviewed {done} card(s).")
 
 
 def run_show(args, print_fn=print):
