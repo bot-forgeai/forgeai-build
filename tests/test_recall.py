@@ -119,6 +119,52 @@ def test_cli_review_walks_due_cards_and_saves(tmp_path):
     assert any("Reviewed 1 card" in line for line in outputs)
 
 
+def _review_deck(tmp_path, n):
+    deck_path = str(tmp_path / "deck.json")
+    cards = []
+    for i in range(n):
+        add_card(cards, f"front{i}", f"back{i}")
+    save_deck(deck_path, cards)
+    return deck_path
+
+
+def test_cli_review_limit_caps_session(tmp_path):
+    deck_path = _review_deck(tmp_path, 3)
+    args = build_arg_parser().parse_args(["--deck", deck_path, "review", "--limit", "2"])
+    inputs = iter(["", "5", "", "5"])
+    run_review(args, input_fn=lambda prompt="": next(inputs), print_fn=lambda *_: None)
+    assert sum(1 for c in load_deck(deck_path) if c["repetitions"] == 1) == 2
+
+
+def test_cli_review_interrupt_keeps_earlier_ratings(tmp_path):
+    deck_path = _review_deck(tmp_path, 2)
+    args = build_arg_parser().parse_args(["--deck", deck_path, "review"])
+    inputs = iter(["", "5", ""])
+
+    def fake_input(prompt=""):
+        try:
+            return next(inputs)
+        except StopIteration:
+            raise EOFError
+
+    outputs = []
+    run_review(args, input_fn=fake_input, print_fn=outputs.append)
+    assert sum(1 for c in load_deck(deck_path) if c["repetitions"] == 1) == 1
+    assert any("Interrupted" in line for line in outputs)
+
+
+def test_cli_review_failed_card_is_asked_again_without_rescheduling(tmp_path):
+    deck_path = _review_deck(tmp_path, 1)
+    args = build_arg_parser().parse_args(["--deck", deck_path, "review"])
+    inputs = iter(["", "1", "", "5"])
+    outputs = []
+    run_review(args, input_fn=lambda prompt="": next(inputs), print_fn=outputs.append)
+    card = load_deck(deck_path)[0]
+    assert card["lapses"] == 1 and card["repetitions"] == 0 and card["interval_days"] == 1
+    assert sum(1 for line in outputs if line.lstrip().startswith("Q:")) == 2
+    assert any("Reviewed 1 card" in line for line in outputs)
+
+
 def test_cli_review_with_nothing_due_reports_that(tmp_path):
     deck_path = str(tmp_path / "deck.json")
     save_deck(deck_path, [])
