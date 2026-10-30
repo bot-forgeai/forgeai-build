@@ -309,3 +309,20 @@ def test_stem_only_applies_to_missing_terms():
     from searchlite.tokenize import stem
     assert stem("compressing") == stem("compression") == "compress"
     assert stem("cat") == "cat"
+
+
+def test_similar_ranks_related_doc_and_excludes_self():
+    from searchlite.index import Index
+    idx = Index()
+    idx.add_document("a", "sd card wear leveling flash writes endurance")
+    idx.add_document("b", "flash writes wear the sd card endurance over time")
+    idx.add_document("c", "pasta recipe with tomato and basil")
+    res = idx.similar("a")
+    assert [d for d, _ in res] == ["b"]
+
+
+def test_similar_unknown_doc_raises():
+    import pytest
+    from searchlite.index import Index
+    with pytest.raises(KeyError):
+        Index().similar("nope")

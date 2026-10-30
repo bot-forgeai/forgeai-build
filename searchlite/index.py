@@ -133,6 +133,23 @@ class Index:
         ranked = sorted(scores.items(), key=lambda kv: (-kv[1], kv[0]))
         return ranked[:top_k]
 
+    def similar(self, doc_id, top_k=10, terms=12):
+        """More-like-this: rank the other documents by the `terms` most
+        distinctive terms of doc_id (highest tf*idf), scored with bm25.
+        Raises KeyError if doc_id isn't indexed."""
+        if doc_id not in self.doc_lengths:
+            raise KeyError(doc_id)
+        n = self.doc_count
+        weights = {}
+        for term, postings in self.postings.items():
+            if doc_id in postings:
+                weights[term] = postings[doc_id] * (math.log((n + 1) / (len(postings) + 1)) + 1)
+        best = sorted(weights, key=lambda t: (-weights[t], t))[:terms]
+        scores = self._score_bm25(" ".join(best))
+        scores.pop(doc_id, None)
+        ranked = sorted(scores.items(), key=lambda kv: (-kv[1], kv[0]))
+        return ranked[:top_k]
+
     def _expand(self, tokens):
         """Replace each query term the index lacks with the indexed terms
         sharing its stem, so 'compressing' finds 'compression'."""

@@ -161,6 +161,23 @@ def cmd_search(args):
         print(f"{score:.4f}\t{doc_id}\t{preview}")
 
 
+def cmd_similar(args):
+    if args.top < 1:
+        print(f"error: --top must be a positive number, got {args.top}", file=sys.stderr)
+        sys.exit(2)
+    index = _load_existing(args.index)
+    try:
+        results = index.similar(args.doc_id, top_k=args.top)
+    except KeyError:
+        print(f"error: no such document {args.doc_id!r}", file=sys.stderr)
+        sys.exit(1)
+    if not results:
+        print("no results")
+        return
+    for doc_id, score in results:
+        print(f"{score:.4f}\t{doc_id}\t{index.doc_titles.get(doc_id, '')}")
+
+
 def cmd_stats(args):
     index = _load_existing(args.index)
     print(f"documents: {index.doc_count}")
@@ -207,6 +224,11 @@ def build_parser():
     p_search.add_argument("--phrase", action="store_true", help="require query terms to appear as an exact consecutive phrase, ranked by occurrence count instead of tfidf/bm25")
     p_search.add_argument("--json", action="store_true", help="print results as a JSON array of {doc_id, score, preview} ('[]' when nothing matches)")
     p_search.set_defaults(func=cmd_search)
+
+    p_similar = sub.add_parser("similar", help="list documents most like an indexed document (by its distinctive terms)")
+    p_similar.add_argument("doc_id")
+    p_similar.add_argument("--top", type=int, default=10, help="max number of results (default: 10)")
+    p_similar.set_defaults(func=cmd_similar)
 
     p_stats = sub.add_parser("stats", help="print index size stats")
     p_stats.set_defaults(func=cmd_stats)
