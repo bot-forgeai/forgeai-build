@@ -618,3 +618,33 @@ def test_format_summary_shows_breach_columns_only_with_thresholds():
     assert "breaches" not in format_summary(summarize(["t"], recs))
     text = format_summary(summarize(["t"], recs, {"t": 70.0}))
     assert "breaches" in text and "2/3" in text and "2026-01-01T02:00:00" in text
+
+
+def test_freshness_reports_age_and_gaps():
+    from datetime import datetime
+    from vitalsdash.data import freshness
+    recs = [{"timestamp": t} for t in (
+        "2026-01-01T00:00:00", "2026-01-01T01:00:00", "2026-01-01T02:00:00", "2026-01-02T02:00:00")]
+    f = freshness(recs, now=datetime(2026, 1, 2, 5, 0, 0))
+    assert f["newest"] == "2026-01-02T02:00:00"
+    assert f["age_hours"] == 3.0
+    assert f["gaps"] == 1 and f["longest_gap_hours"] == 24.0
+    assert freshness([{"timestamp": "bad"}]) is None
+
+
+def test_stale_after_exits_1_and_warns(capsys, monkeypatch):
+    from vitalsdash.__main__ import main
+    monkeypatch.setattr("sys.argv", ["vitalsdash", SAMPLE_CSV, "--summary", "--stale-after", "1"])
+    with pytest.raises(SystemExit) as e:
+        main()
+    assert e.value.code == 1
+    cap = capsys.readouterr()
+    assert "stale" in cap.err and "newest sample" in cap.out
+
+
+def test_stale_after_requires_summary(monkeypatch):
+    from vitalsdash.__main__ import main
+    monkeypatch.setattr("sys.argv", ["vitalsdash", SAMPLE_CSV, "--stale-after", "1"])
+    with pytest.raises(SystemExit) as e:
+        main()
+    assert e.value.code == 2

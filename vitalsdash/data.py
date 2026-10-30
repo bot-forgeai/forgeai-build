@@ -146,6 +146,31 @@ def find_gaps(records, factor=3.0):
     ]
 
 
+def freshness(records, now=None):
+    """How current the log is: newest sample, its age, and logging gaps.
+
+    Returns {"newest": str, "age_hours": float, "gaps": count,
+    "longest_gap_hours": float}, or None if no timestamp parses. `now` is a
+    naive datetime (default: local time now), matching the CSV's stamps.
+    """
+    stamps = []
+    for r in records:
+        try:
+            stamps.append(datetime.fromisoformat(r["timestamp"]))
+        except ValueError:
+            continue
+    if not stamps:
+        return None
+    newest = max(stamps)
+    gaps = find_gaps(records)
+    return {
+        "newest": newest.isoformat(),
+        "age_hours": round(((now or datetime.now()) - newest).total_seconds() / 3600, 2),
+        "gaps": len(gaps),
+        "longest_gap_hours": max((g["hours"] for g in gaps), default=0.0),
+    }
+
+
 def filter_last_days(records, days):
     """Keep records within `days` of the newest parseable timestamp.
 
