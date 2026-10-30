@@ -132,6 +132,20 @@ def cmd_remove(args):
     print(f"removed {args.doc_id!r}")
 
 
+def _boost_path(index, args, results):
+    """Re-rank so docs whose file name contains a query term float up (x3 score)."""
+    wanted = set(tokenize(args.query))
+    pool = index.search(args.query, top_k=max(args.top * 5, 50), rank=args.rank)
+    boosted = []
+    for doc_id, score in pool:
+        name = os.path.splitext(os.path.basename(doc_id))[0]
+        if wanted & set(tokenize(name.replace("-", " ").replace("_", " "))):
+            score *= 3
+        boosted.append((doc_id, score))
+    boosted.sort(key=lambda r: -r[1])
+    return boosted[:args.top]
+
+
 def cmd_search(args):
     if args.top < 1:
         print(f"error: --top must be a positive number, got {args.top}", file=sys.stderr)
@@ -144,6 +158,8 @@ def cmd_search(args):
         results = index.search_phrase(args.query, top_k=args.top)
     else:
         results = index.search(args.query, top_k=args.top, rank=args.rank)
+    if args.boost_path and not args.phrase:
+        results = _boost_path(index, args, results)
     if not results and not args.json:
         print("no results")
         return
@@ -222,6 +238,7 @@ def build_parser():
     p_search.add_argument("--snippet", action="store_true", help="show a query-term-highlighted excerpt instead of the leading preview")
     p_search.add_argument("--rank", choices=["tfidf", "bm25"], default="tfidf", help="ranking method (default: tfidf)")
     p_search.add_argument("--phrase", action="store_true", help="require query terms to appear as an exact consecutive phrase, ranked by occurrence count instead of tfidf/bm25")
+    p_search.add_argument("--boost-path", action="store_true", help="triple the score of docs whose file name contains a query term")
     p_search.add_argument("--json", action="store_true", help="print results as a JSON array of {doc_id, score, preview} ('[]' when nothing matches)")
     p_search.set_defaults(func=cmd_search)
 
