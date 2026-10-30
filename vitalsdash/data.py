@@ -230,6 +230,25 @@ def trend_per_day(stamped):
     return sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / var
 
 
+def breach_history(points, limit, below=False):
+    """How often (timestamp, value) points crossed `limit`, not just the latest one.
+
+    Returns {"n": breaching samples, "longest_run": longest consecutive
+    streak of them, "last": timestamp of the most recent breach or None}.
+    """
+    n = run = longest = 0
+    last = None
+    for stamp, value in points:
+        if (value < limit) if below else (value > limit):
+            n += 1
+            run += 1
+            longest = max(longest, run)
+            last = stamp
+        else:
+            run = 0
+    return {"n": n, "longest_run": longest, "last": last}
+
+
 def summarize(metric_names, records, thresholds=None, below=()):
     """Per-metric stats for a one-shot text report.
 
@@ -255,6 +274,10 @@ def summarize(metric_names, records, thresholds=None, below=()):
             breached = latest < limit
         else:
             breached = latest > limit
+        history = None
+        if limit is not None:
+            history = breach_history(
+                [(r["timestamp"], r[name]) for r in records if name in r], limit, name in below)
         stamped = []
         for r in records:
             if name in r:
@@ -272,5 +295,8 @@ def summarize(metric_names, records, thresholds=None, below=()):
             "trend_per_day": trend_per_day(stamped),
             "latest": latest,
             "breached": breached,
+            "breach_n": history and history["n"],
+            "breach_longest_run": history and history["longest_run"],
+            "last_breach": history and history["last"],
         })
     return rows

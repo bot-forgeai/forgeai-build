@@ -116,10 +116,14 @@ def format_summary(rows):
     """Render summarize() rows as an aligned text table; '!' marks a breach.
 
     Rows carrying "cmp_mean" (see add_compare_means) get two extra columns:
-    the --compare file's mean and the difference (this minus that).
+    the --compare file's mean and the difference (this minus that). Rows with a
+    threshold also get breaches (samples past it, of n), the longest streak of
+    them, and when the last one happened.
     """
     compare = any("cmp_mean" in r for r in rows)
-    header = ("metric", "n", "min", "mean", "max", "p95", "trend/d", "latest") + (("mean2", "diff") if compare else ())
+    limits = any(r.get("breach_n") is not None for r in rows)
+    header = ("metric", "n", "min", "mean", "max", "p95", "trend/d", "latest") + (("mean2", "diff") if compare else ()) \
+        + (("breaches", "run", "last breach") if limits else ())
     body = []
     for r in rows:
         row = (r["metric"], str(r["n"]), f"{r['min']:.4g}", f"{r['mean']:.4g}",
@@ -129,6 +133,10 @@ def format_summary(rows):
         if compare:
             c = r.get("cmp_mean")
             row += ("-", "-") if c is None else (f"{c:.4g}", f"{r['mean'] - c:+.4g}")
+        if limits:
+            b = r.get("breach_n")
+            row += ("-", "-", "-") if b is None else (
+                f"{b}/{r['n']}", str(r["breach_longest_run"]), r["last_breach"] or "-")
         body.append(row)
     widths = [max(len(row[i]) for row in [header] + body) for i in range(len(header))]
     lines = ["  ".join(c.ljust(w) if i == 0 else c.rjust(w) for i, (c, w) in enumerate(zip(row, widths)))
