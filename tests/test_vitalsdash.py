@@ -593,3 +593,28 @@ def test_format_summary_shows_p95_and_trend_columns():
     out = format_summary(summarize(["a"], recs)).splitlines()
     assert out[0].split()[-3:] == ["p95", "trend/d", "latest"]
     assert out[1].split()[-2] == "+1"
+
+
+def test_summarize_breach_history_counts_runs_and_last():
+    from vitalsdash.data import summarize
+    recs = [{"timestamp": f"2026-01-01T0{i}:00:00", "t": v} for i, v in enumerate([60, 80, 90, 50, 85])]
+    row = summarize(["t"], recs, {"t": 70.0})[0]
+    assert (row["breach_n"], row["breach_longest_run"], row["last_breach"]) == (3, 2, "2026-01-01T04:00:00")
+    assert row["breached"] is True
+
+
+def test_summarize_breach_history_below_and_unthresholded():
+    from vitalsdash.data import summarize
+    recs = [{"timestamp": f"2026-01-01T0{i}:00:00", "m": v, "x": 1} for i, v in enumerate([50, 120, 90])]
+    rows = {r["metric"]: r for r in summarize(["m", "x"], recs, {"m": 100.0}, below=["m"])}
+    assert rows["m"]["breach_n"] == 2 and rows["m"]["breach_longest_run"] == 1
+    assert rows["x"]["breach_n"] is None
+
+
+def test_format_summary_shows_breach_columns_only_with_thresholds():
+    from vitalsdash.__main__ import format_summary
+    from vitalsdash.data import summarize
+    recs = [{"timestamp": f"2026-01-01T0{i}:00:00", "t": v} for i, v in enumerate([60, 80, 90])]
+    assert "breaches" not in format_summary(summarize(["t"], recs))
+    text = format_summary(summarize(["t"], recs, {"t": 70.0}))
+    assert "breaches" in text and "2/3" in text and "2026-01-01T02:00:00" in text
