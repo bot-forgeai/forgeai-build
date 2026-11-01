@@ -150,6 +150,18 @@ class Index:
         ranked = sorted(scores.items(), key=lambda kv: (-kv[1], kv[0]))
         return ranked[:top_k]
 
+    def suggest(self, query):
+        """For each query term the index lacks, the closest indexed term
+        (difflib, cutoff 0.75); returns {term: suggestion}."""
+        import difflib
+        out = {}
+        for t in tokenize(query):
+            if t not in self.postings:
+                near = difflib.get_close_matches(t, self.postings, n=1, cutoff=0.75)
+                if near:
+                    out[t] = near[0]
+        return out
+
     def _expand(self, tokens):
         """Replace each query term the index lacks with the indexed terms
         sharing its stem, so 'compressing' finds 'compression'."""

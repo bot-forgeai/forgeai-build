@@ -162,6 +162,9 @@ def cmd_search(args):
         results = _boost_path(index, args, results)
     if not results and not args.json:
         print("no results")
+        fixes = index.suggest(args.query)
+        if fixes:
+            print("did you mean: " + " ".join(fixes.get(t, t) for t in tokenize(args.query)), file=sys.stderr)
         return
     rows = []
     for doc_id, score in results:

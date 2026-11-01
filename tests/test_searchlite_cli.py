@@ -395,3 +395,15 @@ def test_boost_path_floats_filename_match_to_top(tmp_path, capsys):
     main(["--index", index_path, "search", "fox", "--boost-path"])
     boosted = capsys.readouterr().out.splitlines()
     assert "fox-notes.txt" in boosted[0]
+
+
+def test_no_results_suggests_close_indexed_term(tmp_path, capsys):
+    f = tmp_path / "a.txt"
+    f.write_text("the compressor squeezes data")
+    index_path = str(tmp_path / "i.json")
+    main(["--index", index_path, "add", str(f)])
+    capsys.readouterr()
+    main(["--index", index_path, "search", "compresor"])
+    cap = capsys.readouterr()
+    assert "no results" in cap.out
+    assert "did you mean: compressor" in cap.err
