@@ -407,3 +407,15 @@ def test_no_results_suggests_close_indexed_term(tmp_path, capsys):
     cap = capsys.readouterr()
     assert "no results" in cap.out
     assert "did you mean: compressor" in cap.err
+
+
+def test_no_results_without_close_term_prints_no_hint(tmp_path, capsys):
+    f = tmp_path / "a.txt"
+    f.write_text("the compressor squeezes data")
+    index_path = str(tmp_path / "i.json")
+    main(["--index", index_path, "add", str(f)])
+    capsys.readouterr()
+    main(["--index", index_path, "search", "zzzqqq"])
+    cap = capsys.readouterr()
+    assert "no results" in cap.out
+    assert "did you mean" not in cap.err
