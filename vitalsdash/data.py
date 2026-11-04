@@ -325,3 +325,20 @@ def summarize(metric_names, records, thresholds=None, below=()):
             "last_breach": history and history["last"],
         })
     return rows
+
+
+def daily_rollup(records, metric):
+    """Per-calendar-day n/min/mean/max of one metric, oldest day first.
+
+    Records whose timestamp doesn't parse are skipped. Returns a list of
+    {"day": "YYYY-MM-DD", "n": int, "min": float, "mean": float, "max": float}.
+    """
+    days = {}
+    for r in records:
+        try:
+            day = datetime.fromisoformat(r["timestamp"]).date().isoformat()
+        except ValueError:
+            continue
+        days.setdefault(day, []).append(r[metric])
+    return [{"day": d, "n": len(v), "min": min(v), "mean": statistics.fmean(v), "max": max(v)}
+            for d, v in sorted(days.items())]

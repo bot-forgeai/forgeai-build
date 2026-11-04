@@ -648,3 +648,14 @@ def test_stale_after_requires_summary(monkeypatch):
     with pytest.raises(SystemExit) as e:
         main()
     assert e.value.code == 2
+
+
+def test_daily_rollup_groups_by_calendar_day():
+    from vitalsdash.data import daily_rollup
+    recs = [{"timestamp": "2026-01-01T23:00:00", "x": 1.0},
+            {"timestamp": "2026-01-01T01:00:00", "x": 3.0},
+            {"timestamp": "2026-01-02T00:00:00", "x": 5.0},
+            {"timestamp": "bad", "x": 99.0}]
+    out = daily_rollup(recs, "x")
+    assert [r["day"] for r in out] == ["2026-01-01", "2026-01-02"]
+    assert out[0] == {"day": "2026-01-01", "n": 2, "min": 1.0, "mean": 2.0, "max": 3.0}

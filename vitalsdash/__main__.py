@@ -4,7 +4,7 @@ import json
 import sys
 from importlib.metadata import version as _get_version, PackageNotFoundError
 
-from .data import freshness, load_vitals, summarize
+from .data import daily_rollup, freshness, load_vitals, summarize
 from .server import _load, make_server
 
 
@@ -108,7 +108,22 @@ def build_arg_parser():
         help="with --summary, exit 1 (and warn on stderr) if the newest sample "
         "is more than HOURS old, so a stalled logger fails a script",
     )
+    parser.add_argument(
+        "--daily",
+        metavar="METRIC",
+        help="with --summary, print a per-day n/min/mean/max table for METRIC "
+        "instead of the per-metric summary (honours --last-days and --rate)",
+    )
     return parser
+
+
+def format_daily(rows):
+    """Render daily_rollup() rows as an aligned text table."""
+    header = ("day", "n", "min", "mean", "max")
+    body = [(r["day"], str(r["n"]), f"{r['min']:.4g}", f"{r['mean']:.4g}", f"{r['max']:.4g}") for r in rows]
+    widths = [max(len(row[i]) for row in [header] + body) for i in range(len(header))]
+    return "\n".join("  ".join(c.ljust(w) if i == 0 else c.rjust(w) for i, (c, w) in enumerate(zip(row, widths)))
+                     for row in [header] + body)
 
 
 def add_compare_means(rows, other_rows):
@@ -193,6 +208,9 @@ def main():
     if args.stale_after is not None and not args.summary:
         parser.error("--stale-after only applies together with --summary")
 
+    if args.daily is not None and not args.summary:
+        parser.error("--daily only applies together with --summary")
+
     thresholds = parse_thresholds(args.threshold)
     try:
         known, _ = load_vitals(args.csv)
@@ -212,6 +230,12 @@ def main():
                   f"(columns: {', '.join(known)})", file=sys.stderr)
     if args.summary:
         metric_names, records = _load(args.csv, args.rate, args.last_days)
+        if args.daily is not None:
+            if args.daily not in metric_names:
+                sys.exit(f"vitalsdash: --daily {args.daily!r} matches no metric (metrics: {', '.join(metric_names)})")
+            rolled = daily_rollup(records, args.daily)
+            print(json.dumps(rolled, indent=2) if args.json else format_daily(rolled))
+            sys.exit(0)
         rows = summarize(metric_names, records, thresholds, parse_below_metrics(args.threshold))
         if args.compare:
             names2, records2 = _load(args.compare, args.rate, args.last_days)
