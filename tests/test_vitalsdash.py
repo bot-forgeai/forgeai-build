@@ -659,3 +659,25 @@ def test_daily_rollup_groups_by_calendar_day():
     out = daily_rollup(recs, "x")
     assert [r["day"] for r in out] == ["2026-01-01", "2026-01-02"]
     assert out[0] == {"day": "2026-01-01", "n": 2, "min": 1.0, "mean": 2.0, "max": 3.0}
+
+
+def test_gaps_lists_each_gap(tmp_path, monkeypatch, capsys):
+    from vitalsdash.__main__ import main
+    csv_path = tmp_path / "v.csv"
+    rows = ["timestamp,temp_c"] + [f"2026-01-01T0{h}:00:00,50" for h in range(5)]
+    rows += ["2026-01-02T12:00:00,50", "2026-01-02T13:00:00,50"]
+    csv_path.write_text("\n".join(rows) + "\n")
+    monkeypatch.setattr("sys.argv", ["vitalsdash", str(csv_path), "--summary", "--gaps"])
+    with pytest.raises(SystemExit) as e:
+        main()
+    out = capsys.readouterr().out
+    assert e.value.code == 0
+    assert "2026-01-01T04:00:00" in out and "2026-01-02T12:00:00" in out and "32" in out
+
+
+def test_gaps_requires_summary(monkeypatch):
+    from vitalsdash.__main__ import main
+    monkeypatch.setattr("sys.argv", ["vitalsdash", SAMPLE_CSV, "--gaps"])
+    with pytest.raises(SystemExit) as e:
+        main()
+    assert e.value.code == 2

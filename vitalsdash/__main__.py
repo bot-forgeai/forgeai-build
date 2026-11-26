@@ -4,7 +4,7 @@ import json
 import sys
 from importlib.metadata import version as _get_version, PackageNotFoundError
 
-from .data import daily_rollup, freshness, load_vitals, summarize
+from .data import daily_rollup, find_gaps, freshness, load_vitals, summarize
 from .server import _load, make_server
 
 
@@ -114,6 +114,12 @@ def build_arg_parser():
         help="with --summary, print a per-day n/min/mean/max table for METRIC "
         "instead of the per-metric summary (honours --last-days and --rate)",
     )
+    parser.add_argument(
+        "--gaps",
+        action="store_true",
+        help="with --summary, list each logging gap (start, end, hours) instead of "
+        "the per-metric summary (honours --last-days)",
+    )
     return parser
 
 
@@ -210,6 +216,8 @@ def main():
 
     if args.daily is not None and not args.summary:
         parser.error("--daily only applies together with --summary")
+    if args.gaps and not args.summary:
+        parser.error("--gaps only applies together with --summary")
 
     thresholds = parse_thresholds(args.threshold)
     try:
@@ -235,6 +243,17 @@ def main():
                 sys.exit(f"vitalsdash: --daily {args.daily!r} matches no metric (metrics: {', '.join(metric_names)})")
             rolled = daily_rollup(records, args.daily)
             print(json.dumps(rolled, indent=2) if args.json else format_daily(rolled))
+            sys.exit(0)
+        if args.gaps:
+            found = find_gaps(records)
+            if args.json:
+                print(json.dumps(found, indent=2))
+            elif found:
+                print("start                end                  hours")
+                for g in found:
+                    print(f"{g['start']:<20} {g['end']:<20} {g['hours']:>6}")
+            else:
+                print("no logging gaps")
             sys.exit(0)
         rows = summarize(metric_names, records, thresholds, parse_below_metrics(args.threshold))
         if args.compare:
