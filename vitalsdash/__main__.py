@@ -2,9 +2,10 @@ import argparse
 import csv
 import json
 import sys
+from datetime import datetime
 from importlib.metadata import version as _get_version, PackageNotFoundError
 
-from .data import daily_rollup, find_gaps, freshness, load_vitals, summarize
+from .data import daily_rollup, filter_since, find_gaps, freshness, load_vitals, summarize
 from .server import _load, make_server
 
 
@@ -79,6 +80,13 @@ def build_arg_parser():
         metavar="N",
         help="only chart records within N days of the newest timestamp "
         "(per-boot bar chart still covers the whole file)",
+    )
+    parser.add_argument(
+        "--since",
+        type=since_date,
+        metavar="DATE",
+        help="with --summary, only use records at or after this ISO date or "
+        "datetime (e.g. 2026-11-23, to skip everything before an outage)",
     )
     parser.add_argument(
         "--rate",
@@ -183,6 +191,14 @@ def positive_days(text):
     return days
 
 
+def since_date(text):
+    """argparse type for --since: an ISO date or datetime."""
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"invalid ISO date: {text!r}")
+
+
 def threshold_spec(text):
     """argparse type for --threshold: METRIC=VALUE or METRIC<VALUE, VALUE numeric."""
     try:
@@ -238,6 +254,7 @@ def main():
                   f"(columns: {', '.join(known)})", file=sys.stderr)
     if args.summary:
         metric_names, records = _load(args.csv, args.rate, args.last_days)
+        records = filter_since(records, args.since)
         if args.daily is not None:
             if args.daily not in metric_names:
                 sys.exit(f"vitalsdash: --daily {args.daily!r} matches no metric (metrics: {', '.join(metric_names)})")
