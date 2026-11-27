@@ -681,3 +681,23 @@ def test_gaps_requires_summary(monkeypatch):
     with pytest.raises(SystemExit) as e:
         main()
     assert e.value.code == 2
+
+
+def test_filter_since_keeps_records_at_or_after_cutoff():
+    from datetime import datetime
+    from vitalsdash.data import filter_since
+
+    recs = [{"timestamp": f"2026-10-{d:02d}T00:00:00"} for d in (1, 5, 9)]
+    assert [r["timestamp"][8:10] for r in filter_since(recs, datetime(2026, 10, 5))] == ["05", "09"]
+    assert filter_since(recs, None) is recs
+
+
+def test_summary_since_limits_rows_counted(tmp_path, capsys, monkeypatch):
+    from vitalsdash.__main__ import main
+    p = tmp_path / "v.csv"
+    p.write_text("timestamp,temp_c\n2026-10-01T00:00:00,10\n2026-10-05T00:00:00,50\n2026-10-09T00:00:00,70\n")
+    monkeypatch.setattr("sys.argv", ["vitalsdash", str(p), "--summary", "--json", "--since", "2026-10-05"])
+    with pytest.raises(SystemExit):
+        main()
+    row = json.loads(capsys.readouterr().out)[0]
+    assert row["n"] == 2 and row["min"] == 50

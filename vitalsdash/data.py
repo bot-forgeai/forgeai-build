@@ -192,6 +192,22 @@ def filter_last_days(records, days):
     return [r for r, t in zip(records, parsed) if t is None or t >= cutoff]
 
 
+def filter_since(records, since):
+    """Keep records at or after `since` (a datetime). Unparseable timestamps are kept."""
+    if since is None:
+        return records
+    kept = []
+    for r in records:
+        try:
+            t = datetime.fromisoformat(r["timestamp"])
+        except ValueError:
+            kept.append(r)
+            continue
+        if t >= since:
+            kept.append(r)
+    return kept
+
+
 def to_rate(records, metrics):
     """Turn cumulative counters into per-hour rates.
 
