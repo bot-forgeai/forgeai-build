@@ -68,6 +68,11 @@ def build_arg_parser():
     )
     rate_p.add_argument("text", help="substring of the card's front (case-insensitive); must match exactly one card")
     rate_p.add_argument("quality", type=int, choices=range(6), metavar="0-5", help="recall quality")
+    batch_p = sub.add_parser(
+        "rate-batch",
+        help="rate many cards at once from a file of 'QUALITY TEXT' lines ('-' for stdin); all-or-nothing",
+    )
+    batch_p.add_argument("file", help="file of lines like '4 auth outage'; blank lines and # comments skipped")
     del_p = sub.add_parser(
         "delete", help="remove one card, picked by a substring of its front"
     )
@@ -203,6 +208,38 @@ def run_rate(args, print_fn=print):
     apply_review(matches[0], args.quality)
     save_deck(args.deck, cards)
     print_fn(f"Rated {matches[0]['front']!r} {args.quality}; next due {matches[0]['due_date']}.")
+    return True
+
+
+def run_rate_batch(args, print_fn=print, lines=None):
+    """Apply 'QUALITY TEXT' lines in one pass. Nothing is saved unless every line resolves."""
+    if lines is None:
+        lines = sys.stdin.read().splitlines() if args.file == "-" else open(args.file).read().splitlines()
+    cards = load_deck(args.deck)
+    plan, errors = [], []
+    for n, line in enumerate(lines, 1):
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        q, _, text = line.partition(" ")
+        text = text.strip()
+        if q not in "012345" or len(q) != 1 or not text:
+            errors.append(f"line {n}: expected 'QUALITY(0-5) TEXT', got {line!r}")
+            continue
+        matches = [c for c in cards if text.casefold() in c["front"].casefold()]
+        if len(matches) != 1:
+            errors.append(f"line {n}: {len(matches)} cards match {text!r}; need exactly 1")
+            continue
+        plan.append((matches[0], int(q)))
+    if errors:
+        for e in errors:
+            print_fn(e)
+        print_fn("Nothing rated.")
+        return False
+    for card, q in plan:
+        apply_review(card, q)
+    save_deck(args.deck, cards)
+    print_fn(f"Rated {len(plan)} card(s).")
     return True
 
 
@@ -397,6 +434,11 @@ def main(argv=None):
             register_current_deck(args)
     elif args.command == "rate":
         if run_rate(args):
+            register_current_deck(args)
+        else:
+            sys.exit(1)
+    elif args.command == "rate-batch":
+        if run_rate_batch(args):
             register_current_deck(args)
         else:
             sys.exit(1)
