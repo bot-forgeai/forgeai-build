@@ -540,6 +540,32 @@ def test_rate_rejects_ambiguous_or_missing_match(tmp_path, capsys):
     assert all(c.get("lapses", 0) == 0 for c in load_deck(deck))
 
 
+def test_rate_batch_rates_all_lines(tmp_path):
+    deck = str(tmp_path / "d.json")
+    reg = str(tmp_path / "r.json")
+    main(["--deck", deck, "--registry", reg, "add", "Alpha thing", "a"])
+    main(["--deck", deck, "--registry", reg, "add", "Beta thing", "b"])
+    f = tmp_path / "b.txt"
+    f.write_text("# comment\n1 alpha\n\n5 beta\n")
+    main(["--deck", deck, "--registry", reg, "rate-batch", str(f)])
+    cards = {c["front"]: c for c in load_deck(deck)}
+    assert cards["Alpha thing"]["lapses"] == 1
+    assert cards["Beta thing"].get("lapses", 0) == 0
+
+
+def test_rate_batch_is_all_or_nothing(tmp_path):
+    import pytest
+    deck = str(tmp_path / "d.json")
+    reg = str(tmp_path / "r.json")
+    main(["--deck", deck, "--registry", reg, "add", "Alpha thing", "a"])
+    before = load_deck(deck)
+    f = tmp_path / "b.txt"
+    f.write_text("1 alpha\n4 zzz\n9 alpha\n")
+    with pytest.raises(SystemExit):
+        main(["--deck", deck, "--registry", reg, "rate-batch", str(f)])
+    assert load_deck(deck) == before
+
+
 def test_cli_list_due_hides_upcoming_cards(tmp_path):
     deck_path = str(tmp_path / "deck.json")
     today = date(2026, 1, 10)

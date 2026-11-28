@@ -82,6 +82,7 @@ python3 -m venv .venv && .venv/bin/pip install -e .
 .venv/bin/recall --deck mydeck.json stats --json        # counts as JSON for scripts
 .venv/bin/recall --deck mydeck.json list     # preview all cards, no reviewing
 .venv/bin/recall --deck mydeck.json rate "Peru" 5          # grade one card by front substring
+.venv/bin/recall --deck mydeck.json rate-batch ratings.txt     # many at once: lines like "4 Peru"; all-or-nothing
 .venv/bin/recall --deck mydeck.json import cards.txt   # add cards from a text file
 .venv/bin/recall --deck mydeck.json export cards.txt   # write all cards to a text file
 .venv/bin/recall decks                                 # list every deck used so far
